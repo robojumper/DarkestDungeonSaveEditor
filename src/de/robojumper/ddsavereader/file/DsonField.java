@@ -12,18 +12,21 @@ public class DsonField {
 	// TODO: Make array a special kind of field with an Inner type??
 	static final String[] INTARRAY_FIELD_NAMES = {
 		"read_page_indexes", "raid_read_page_indexes", "raid_unread_page_indexes",	// journal.json
-		"dungeons_unlocked", // game_knowledge
+		"dungeons_unlocked", // game_knowledge.json
 		"goal_ids", "trinket_retention_ids",	// quest.json
 		"last_party_guids", // roster.json
 		"result_event_history", // town_event.json
 		"additional_mash_disabled_infestation_monster_class_ids", // campaign_mash.json
+		// example for how to make variable names more specific
+		"party@heroes", // raid.json
+		"narration_audio_event_queue_tags", // loading_screen.json
 	};
 	
 	static final String[] STRINGARRAY_FIELD_NAMES = {
 		"goal_ids", // quest.json
 	};
 
-	
+	// TODO: map@bounds is a rect?
 	public enum FieldType {
 		TYPE_Object,	// has a Meta1Block entry
 		TYPE_Bool,		// 1 byte, 0x00 or 0x01
@@ -39,7 +42,7 @@ public class DsonField {
 	};
 	
 	public FieldType Type = FieldType.TYPE_Unknown;
-	
+	private DsonField Parent;
 	
 	public String Name;
 	
@@ -107,7 +110,7 @@ public class DsonField {
 	}
 	
 	private boolean ParseFloat() {
-		if (Arrays.asList(FLOAT_FIELD_NAMES).contains(Name)) {
+		if (NameInArray(FLOAT_FIELD_NAMES)) {
 			if (AlignedSize() == 4) {
 				Type = FieldType.TYPE_Float;
 				byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
@@ -120,7 +123,7 @@ public class DsonField {
 	}
 	
 	private boolean ParseStringArray() {
-		if (Arrays.asList(STRINGARRAY_FIELD_NAMES).contains(Name)) {
+		if (NameInArray(STRINGARRAY_FIELD_NAMES)) {
 			Type = FieldType.TYPE_StringArray;
 			byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
 			int arrLen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
@@ -146,7 +149,7 @@ public class DsonField {
 	}
 
 	private boolean ParseIntArray() {
-		if (Arrays.asList(INTARRAY_FIELD_NAMES).contains(Name)) {
+		if (NameInArray(INTARRAY_FIELD_NAMES)) {
 			byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
 			int arrLen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
 			if (AlignedSize() == (arrLen + 1) * 4) {
@@ -163,6 +166,26 @@ public class DsonField {
 				}
 				sb.append("]");
 				DataString = sb.toString();
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	private boolean NameInArray(String[] arr) {
+		DsonField CheckField = this;
+		boolean match;
+		for (int i = 0; i < arr.length; i++) {
+			String[] names = arr[i].split("@");
+			match = true;
+			for (int j = names.length - 1; j >= 0 && CheckField != null; j--) {
+				if (!(names[j].equals("*") || names[j].equals(CheckField.Name))) {
+					match = false;
+					break;
+				}
+				CheckField = CheckField.Parent;
+			}
+			if (match) {
 				return true;
 			}
 		}
@@ -210,6 +233,7 @@ public class DsonField {
 		for (int i = 0; i < Children.length; i++) {
 			if (Children[i] == null) {
 				Children[i] = Field;
+				Field.Parent = this;
 				return;
 			}
 		}
