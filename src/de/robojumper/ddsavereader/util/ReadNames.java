@@ -45,15 +45,14 @@ public class ReadNames {
 		try {
 			Files.walkFileTree(rootDir.toPath(), new SimpleFileVisitor<Path>() {
 				@Override
-                public FileVisitResult preVisitDirectory(Path file, BasicFileAttributes attrs)
-                        throws IOException
-                {
+				public FileVisitResult preVisitDirectory(Path file, BasicFileAttributes attrs)
+				{
 					if (file.toFile().getName().equalsIgnoreCase("monsters")) {
-			        	ParseMonsterDirectory(file.toFile());
-			        	return FileVisitResult.SKIP_SUBTREE;
-			        }
+						ParseMonsterDirectory(file.toFile());
+						return FileVisitResult.SKIP_SUBTREE;
+					}
 					return FileVisitResult.CONTINUE;
-                }
+				}
 			});
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
@@ -65,10 +64,10 @@ public class ReadNames {
 	private static void ParseUpgradeTrees(File directory) {
 		try {
 			Files.walkFileTree(directory.toPath(), new SimpleFileVisitor<Path>() {
-			    @Override
-			    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-			        if (file.toString().endsWith(".upgrades.json")) {
-			        	try {
+				@Override
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+					if (file.toString().endsWith(".upgrades.json")) {
+						try {
 							String JsonString = new String(Files.readAllBytes(file));
 							JsonParser parser = new JsonParser();
 							JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
@@ -83,9 +82,9 @@ public class ReadNames {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
 						}
-			        }
-			        return FileVisitResult.CONTINUE;
-			    }
+					}
+					return FileVisitResult.CONTINUE;
+				}
 			});
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
@@ -97,17 +96,17 @@ public class ReadNames {
 	private static void ParseMonsterDirectory(File MonsterDir) {
 		try {
 			Files.walkFileTree(MonsterDir.toPath(), new SimpleFileVisitor<Path>() {
-			    @Override
-			    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-			        if (file.toString().endsWith(".info.darkest")) {
-			        	String FileName = file.toFile().getName();
-			        	if (FileName.indexOf(".") > 0) {
-			        		FileName = FileName.substring(0, FileName.indexOf("."));
-			        	}
-			        	NAMES.add(FileName);    
-			        }
-			        return FileVisitResult.CONTINUE;
-			    }
+				@Override
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+					if (file.toString().endsWith(".info.darkest")) {
+						String FileName = file.toFile().getName();
+						if (FileName.indexOf(".") > 0) {
+							FileName = FileName.substring(0, FileName.indexOf("."));
+						}
+						NAMES.add(FileName);	
+					}
+					return FileVisitResult.CONTINUE;
+				}
 			});
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
