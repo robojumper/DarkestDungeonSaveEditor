@@ -29,37 +29,42 @@ public class ReadNames {
 			File RootDir = new File(args[i]);
 			if (RootDir.isDirectory()) {
 				// parse monster list
-				List<File> allDirs = new ArrayList<File>(Arrays.asList(RootDir.listFiles()));
-				for (int j = 0; j < allDirs.size(); j++) {
-					File[] files = allDirs.get(j).listFiles();
-					if (files != null) {
-						allDirs.addAll(Arrays.asList(files));
-					}
-					if (allDirs.get(j).isDirectory()) {
-						if (allDirs.get(j).getName().equalsIgnoreCase("monsters")) {
-							ParseMonsterDirectory(allDirs.get(j));
-						}
-					}
-				}
+				FindAndParseMonsters(RootDir);
 				// parse upgrade trees
 				ParseUpgradeTrees(RootDir);
 			}
 		}
 		Iterator<String> it = NAMES.iterator();
 		while (it.hasNext()) {
-			System.out.println(it.next());
+			String str = it.next();
+			System.out.println(str);
 		}
 	}
 	
+	private static void FindAndParseMonsters(File rootDir) {
+		try {
+			Files.walkFileTree(rootDir.toPath(), new SimpleFileVisitor<Path>() {
+				@Override
+                public FileVisitResult preVisitDirectory(Path file, BasicFileAttributes attrs)
+                        throws IOException
+                {
+					if (file.toFile().getName().equalsIgnoreCase("monsters")) {
+			        	ParseMonsterDirectory(file.toFile());
+			        	return FileVisitResult.SKIP_SUBTREE;
+			        }
+					return FileVisitResult.CONTINUE;
+                }
+			});
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+	}
+
 	private static void ParseUpgradeTrees(File directory) {
 		try {
 			Files.walkFileTree(directory.toPath(), new SimpleFileVisitor<Path>() {
-				@Override
-			    public FileVisitResult preVisitDirectory(Path dir,
-			            BasicFileAttributes attrs) {
-			        return FileVisitResult.CONTINUE;
-			    }
-
 			    @Override
 			    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
 			        if (file.toString().endsWith(".upgrades.json")) {
@@ -81,11 +86,6 @@ public class ReadNames {
 			        }
 			        return FileVisitResult.CONTINUE;
 			    }
-
-			    @Override
-			    public FileVisitResult visitFileFailed(Path file, IOException e) {
-			        return FileVisitResult.CONTINUE;
-			    }
 			});
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
@@ -97,12 +97,6 @@ public class ReadNames {
 	private static void ParseMonsterDirectory(File MonsterDir) {
 		try {
 			Files.walkFileTree(MonsterDir.toPath(), new SimpleFileVisitor<Path>() {
-				@Override
-			    public FileVisitResult preVisitDirectory(Path dir,
-			            BasicFileAttributes attrs) {
-			        return FileVisitResult.CONTINUE;
-			    }
-
 			    @Override
 			    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
 			        if (file.toString().endsWith(".info.darkest")) {
@@ -112,11 +106,6 @@ public class ReadNames {
 			        	}
 			        	NAMES.add(FileName);    
 			        }
-			        return FileVisitResult.CONTINUE;
-			    }
-
-			    @Override
-			    public FileVisitResult visitFileFailed(Path file, IOException e) {
 			        return FileVisitResult.CONTINUE;
 			    }
 			});
