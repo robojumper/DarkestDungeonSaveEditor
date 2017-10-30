@@ -35,8 +35,8 @@ public class DsonFile {
 		Buffer.get(Header.epsilon);
 		Header.lengthOfHeader = Buffer.getInt();
 		Header.zeroes = Buffer.getInt();
-		Header.gamma = Buffer.getInt();
-		Header.gamma2 = Buffer.getInt();
+		Header.numObjects16 = Buffer.getInt();
+		Header.numObjects = Buffer.getInt();
 		Header.startOfMeta1 = Buffer.getInt();
 		Header.zeroes2 = Buffer.getLong();
 		Header.zeroes3 = Buffer.getLong();
@@ -74,7 +74,9 @@ public class DsonFile {
 			RootFields = new ArrayList<DsonField>();
 			// Is this the correct way to do it?
 			// WARNING: Apparently, META2 is not necessarily ordered the same way as DATA
-			// This may have serious implications on Field Hierarchy
+			// This may have serious implications on Field Hierarchy.
+			// It seems to work, in case it breaks, this is what you're looking for
+			// This should also be revisited when trying to get saving implemented 
 			for (int i = 0; i < Meta2.Entries.length; i++) {
 				DsonField Field = new DsonField();
 				int off = Meta2.Entries[i].offset;
@@ -113,6 +115,7 @@ public class DsonFile {
 				}
 				// Add the field
 				// If our stack is empty, the field needs to be of type object!
+				// (At least I haven't seen it any other way, since all files began with base_root 
 				if (FieldStack.isEmpty()) {
 					assert(Field.Type == FieldType.TYPE_Object);
 					RootFields.add(Field);
@@ -135,6 +138,8 @@ public class DsonFile {
 			}
 			// we really should not have any pending fields at this point
 			assert(FieldStack.isEmpty());
+			// runningObjIdx starts at -1
+			assert(runningObjIdx + 1 == Header.numObjects);
 		}
 	}
 	
@@ -155,7 +160,7 @@ public class DsonFile {
 		byte[] epsilon = {0x00, 0x00, 0x00, 0x00};
 		int lengthOfHeader; // always 0x40?
 		int zeroes;
-		int gamma, gamma2; // gamme = gamma2 << 4
+		int numObjects16, numObjects; // numObjects16 = numObjects << 4
 		int startOfMeta1; // always 0x40?
 		long zeroes2;
 		long zeroes3;
@@ -281,6 +286,10 @@ public class DsonFile {
 	// Comments contain debug info that might come in handy. This debug info is just unknown hex fields
 	public String GetJSonString(int indent, boolean debug) {
 		StringBuilder sb = new StringBuilder();
+		if (debug) {
+			sb.append("// HEADER: ");
+			sb.append("gamma: " + Header.numObjects16 + " (gamma >> 4: " + Header.numObjects + ")");
+		}
 		sb.append(indt(indent)+"{\n");
 		indent++;
 		
@@ -300,13 +309,10 @@ public class DsonFile {
 	private void WriteField(StringBuilder sb, DsonField Field, int indent, boolean debug) { 
 
 		if (debug) {
-			String DebugInfo = "// INFO ";
+			sb.append(indt(indent) + "// INFO ");
 			// every field has a Meta2Index
-			DebugInfo += "Meta2_TypeHash: 0x" + LEBytesToHexStr(Meta2.Entries[Field.Meta2EntryIdx].TypeIdent) + " ";
-			
-			DebugInfo += "\n";	
-	
-			sb.append(indt(indent) + DebugInfo);
+			sb.append("Meta2_TypeHash: 0x" + LEBytesToHexStr(Meta2.Entries[Field.Meta2EntryIdx].TypeIdent) + " ");
+			sb.append("\n");	
 		}
 		
 		sb.append(indt(indent) + "\"" + Field.Name + "\" : ");

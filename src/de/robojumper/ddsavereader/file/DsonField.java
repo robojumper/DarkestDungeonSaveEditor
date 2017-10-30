@@ -85,7 +85,7 @@ public class DsonField {
 		} else if (AlignedSize() == 4) {
 			Type = FieldType.TYPE_Int;
 			byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
-			int tempInt = ByteBuffer.wrap(tempArr).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt();
+			int tempInt = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
 			DataString = Integer.toString(tempInt);
 		} else if (ParseString()) {
 			// Some strings are actually embedded files
@@ -114,7 +114,7 @@ public class DsonField {
 			if (AlignedSize() == 4) {
 				Type = FieldType.TYPE_Float;
 				byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
-				float tempFlt = ByteBuffer.wrap(tempArr).order(java.nio.ByteOrder.LITTLE_ENDIAN).getFloat();
+				float tempFlt = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getFloat();
 				DataString = Float.toString(tempFlt);
 				return true;
 			}
