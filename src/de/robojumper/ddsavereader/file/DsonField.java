@@ -3,11 +3,13 @@ package de.robojumper.ddsavereader.file;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.HashMap;
+
 
 // Dson for Darkest Json
 public class DsonField {
 	
-	static final String[] FLOAT_FIELD_NAMES = {"current_hp", "m_Stress"};
+	static final String[] FLOAT_FIELD_NAMES = {"current_hp", "m_Stress", "actor@buff_group@*@amount"};
 	
 	// TODO: Make array a special kind of field with an Inner type??
 	static final String[] INTARRAY_FIELD_NAMES = {
@@ -25,6 +27,11 @@ public class DsonField {
 	static final String[] STRINGARRAY_FIELD_NAMES = {
 		"goal_ids", // quest.json
 	};
+
+	
+	// When loading, all Integers will check for a matching hash and replace their display string with @"<name>" (where <name> is the unhashed string)
+	// This is much better than trying to find a good reverse
+	public static final HashMap<Integer, String> NAME_TABLE = new HashMap<Integer, String>();
 
 	// TODO: map@bounds is a rect?
 	public enum FieldType {
@@ -87,6 +94,10 @@ public class DsonField {
 			byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
 			int tempInt = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
 			DataString = Integer.toString(tempInt);
+			String UnHashed = NAME_TABLE.get(tempInt);
+			if (UnHashed != null) {
+				DataString = "@\"" + UnHashed + "\"";
+			}
 		} else if (ParseString()) {
 			// Some strings are actually embedded files
 			if (DataString.length() >= 6) {
@@ -248,4 +259,6 @@ public class DsonField {
 		}
 		return true;
 	}
+	
+
 }

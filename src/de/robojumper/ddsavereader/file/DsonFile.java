@@ -368,7 +368,7 @@ public class DsonFile {
 	}
 	
 	// Seems to be correct
-	static int StringHash(String str) {
+	public static int StringHash(String str) {
 		int hash = 0;
 		for (int i = 0; i < str.length(); i++) {
 			hash = hash * 53 + str.charAt(i);

@@ -1,10 +1,14 @@
 package de.robojumper.ddsavereader;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+
+import de.robojumper.ddsavereader.file.DsonField;
 import de.robojumper.ddsavereader.file.DsonFile;
 
 public class Main {
@@ -13,7 +17,7 @@ public class Main {
 		String arg;
 		int i = 0;
 		boolean debug = false;
-		String outfile = "", infile = "";
+		String outfile = "", infile = "", namefile = "";
 
 		while (i < args.length && args[i].startsWith("-")) {
 			arg = args[i++];
@@ -26,7 +30,15 @@ public class Main {
 				if (i < args.length) {
 					outfile = args[i++];
 				} else {
-					System.err.println("-output requires a filename");
+					System.err.println("--output requires a filename");
+				}
+			}
+			
+			if (arg.equals("-n") || arg.equals("--names")) {
+				if (i < args.length) {
+					namefile = args[i++];
+				} else {
+					System.err.println("--names requires a filename");
 				}
 			}
 		}
@@ -34,7 +46,25 @@ public class Main {
 		if (i == args.length - 1) {
 			infile = args[i++];
 		} else {
-			System.err.println("Usage: ParseCmdLine [--debug, -d] [--output, -o outfile] filename");
+			System.err.println("Usage: ParseCmdLine [--debug, -d] [--names, -n namefile] [--output, -o outfile] filename");
+			System.exit(1);
+		}
+		
+		// for now, read in the names from a specified text file
+		// This could be read in from game data!
+		try {
+			try (BufferedReader br = new BufferedReader(new FileReader(Paths.get(namefile).toFile()))) {
+			    String line;
+			    while ((line = br.readLine()) != null) {
+			    	if (!line.equals("")) {
+			    		DsonField.NAME_TABLE.put(DsonFile.StringHash(line), line);
+			    	}
+			    }
+			}
+		} catch (IOException e) {
+			System.err.println("Could not read " + namefile);
+			System.err.println(e.getMessage());
+			System.exit(1);
 		}
 
 		String OutResult = null;
