@@ -32,4 +32,4 @@ There is no output file parameter, just pipe it to a file (append ` > names.txt`
 
 ## Attribution
 
-This application uses the [Google GSON Library](https://github.com/google/gson) 2.8.2, licensed under the [Apache License 2.0](https://github.com/robojumper/DarkestDungeonSaveReader/blob/master/Licenses/APACHEv2.0.txt).
+This application uses the [Google GSON Library](https://github.com/google/gson) 2.8.2, licensed under the [Apache License 2.0](https://github.com/robojumper/DarkestDungeonSaveReader/blob/master/Licenses/Apachev2.0.txt).
