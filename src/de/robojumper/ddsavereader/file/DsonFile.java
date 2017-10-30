@@ -40,7 +40,7 @@ public class DsonFile {
 		Header.startOfMeta1 = Buffer.getInt();
 		Header.zeroes2 = Buffer.getLong();
 		Header.zeroes3 = Buffer.getLong();
-		Header.delta = Buffer.getInt();
+		Header.numMeta2Entries = Buffer.getInt();
 		Header.startOfMeta2 = Buffer.getInt();
 		Header.zeroes4 = Buffer.getInt();
 		Header.lengthOfData = Buffer.getInt();
@@ -59,6 +59,7 @@ public class DsonFile {
 			byte[] Meta2Data = new byte[Header.startOfData - Header.startOfMeta2];
 			Buffer.get(Meta2Data);
 			Meta2 = new Meta2Block(Meta2Data);
+			assert(Header.numMeta2Entries == Meta2.Entries.length);;
 		}
 		{
 			byte[] Data = new byte[Header.lengthOfData];
@@ -164,7 +165,7 @@ public class DsonFile {
 		int startOfMeta1; // always 0x40?
 		long zeroes2;
 		long zeroes3;
-		int delta;
+		int numMeta2Entries;
 		int startOfMeta2;
 		int zeroes4;
 		int startOfData;
@@ -287,8 +288,7 @@ public class DsonFile {
 	public String GetJSonString(int indent, boolean debug) {
 		StringBuilder sb = new StringBuilder();
 		if (debug) {
-			sb.append("// HEADER: ");
-			sb.append("gamma: " + Header.numObjects16 + " (gamma >> 4: " + Header.numObjects + ")");
+			//sb.append("// HEADER: ");
 		}
 		sb.append(indt(indent)+"{\n");
 		indent++;
