@@ -20,8 +20,6 @@ public class DsonFile {
 	Meta1Block Meta1;
 	Meta2Block Meta2;
 	// The first field that is being deserialized is always base_root
-	// Field stack so we know what we push variables to
-	Stack<DsonField> FieldStack;
 	List<DsonField> RootFields;
 	
 	// Embed files are strings that have the last null-terminating character included in the data size
@@ -67,8 +65,16 @@ public class DsonFile {
 			Buffer.get(Data);
 			assert(Buffer.remaining() == 0);
 			// parse the objects
-			FieldStack = new Stack<DsonField>();
+			Stack<DsonField> FieldStack = new Stack<DsonField>();
+			// For HierarchyHint
+			Stack<Integer> HierarchyStack = new Stack<Integer>();
+			// base_root starts at -1
+			int runningObjIdx = -1;
+			HierarchyStack.push(new Integer(runningObjIdx));
 			RootFields = new ArrayList<DsonField>();
+			// Is this the correct way to do it?
+			// WARNING: Apparently, META2 is not necessarily ordered the same way as DATA
+			// This may have serious implications on Field Hierarchy
 			for (int i = 0; i < Meta2.Entries.length; i++) {
 				DsonField Field = new DsonField();
 				int off = Meta2.Entries[i].offset;
@@ -87,7 +93,7 @@ public class DsonFile {
 				} else {
 					dataLen = Data.length + 1 - off;
 				}*/
-				int nextOff = Meta2.FindSmallestOffsetLargerThan(off);
+				int nextOff = Meta2.FindSmallestOffsetLargerThan(Meta2.Entries[i].offset);
 				if (nextOff > 0) {
 					dataLen = nextOff - off;
 				} else {
@@ -100,6 +106,8 @@ public class DsonFile {
 					Field.Type = FieldType.TYPE_Object;
 					Field.DataString = "";
 					Field.SetNumChildren(objectsizes[0]);
+					assert(Meta2.Entries[i].GetMyMeta1BlockEntry().HierarchyHint == HierarchyStack.peek().intValue());
+					runningObjIdx++;
 				} else {
 					Field.GuessType();
 				}
@@ -115,12 +123,14 @@ public class DsonFile {
 				// If we have an object, push it to the stack
 				if (Field.Type == FieldType.TYPE_Object) {
 					FieldStack.push(Field);
+					HierarchyStack.push(new Integer(runningObjIdx));
 				}
 				
 				// Then check if the object on top of the stack has all its children. If so, pop it
 				// In case an object was the last child of an object, we do this recursively
 				while (!FieldStack.isEmpty() && FieldStack.peek().Type == FieldType.TYPE_Object && FieldStack.peek().HasAllChilds()) {
 					FieldStack.pop();
+					HierarchyStack.pop();
 				}
 			}
 			// we really should not have any pending fields at this point
@@ -169,7 +179,7 @@ public class DsonFile {
 			Entries = new Meta1BlockEntry[Data.length / 0x10];
 			for (int i = 0; Buffer.remaining() != 0; i++) {
 				Entries[i] = new Meta1BlockEntry();
-				Buffer.get(Entries[i].alpha);
+				Entries[i].HierarchyHint = Buffer.getInt();
 				Entries[i].idx = Buffer.getInt();
 				Entries[i].NumDirectChildren = Buffer.getInt();
 				Entries[i].NumAllChildren = Buffer.getInt();
@@ -178,8 +188,8 @@ public class DsonFile {
 		
 		// data structure encapsulating a single entry in the Meta1Block
 		class Meta1BlockEntry {
-			// unknown int. first entry is FF FF FF FF. rest seemingly random
-			byte[] alpha = new byte[4];
+			// index of this object in the data - 1, and all sibling objects have the same (i.e. inherit from the first) 
+			int HierarchyHint;
 			// index into Meta2Block.Entries
 			int idx;
 			// number of direct children fields of this property
@@ -292,13 +302,8 @@ public class DsonFile {
 		if (debug) {
 			String DebugInfo = "// INFO ";
 			// every field has a Meta2Index
-			// not needed -- verified Name hash is correct!
-			//DebugInfo += "Meta2_NameHash: 0x" + LEBytesToHexStr(Meta2.Entries[Field.Meta2EntryIdx].NameIdent) + " (test hash: 0x" + Integer.toHexString(StringHash(Field.Name)) + ") ";
 			DebugInfo += "Meta2_TypeHash: 0x" + LEBytesToHexStr(Meta2.Entries[Field.Meta2EntryIdx].TypeIdent) + " ";
 			
-			if (Field.Meta1EntryIdx > -1) {
-				DebugInfo += "Meta1_alpha: 0x" + LEBytesToHexStr(Meta1.Entries[Field.Meta1EntryIdx].alpha);
-			}
 			DebugInfo += "\n";	
 	
 			sb.append(indt(indent) + DebugInfo);
