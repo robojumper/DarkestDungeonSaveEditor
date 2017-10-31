@@ -9,7 +9,7 @@ import java.util.HashMap;
 // Dson for Darkest Json
 public class DsonField {
 	
-	static final String[] FLOAT_FIELD_NAMES = {"current_hp", "m_Stress", "actor@buff_group@*@amount"};
+	static final String[] FLOAT_FIELD_NAMES = {"current_hp", "m_Stress", "actor@buff_group@*@amount", "chapters@*@*@percent"};
 	
 	// TODO: Make array a special kind of field with an Inner type??
 	static final String[] INTARRAY_FIELD_NAMES = {
@@ -29,7 +29,7 @@ public class DsonField {
 	};
 
 	
-	// When loading, all Integers will check for a matching hash and replace their display string with @"<name>" (where <name> is the unhashed string)
+	// When loading, all Integers will check for a matching hash and replace their display string with #"<name>" (where <name> is the unhashed string)
 	// This is much better than trying to find a good reverse
 	public static final HashMap<Integer, String> NAME_TABLE = new HashMap<Integer, String>();
 
@@ -96,7 +96,7 @@ public class DsonField {
 			DataString = Integer.toString(tempInt);
 			String UnHashed = NAME_TABLE.get(tempInt);
 			if (UnHashed != null) {
-				DataString = "@\"" + UnHashed + "\"";
+				DataString = "#\"" + UnHashed + "\"";
 			}
 		} else if (ParseString()) {
 			// Some strings are actually embedded files
@@ -137,6 +137,7 @@ public class DsonField {
 		if (NameInArray(STRINGARRAY_FIELD_NAMES)) {
 			Type = FieldType.TYPE_StringArray;
 			byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
+			@SuppressWarnings("unused")
 			int arrLen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
 			// read the rest
 			byte[] strings = Arrays.copyOfRange(RawData, AlignmentSkip() + 4, AlignmentSkip() + AlignedSize());
@@ -184,13 +185,14 @@ public class DsonField {
 	}
 	
 	private boolean NameInArray(String[] arr) {
-		DsonField CheckField = this;
+		DsonField CheckField;
 		boolean match;
 		for (int i = 0; i < arr.length; i++) {
 			String[] names = arr[i].split("@");
 			match = true;
-			for (int j = names.length - 1; j >= 0 && CheckField != null; j--) {
-				if (!(names[j].equals("*") || names[j].equals(CheckField.Name))) {
+			CheckField = this;
+			for (int j = names.length - 1; j >= 0; j--) {
+				if (CheckField == null || !(names[j].equals("*") || names[j].equals(CheckField.Name))) {
 					match = false;
 					break;
 				}
@@ -202,6 +204,7 @@ public class DsonField {
 		}
 		return false;
 	}
+
 
 	private boolean ParseString() {
 		// A string has a 4-byte int for the length, followed by a null-term'd string. So it's at least 5 bytes long

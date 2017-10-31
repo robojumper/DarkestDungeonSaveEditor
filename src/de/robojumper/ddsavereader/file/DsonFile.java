@@ -111,8 +111,6 @@ public class DsonFile {
 					Field.SetNumChildren(objectsizes[0]);
 					assert(Meta2.Entries[i].GetMyMeta1BlockEntry().HierarchyHint == HierarchyStack.peek().intValue());
 					runningObjIdx++;
-				} else {
-					Field.GuessType();
 				}
 				// Add the field
 				// If our stack is empty, the field needs to be of type object!
@@ -124,6 +122,11 @@ public class DsonFile {
 					// We have a stack element, add Field as a child
 					FieldStack.peek().AddChild(Field);
 				}
+				// now guess the type that it knows about its parents
+				if (Field.Type != FieldType.TYPE_Object) {
+					Field.GuessType();
+				}
+				
 				// If we have an object, push it to the stack
 				if (Field.Type == FieldType.TYPE_Object) {
 					FieldStack.push(Field);

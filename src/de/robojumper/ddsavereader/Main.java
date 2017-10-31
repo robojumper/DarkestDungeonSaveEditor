@@ -52,7 +52,7 @@ public class Main {
 		
 		// for now, read in the names from a specified text file
 		// This could be read in from game data!
-		try {
+		if (!namefile.equals("")) {
 			try (BufferedReader br = new BufferedReader(new FileReader(Paths.get(namefile).toFile()))) {
 			    String line;
 			    while ((line = br.readLine()) != null) {
@@ -60,11 +60,11 @@ public class Main {
 			    		DsonField.NAME_TABLE.put(DsonFile.StringHash(line), line);
 			    	}
 			    }
+			} catch (IOException e) {
+				System.err.println("Could not read " + namefile);
+				System.err.println(e.getMessage());
+				System.exit(1);
 			}
-		} catch (IOException e) {
-			System.err.println("Could not read " + namefile);
-			System.err.println(e.getMessage());
-			System.exit(1);
 		}
 
 		String OutResult = null;
