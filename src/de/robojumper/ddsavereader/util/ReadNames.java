@@ -173,7 +173,7 @@ public class ReadNames {
 							JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
 							JsonObject dataObject = rootObject.getAsJsonObject("data");
 							if (dataObject != null) {
-								JsonObject activitiesObject = rootObject.getAsJsonObject("activities");
+								JsonObject activitiesObject = dataObject.getAsJsonObject("activities");
 								if (activitiesObject != null) {
 									for (Entry<String, JsonElement> elem : activitiesObject.entrySet()) {
 										NAMES.add(elem.getKey());

@@ -171,7 +171,14 @@ public class DsonField {
 				StringBuilder sb = new StringBuilder();
 				sb.append("[");
 				for (int i = 0; i < arrLen; i++) {
-					sb.append(Integer.toString(Buffer.getInt()));
+					int tempInt = Buffer.getInt();
+					String UnHashed = NAME_TABLE.get(tempInt);
+					if (UnHashed != null) {
+						UnHashed = "#\"" + UnHashed + "\"";
+						sb.append(UnHashed);
+					} else {
+						sb.append(Integer.toString(tempInt));
+					}
 					if (i != arrLen - 1) {
 						sb.append(", ");
 					}
