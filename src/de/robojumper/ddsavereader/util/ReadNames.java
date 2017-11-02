@@ -36,6 +36,8 @@ public class ReadNames {
 				ParseMissions(RootDir);
 				// buildings, activities
 				ParseBuildings(RootDir);
+				// events
+				ParseTownEvents(RootDir);
 			}
 		}
 		Iterator<String> it = NAMES.iterator();
@@ -178,6 +180,44 @@ public class ReadNames {
 									for (Entry<String, JsonElement> elem : activitiesObject.entrySet()) {
 										NAMES.add(elem.getKey());
 									}
+								}
+							}
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+					}
+					return FileVisitResult.CONTINUE;
+				}
+			});
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
+	private static void ParseTownEvents(File directory) {
+		try {
+			Files.walkFileTree(directory.toPath(), new SimpleFileVisitor<Path>() {
+				@Override
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+					if (file.toString().endsWith(".events.json")) {
+						// add file name
+						String FileName = file.toFile().getName();
+						if (FileName.indexOf(".") > 0) {
+							FileName = FileName.substring(0, FileName.indexOf("."));
+						}
+						NAMES.add(FileName);
+						// parse activities
+						try {
+							String JsonString = new String(Files.readAllBytes(file));
+							JsonParser parser = new JsonParser();
+							JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
+							JsonArray arrEvents = rootObject.getAsJsonArray("events");
+							if (arrEvents != null) {
+								for (int i = 0; i < arrEvents.size(); i++) {
+									String id = arrEvents.get(i).getAsJsonObject().get("id").getAsString();
+									NAMES.add(id);
 								}
 							}
 						} catch (IOException e) {

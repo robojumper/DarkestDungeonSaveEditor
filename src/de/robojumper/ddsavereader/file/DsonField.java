@@ -14,7 +14,7 @@ public class DsonField {
 	// TODO: Make array a special kind of field with an Inner type??
 	static final String[] INTARRAY_FIELD_NAMES = {
 		"read_page_indexes", "raid_read_page_indexes", "raid_unread_page_indexes",	// journal.json
-		"dungeons_unlocked", // game_knowledge.json
+		"dungeons_unlocked", "played_video_list", // game_knowledge.json
 		"goal_ids", "trinket_retention_ids",	// quest.json
 		"last_party_guids", // roster.json
 		"result_event_history", // town_event.json
