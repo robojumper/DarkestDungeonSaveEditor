@@ -7,8 +7,12 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
@@ -23,21 +27,122 @@ import com.google.gson.JsonParser;
 public class ReadNames {
 
 	static final Set<String> NAMES = new HashSet<String>();
+	static final Map<String, List<Parser>> PARSERS = new HashMap<String, List<Parser>>();
+	
+	static {
+		// Info files (Heroes, Monsters)
+		putParser(".info.darkest", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file) {
+				addBaseName(filePath);
+			}
+		}));
+		
+		// Upgrades
+		putParser(".upgrades.json", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file) {
+				addBaseName(filePath);
+				addSimpleJSONArrayEntryIDs(file, "trees", "id");
+			}
+		}));
+		
+		// Camping skills
+		putParser(".camping_skills.json", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file) {
+				addSimpleJSONArrayEntryIDs(file, "skills", "id");
+			}
+		}));
+		
+		// Dungeon types
+		putParser(".dungeon.json", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file) {
+				addBaseName(filePath);
+			}
+		}));
+
+		// Dungeon types
+		putParser(".types.json", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file) {
+				addSimpleJSONArrayEntryIDs(file, "types", "id");
+				addSimpleJSONArrayEntryIDs(file, "goals", "id");
+			}
+		}));
+		
+		// Buildings and activities
+		putParser(".building.json", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file) {
+				addBaseName(filePath);
+				String JsonString = new String(file);
+				JsonParser parser = new JsonParser();
+				JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
+				JsonObject dataObject = rootObject.getAsJsonObject("data");
+				if (dataObject != null) {
+					JsonObject activitiesObject = dataObject.getAsJsonObject("activities");
+					if (activitiesObject != null) {
+						for (Entry<String, JsonElement> elem : activitiesObject.entrySet()) {
+							NAMES.add(elem.getKey());
+						}
+					}
+				}
+			}
+		}));
+		
+		putParser(".events.json", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file) {
+				addBaseName(filePath);
+				addSimpleJSONArrayEntryIDs(file, "events", "id");
+			}
+		}));
+
+	}
+	
+	static void putParser(String extension, Parser Parser) {
+		List<Parser> l = PARSERS.get(extension);
+		if (l == null) {
+			PARSERS.put(extension, l = new ArrayList<Parser>());
+		}
+		if (!l.contains(Parser)) {
+			l.add(Parser);
+		}
+	}
+	
 	// args is a list of game or mod root directories
 	public static void main(String[] args) {
 		for (int i = 0; i < args.length; i++) {
 			File RootDir = new File(args[i]);
 			if (RootDir.isDirectory()) {
-				// parse monster list
-				FindInfoFiles(RootDir);
-				// parse upgrade trees
-				ParseUpgradeTrees(RootDir);
-				// dungeon types, quests
-				ParseMissions(RootDir);
-				// buildings, activities
-				ParseBuildings(RootDir);
-				// events
-				ParseTownEvents(RootDir);
+				try {
+					Files.walkFileTree(RootDir.toPath(), new SimpleFileVisitor<Path>() {
+						@Override
+						public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+							String filename = file.toString();
+							// for all parsers that want to handle this file
+							for (Entry<String, List<Parser>> entry : PARSERS.entrySet()) {
+								if (filename.endsWith(entry.getKey())) {
+									try {
+										byte[] Data = Files.readAllBytes(file);
+										for (Parser parser : entry.getValue()) {
+											parser.parseFile(file, Data);
+										}
+									} catch (IOException e) {
+										// TODO Auto-generated catch block
+										e.printStackTrace();
+									}
+								}
+							}
+							return FileVisitResult.CONTINUE;
+						}
+					});
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 			}
 		}
 		Iterator<String> it = NAMES.iterator();
@@ -48,190 +153,32 @@ public class ReadNames {
 	}
 	
 	
-
-
-	private static void ParseUpgradeTrees(File directory) {
-		try {
-			Files.walkFileTree(directory.toPath(), new SimpleFileVisitor<Path>() {
-				@Override
-				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-					if (file.toString().endsWith(".upgrades.json")) {
-						// add file name, this catches buildings etc.
-						String FileName = file.toFile().getName();
-						if (FileName.indexOf(".") > 0) {
-							FileName = FileName.substring(0, FileName.indexOf("."));
-						}
-						NAMES.add(FileName);
-						// parse trees
-						try {
-							String JsonString = new String(Files.readAllBytes(file));
-							JsonParser parser = new JsonParser();
-							JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
-							JsonArray arrTrees = rootObject.getAsJsonArray("trees");
-							if (arrTrees != null) {
-								for (int i = 0; i < arrTrees.size(); i++) {
-									String id = arrTrees.get(i).getAsJsonObject().get("id").getAsString();
-									NAMES.add(id);
-								}
-							}
-						} catch (IOException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-					return FileVisitResult.CONTINUE;
-				}
-			});
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+    interface Parser {
+        void parseFile(Path filePath, byte[] file);
+    }
+    
+    // utility functions
+    static void addBaseName(Path filePath) {
+    	String FileName = filePath.toFile().getName();
+		if (FileName.indexOf(".") > 0) {
+			FileName = FileName.substring(0, FileName.indexOf("."));
 		}
-	}
-	
-	private static void ParseMissions(File directory) {
-		try {
-			Files.walkFileTree(directory.toPath(), new SimpleFileVisitor<Path>() {
-				@Override
-				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-					// dungeons
-					if (file.toString().endsWith(".dungeon.json")) {
-						String FileName = file.toFile().getName();
-						if (FileName.indexOf(".") > 0) {
-							FileName = FileName.substring(0, FileName.indexOf("."));
-						}
-						NAMES.add(FileName);
-					} else if (file.toString().endsWith(".types.json")) {
-						// parse quest goals and types
-						try {
-							String JsonString = new String(Files.readAllBytes(file));
-							JsonParser parser = new JsonParser();
-							JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
-							JsonArray arrGoals = rootObject.getAsJsonArray("goals");
-							if (arrGoals != null) {
-								for (int i = 0; i < arrGoals.size(); i++) {
-									String id = arrGoals.get(i).getAsJsonObject().get("id").getAsString();
-									NAMES.add(id);
-								}
-							}
-							JsonArray arrTypes = rootObject.getAsJsonArray("types");
-							if (arrTypes != null) {
-								for (int i = 0; i < arrTypes.size(); i++) {
-									String id = arrTypes.get(i).getAsJsonObject().get("id").getAsString();
-									NAMES.add(id);
-								}
-							}
-						} catch (IOException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-					return FileVisitResult.CONTINUE;
-				}
-			});
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+    	NAMES.add(FileName);
+    }
+    
+    // assuming a JSON file where the root object has an array <arrayName> of objects each with a string variable <idString>
+    // add that ID string
+    static void addSimpleJSONArrayEntryIDs(byte[] data, String arrayName, String idString) {
+    	String JsonString = new String(data);
+		JsonParser parser = new JsonParser();
+		JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
+		JsonArray arrArray = rootObject.getAsJsonArray(arrayName);
+		if (arrArray != null) {
+			for (int i = 0; i < arrArray.size(); i++) {
+				String id = arrArray.get(i).getAsJsonObject().get(idString).getAsString();
+				NAMES.add(id);
+			}
 		}
-	}
-
-	// find all "*.info.darkest" file, this file name without extension are ususally important IDs
-	private static void FindInfoFiles(File MonsterDir) {
-		try {
-			Files.walkFileTree(MonsterDir.toPath(), new SimpleFileVisitor<Path>() {
-				@Override
-				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-					if (file.toString().endsWith(".info.darkest")) {
-						String FileName = file.toFile().getName();
-						if (FileName.indexOf(".") > 0) {
-							FileName = FileName.substring(0, FileName.indexOf("."));
-						}
-						NAMES.add(FileName);
-					}
-					return FileVisitResult.CONTINUE;
-				}
-			});
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
-	
-	private static void ParseBuildings(File directory) {
-		try {
-			Files.walkFileTree(directory.toPath(), new SimpleFileVisitor<Path>() {
-				@Override
-				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-					if (file.toString().endsWith(".building.json")) {
-						// add file name
-						String FileName = file.toFile().getName();
-						if (FileName.indexOf(".") > 0) {
-							FileName = FileName.substring(0, FileName.indexOf("."));
-						}
-						NAMES.add(FileName);
-						// parse activities
-						try {
-							String JsonString = new String(Files.readAllBytes(file));
-							JsonParser parser = new JsonParser();
-							JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
-							JsonObject dataObject = rootObject.getAsJsonObject("data");
-							if (dataObject != null) {
-								JsonObject activitiesObject = dataObject.getAsJsonObject("activities");
-								if (activitiesObject != null) {
-									for (Entry<String, JsonElement> elem : activitiesObject.entrySet()) {
-										NAMES.add(elem.getKey());
-									}
-								}
-							}
-						} catch (IOException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-					return FileVisitResult.CONTINUE;
-				}
-			});
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
-	
-	private static void ParseTownEvents(File directory) {
-		try {
-			Files.walkFileTree(directory.toPath(), new SimpleFileVisitor<Path>() {
-				@Override
-				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-					if (file.toString().endsWith(".events.json")) {
-						// add file name
-						String FileName = file.toFile().getName();
-						if (FileName.indexOf(".") > 0) {
-							FileName = FileName.substring(0, FileName.indexOf("."));
-						}
-						NAMES.add(FileName);
-						// parse activities
-						try {
-							String JsonString = new String(Files.readAllBytes(file));
-							JsonParser parser = new JsonParser();
-							JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
-							JsonArray arrEvents = rootObject.getAsJsonArray("events");
-							if (arrEvents != null) {
-								for (int i = 0; i < arrEvents.size(); i++) {
-									String id = arrEvents.get(i).getAsJsonObject().get("id").getAsString();
-									NAMES.add(id);
-								}
-							}
-						} catch (IOException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-					return FileVisitResult.CONTINUE;
-				}
-			});
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
+    }
 
 }
