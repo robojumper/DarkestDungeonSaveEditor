@@ -34,16 +34,19 @@ public class DsonField {
 
 	
 	// When loading, all Integers will check for a matching hash and replace their display string with #"<name>" (where <name> is the unhashed string)
-	// This is much better than trying to find a good reverse
+	// This is much better than trying to find a good reverse. 
 	public static final HashMap<Integer, String> NAME_TABLE = new HashMap<Integer, String>();
+	
+	static final String STR_TRUE = "true";
+	static final String STR_FALSE = "false";
 
 	public enum FieldType {
 		TYPE_Object,        // has a Meta1Block entry
 		TYPE_Bool,          // 1 byte, 0x00 or 0x01
 		TYPE_Char,          // 1 byte, only seems to be used in upgrades.json 
-		TYPE_TwoBool,       // aligned, 8 bytes (only used in gameplay options??)
+		TYPE_TwoBool,       // aligned, 8 bytes (only used in gameplay options??). emitted as t[true, true]
 		TYPE_String,        // aligned, int size + null-terminated string of size (including \0)
-		TYPE_File,          // Actually an object, but encoded as a string (embedded DsonFile). only seems to be used in roster.json 
+		TYPE_File,          // Actually an object, but encoded as a string (embedded DsonFile). used in roster.json and map.json 
 		TYPE_Int,           // aligned, 4 byte integer
 		// Begin hardcode types: these types do not have enough characteristics to make the heuristic work
 		// As such, the field names/paths are hardcoded above
@@ -52,7 +55,7 @@ public class DsonField {
 		TYPE_Float,         // aligned, 4-byte float
 		TYPE_IntArray,      // aligned. 4-byte int [count], then [count] 4-byte integers
 		TYPE_StringArray,   // aligned, 4-byte int [count], then [count] null-terminated strings
-		TYPE_FloatVector,   // aligned, arbitrary number of 4-byte floats
+		TYPE_FloatVector,   // aligned, arbitrary number of 4-byte floats. emitted as v[1.0, 2.0, ...]
 		TYPE_Unknown
 	};
 	
@@ -61,6 +64,13 @@ public class DsonField {
 	
 	public String Name;
 	
+	// The resulting string. In the following cases, it is not a valid JSON value:
+	// 1) It's of TYPE_Int, but an unhashed string. The format is #"string", so removing the # makes it a valid string
+	// 2) It's of TYPE_TwoBool. The format is t[b1, b2], so removing the t makes it a valid boolean array
+	// 3) It's of TYPE_FloatVector. The format is v[f1, f2, ...], so removing the v makes it a valid float array
+	// 4) It's of TYPE_Unknown. The type could not be determined.
+	// The following cases should be handled externally and not cause problems
+	// 5) It's of TYPE_Object. External code should create a valid JSON Object from the Child Fields
 	public String DataString = "UNKNOWN. PLEASE PARSE TYPE";
 	
 	// Some strings are a full file.
@@ -87,7 +97,7 @@ public class DsonField {
 		} else if (RawData.length == 1) { 
 			if (RawData[0] == 0x00 || RawData[0] == 0x01) {
 				Type = FieldType.TYPE_Bool;
-				DataString = RawData[0] == 0x00 ? "False" : "True";
+				DataString = RawData[0] == 0x00 ? STR_FALSE : STR_TRUE;
 			} else {
 				Type = FieldType.TYPE_Char;
 				DataString = "'" + Character.toString((char)RawData[0]) + "'";
@@ -96,7 +106,7 @@ public class DsonField {
 				(RawData[AlignmentSkip() + 0] == 0x00 || RawData[AlignmentSkip() + 0] == 0x01) &&
 				(RawData[AlignmentSkip() + 4] == 0x00 || RawData[AlignmentSkip() + 4] == 0x01)) {
 			Type = FieldType.TYPE_TwoBool;
-			DataString = (RawData[AlignmentSkip() + 4] == 0x00 ? "False" : "True") + " " + (RawData[AlignmentSkip() + 4] == 0x00 ? "False" : "True");
+			DataString = "t[" + (RawData[AlignmentSkip() + 4] == 0x00 ? STR_FALSE : STR_TRUE) + ", " + (RawData[AlignmentSkip() + 4] == 0x00 ? STR_FALSE : STR_TRUE) + "]";
 		} else if (AlignedSize() == 4) {
 			Type = FieldType.TYPE_Int;
 			byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);

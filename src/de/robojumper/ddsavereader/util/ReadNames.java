@@ -156,6 +156,7 @@ public class ReadNames {
 		}));
 		
 		// Curios
+		// TODO: Some Quest curios aren't caught for some reason. Where are they declared / defined??
 		putParser("curio_props.csv", (new Parser() {
 			@Override
 			public void parseFile(Path filePath, byte[] file) {
