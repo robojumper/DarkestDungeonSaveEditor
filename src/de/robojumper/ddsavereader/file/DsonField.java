@@ -9,7 +9,7 @@ import java.util.HashMap;
 // Dson for Darkest Json
 public class DsonField {
 	
-	static final String[] FLOAT_FIELD_NAMES = {"current_hp", "m_Stress", "actor@buff_group@*@amount", "chapters@*@*@percent"};
+	static final String[] FLOAT_FIELD_NAMES = {"current_hp", "m_Stress", "actor@buff_group@*@amount", "chapters@*@*@percent", "non_rolled_additional_chances@*@chance"};
 	
 	// TODO: Make array a special kind of field with an Inner type??
 	static final String[] INTARRAY_FIELD_NAMES = {

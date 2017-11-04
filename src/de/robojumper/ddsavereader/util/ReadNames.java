@@ -14,6 +14,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.Set;
 
 import com.google.gson.JsonArray;
@@ -91,12 +93,62 @@ public class ReadNames {
 				}
 			}
 		}));
-		
+
+		// Town events 
 		putParser(".events.json", (new Parser() {
 			@Override
 			public void parseFile(Path filePath, byte[] file) {
 				addBaseName(filePath);
 				addSimpleJSONArrayEntryIDs(file, "events", "id");
+			}
+		}));
+		
+		// Inventory Items
+		Parser inventoryParser = new Parser() {
+			// example: inventory_item:	.type "heirloom" .id "portrait"	.base_stack_limit 3	.purchase_gold_value 0 .sell_gold_value 0
+			final Pattern ITEMSPATTERN = Pattern.compile("inventory_item:\\s?\\.type\\s?\"([a-z_]*)\"\\s*\\.id\\s*\"([a-z_]*)\".*"); 
+			
+			@Override
+			public void parseFile(Path filePath, byte[] file) {
+				// split lines
+				String[] lines = new String(file).split("\\r?\\n");
+				for (String str : lines) {
+					Matcher m = ITEMSPATTERN.matcher(str);
+					if (m.matches()) {
+						// zero is the entire string, not included in groupCount
+						for (int i = 1; i <= m.groupCount(); i++) {
+							String group = m.group(i);
+							if (!group.equals("")) {
+								NAMES.add(group);
+							}
+						}
+					}
+				}
+				
+			}
+		};
+		putParser(".inventory.items.darkest", inventoryParser);
+		putParser(".inventory.system_configs.darkest", inventoryParser);
+		
+		// Town events 
+		putParser(".trinkets.json", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file) {
+				addSimpleJSONArrayEntryIDs(file, "entries", "id");
+			}
+		}));
+		
+		// Curios
+		putParser("curio_props.csv", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file) {
+				String[] lines = new String(file).split("\\r?\\n");
+				for (String str : lines) {
+					String propName = str.substring(0, str.indexOf(","));
+					if (!propName.equals("")) {
+						NAMES.add(propName);
+					}
+				}
 			}
 		}));
 
@@ -114,6 +166,7 @@ public class ReadNames {
 	
 	// args is a list of game or mod root directories
 	public static void main(String[] args) {
+		NAMES.clear();
 		for (int i = 0; i < args.length; i++) {
 			File RootDir = new File(args[i]);
 			if (RootDir.isDirectory()) {
