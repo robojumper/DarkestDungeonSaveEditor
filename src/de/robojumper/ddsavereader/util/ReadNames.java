@@ -50,10 +50,27 @@ public class ReadNames {
 		}));
 		
 		// Camping skills
+		// Camping skills do NOT have corresponding upgrade trees,
+		// even though they appear in persist.upgrades.json
+		// the actual saved hashed tree name is "soldierclass.skill", even though skills may be shared
 		putParser(".camping_skills.json", (new Parser() {
 			@Override
 			public void parseFile(Path filePath, byte[] file) {
-				addSimpleJSONArrayEntryIDs(file, "skills", "id");
+				String JsonString = new String(file);
+				JsonParser parser = new JsonParser();
+				JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
+				JsonArray arrArray = rootObject.getAsJsonArray("skills");
+				if (arrArray != null) {
+					for (int i = 0; i < arrArray.size(); i++) {
+						String id = arrArray.get(i).getAsJsonObject().get("id").getAsString();
+						JsonArray classes = arrArray.get(i).getAsJsonObject().get("hero_classes").getAsJsonArray();
+						if (classes != null) {
+							for (JsonElement elem : classes) {
+								NAMES.add(elem.getAsString() + "." + id);
+							}
+						}
+					}
+				}
 			}
 		}));
 		
@@ -142,6 +159,7 @@ public class ReadNames {
 		putParser("curio_props.csv", (new Parser() {
 			@Override
 			public void parseFile(Path filePath, byte[] file) {
+				// csv file -- just read the first column
 				String[] lines = new String(file).split("\\r?\\n");
 				for (String str : lines) {
 					String propName = str.substring(0, str.indexOf(","));
@@ -212,16 +230,24 @@ public class ReadNames {
     
     // utility functions
     static void addBaseName(Path filePath) {
+    	addBaseNameToSet(filePath, NAMES);
+    }
+    
+    static void addBaseNameToSet(Path filePath, Set<String> Set) {
     	String FileName = filePath.toFile().getName();
 		if (FileName.indexOf(".") > 0) {
 			FileName = FileName.substring(0, FileName.indexOf("."));
 		}
-    	NAMES.add(FileName);
+		Set.add(FileName);
     }
     
     // assuming a JSON file where the root object has an array <arrayName> of objects each with a string variable <idString>
     // add that ID string
     static void addSimpleJSONArrayEntryIDs(byte[] data, String arrayName, String idString) {
+    	addSimpleJSONArrayEntryIDsToSet(data, arrayName, idString, NAMES);
+    }
+    
+    static void addSimpleJSONArrayEntryIDsToSet(byte[] data, String arrayName, String idString, Set<String> Set) {
     	String JsonString = new String(data);
 		JsonParser parser = new JsonParser();
 		JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
@@ -229,7 +255,7 @@ public class ReadNames {
 		if (arrArray != null) {
 			for (int i = 0; i < arrArray.size(); i++) {
 				String id = arrArray.get(i).getAsJsonObject().get(idString).getAsString();
-				NAMES.add(id);
+				Set.add(id);
 			}
 		}
     }

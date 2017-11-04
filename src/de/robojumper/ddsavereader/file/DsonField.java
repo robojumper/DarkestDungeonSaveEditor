@@ -35,16 +35,16 @@ public class DsonField {
 
 	// TODO: map@bounds is a rect?
 	public enum FieldType {
-		TYPE_Object,	// has a Meta1Block entry
-		TYPE_Bool,		// 1 byte, 0x00 or 0x01
-		TYPE_Char,		// 1 byte, only seems to be used in upgrades.json 
-		TYPE_TwoBool,	// aligned, 6 bytes (only used in gameplay options??)
-		TYPE_String,	// aligned, int size + null-terminated string of size (including \0)
-		TYPE_File,		// Actually an object, but encoded as a string (embedded DsonFile). only seems to be used in roster.json 
-		TYPE_Int,		// aligned, 4 byte integer
-		TYPE_Float,		// aligned, 4-byte float
-		TYPE_IntArray,	// aligned. 4-byte int [length], then [length] 4-byte integers
-		TYPE_StringArray,
+		TYPE_Object,        // has a Meta1Block entry
+		TYPE_Bool,          // 1 byte, 0x00 or 0x01
+		TYPE_Char,          // 1 byte, only seems to be used in upgrades.json 
+		TYPE_TwoBool,       // aligned, 6 bytes (only used in gameplay options??)
+		TYPE_String,        // aligned, int size + null-terminated string of size (including \0)
+		TYPE_File,          // Actually an object, but encoded as a string (embedded DsonFile). only seems to be used in roster.json 
+		TYPE_Int,           // aligned, 4 byte integer
+		TYPE_Float,         // aligned, 4-byte float
+		TYPE_IntArray,      // aligned. 4-byte int [count], then [count] 4-byte integers
+		TYPE_StringArray,   // aligned, 4-byte int [count], then [count] null-terminated strings
 		TYPE_Unknown
 	};
 	
