@@ -27,24 +27,32 @@ public class DsonField {
 	static final String[] STRINGARRAY_FIELD_NAMES = {
 		"goal_ids", // quest.json
 	};
+	
+	static final String[] FLOATVECTOR_FIELD_NAMES = {
+		"map@bounds", "areas@*@bounds", "areas@*@tiles@*@mappos", "areas@*@tiles@*@sidepos", // map.json  
+	};
 
 	
 	// When loading, all Integers will check for a matching hash and replace their display string with #"<name>" (where <name> is the unhashed string)
 	// This is much better than trying to find a good reverse
 	public static final HashMap<Integer, String> NAME_TABLE = new HashMap<Integer, String>();
 
-	// TODO: map@bounds is a rect?
 	public enum FieldType {
 		TYPE_Object,        // has a Meta1Block entry
 		TYPE_Bool,          // 1 byte, 0x00 or 0x01
 		TYPE_Char,          // 1 byte, only seems to be used in upgrades.json 
-		TYPE_TwoBool,       // aligned, 6 bytes (only used in gameplay options??)
+		TYPE_TwoBool,       // aligned, 8 bytes (only used in gameplay options??)
 		TYPE_String,        // aligned, int size + null-terminated string of size (including \0)
 		TYPE_File,          // Actually an object, but encoded as a string (embedded DsonFile). only seems to be used in roster.json 
 		TYPE_Int,           // aligned, 4 byte integer
+		// Begin hardcode types: these types do not have enough characteristics to make the heuristic work
+		// As such, the field names/paths are hardcoded above
+		// Fields matching the names will ALWAYS assume the corresponding type, even if parsing fails
+		// So they should be used sparingly and be as specific as possible
 		TYPE_Float,         // aligned, 4-byte float
 		TYPE_IntArray,      // aligned. 4-byte int [count], then [count] 4-byte integers
 		TYPE_StringArray,   // aligned, 4-byte int [count], then [count] null-terminated strings
+		TYPE_FloatVector,   // aligned, arbitrary number of 4-byte floats
 		TYPE_Unknown
 	};
 	
@@ -117,7 +125,7 @@ public class DsonField {
 	}
 	
 	private boolean ParseHardcodedType() {
-		return ParseIntArray() || ParseStringArray() || ParseFloat();
+		return ParseFloatVector() || ParseIntArray() || ParseStringArray() || ParseFloat();
 	}
 	
 	private boolean ParseFloat() {
@@ -150,7 +158,7 @@ public class DsonField {
 				sb.append("\"" + new String(tempArr2) + "\"");
 				bf.position(bf.position() + strlen);
 				if (bf.remaining() > 0) {
-					sb.append(",");
+					sb.append(", ");
 				}
 			}
 			sb.append("]");
@@ -187,6 +195,28 @@ public class DsonField {
 				DataString = sb.toString();
 				return true;
 			}
+		}
+		return false;
+	}
+	
+	private boolean ParseFloatVector() {
+		if (NameInArray(FLOATVECTOR_FIELD_NAMES)) {
+			Type = FieldType.TYPE_FloatVector;
+			byte[] floats = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + AlignedSize());
+			ByteBuffer bf = ByteBuffer.wrap(floats).order(ByteOrder.LITTLE_ENDIAN);
+			StringBuilder sb = new StringBuilder();
+			// v for vector
+			sb.append("v[");
+			while (bf.remaining() > 0) {
+				float f = bf.getFloat();
+				sb.append(Float.toString(f));
+				if (bf.remaining() > 0) {
+					sb.append(", ");
+				}
+			}
+			sb.append("]");
+			DataString = sb.toString();
+			return true;
 		}
 		return false;
 	}

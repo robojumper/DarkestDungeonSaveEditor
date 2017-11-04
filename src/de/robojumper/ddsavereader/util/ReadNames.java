@@ -169,6 +169,14 @@ public class ReadNames {
 				}
 			}
 		}));
+		
+		// Obstacles 
+		putParser("obstacle_definitions.json", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file) {
+				addSimpleJSONArrayEntryIDs(file, "props", "name");
+			}
+		}));
 
 	}
 	
