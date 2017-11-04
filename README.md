@@ -6,7 +6,7 @@ There are still a few unknown variables in the file, in the code they're named w
 
 ## Usage
 
-    java -jar DDSaveReader.jar [-d] [-n, --names namefile] -o <outputfile> <inputfile>
+    java -jar DDSaveReader.jar [--debug, -d] [--names, -n <namefile>] [--output, -o <outfile>] filename
 
 `-d` dumps all metadata without known purpose as comments into the JSON file at the appropriate place.
 This might come in handy when trying to find a pattern in them.

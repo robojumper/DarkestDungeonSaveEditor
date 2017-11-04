@@ -46,7 +46,7 @@ public class Main {
 		if (i == args.length - 1) {
 			infile = args[i++];
 		} else {
-			System.err.println("Usage: ParseCmdLine [--debug, -d] [--names, -n namefile] [--output, -o outfile] filename");
+			System.err.println("Usage: java -jar DDSaveReader.jar [--debug, -d] [--names, -n namefile] [--output, -o outfile] filename");
 			System.exit(1);
 		}
 		
