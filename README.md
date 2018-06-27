@@ -12,7 +12,7 @@ There are still a few unknown variables in the file, in the code they're named w
 This might come in handy when trying to find a pattern in them. With `-d`, the file is not valid JSON, but should be after removing all comments. Files translated without the `-d` flag should be valid JSON.
 
 `-n` provides a Name File, a newline separated list of strings that are recognized as hashed values.
-Darkest Dungeon hashes some strings using their own hash algorithm, which can make reading some files rather complicated for you.
+Darkest Dungeon hashes some strings using their own hash algorithm, which can make reading some files rather complicated for you. Whenever an integer is recognized as the hash of a given string, it's replaced with that String instead.
 When combined with the `-d` flag, the hashed integers are added as comments.
 
 A list can be compiled by running
