@@ -101,10 +101,10 @@ public class ReadNames {
 				JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
 				JsonObject dataObject = rootObject.getAsJsonObject("data");
 				if (dataObject != null) {
-					JsonObject activitiesObject = dataObject.getAsJsonObject("activities");
-					if (activitiesObject != null) {
-						for (Entry<String, JsonElement> elem : activitiesObject.entrySet()) {
-							NAMES.add(elem.getKey());
+					JsonArray activitiesArray = dataObject.getAsJsonArray("activities");
+					if (activitiesArray != null) {
+						for (JsonElement elem : activitiesArray) {
+						    NAMES.add(elem.getAsJsonObject().get("id").getAsString());
 						}
 					}
 				}
@@ -208,7 +208,7 @@ public class ReadNames {
 									try {
 										byte[] Data = Files.readAllBytes(file);
 										for (Parser parser : entry.getValue()) {
-											parser.parseFile(file, Data);
+										    parser.parseFile(file, Data);
 										}
 									} catch (IOException e) {
 										// TODO Auto-generated catch block
@@ -268,5 +268,4 @@ public class ReadNames {
 			}
 		}
     }
-
 }

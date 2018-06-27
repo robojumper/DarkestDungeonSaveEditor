@@ -16,7 +16,7 @@ public class DsonField {
 		"read_page_indexes", "raid_read_page_indexes", "raid_unread_page_indexes",	// journal.json
 		"dungeons_unlocked", "played_video_list", // game_knowledge.json
 		"goal_ids", "trinket_retention_ids",	// quest.json
-		"last_party_guids", // roster.json
+		"last_party_guids", "dungeon_history", // roster.json
 		"result_event_history", // town_event.json
 		"additional_mash_disabled_infestation_monster_class_ids", // campaign_mash.json
 		// example for how to make variable names more specific
@@ -59,72 +59,68 @@ public class DsonField {
 		TYPE_Unknown
 	};
 	
-	public FieldType Type = FieldType.TYPE_Unknown;
-	private DsonField Parent;
+	public FieldType type = FieldType.TYPE_Unknown;
+	private DsonField parent;
 	
-	public String Name;
+	public String name;
+
+	public String dataString = "\"UNKNOWN. PLEASE PARSE TYPE\"";
 	
-	// The resulting string. In the following cases, it is not a valid JSON value:
-	// 1) It's of TYPE_Int, but an unhashed string. The format is #"string", so removing the # makes it a valid string
-	// 2) It's of TYPE_TwoBool. The format is t[b1, b2], so removing the t makes it a valid boolean array
-	// 3) It's of TYPE_FloatVector. The format is v[f1, f2, ...], so removing the v makes it a valid float array
-	// 4) It's of TYPE_Unknown. The type could not be determined.
-	// The following cases should be handled externally and not cause problems
-	// 5) It's of TYPE_Object. External code should create a valid JSON Object from the Child Fields
-	public String DataString = "UNKNOWN. PLEASE PARSE TYPE";
+	private String hashedValue;
 	
 	// Some strings are a full file.
-	public DsonFile EmbeddedFile;
+	public DsonFile embeddedFile;
 	// both only used when reading
 	// raw data from JSON file, used to score Type
-	public byte[] RawData;
+	public byte[] rawData;
 	// the offset of this field from the beginning of the DATA block
 	// (required since some types are aligned) 
-	public int DataStartInFile;
+	public int dataStartInFile;
 	
 	
-	public int Meta1EntryIdx = -1;
-	public int Meta2EntryIdx = -1;
+	public int meta1EntryIdx = -1;
+	public int meta2EntryIdx = -1;
 	
 	
 	// ONLY for Object type!!
-	public DsonField[] Children;
+	public DsonField[] children;
 	
 	// If external code has not determined this field to be TYPE_Object, guess the type
-	public boolean GuessType() {
-		if (ParseHardcodedType()) {
+	public boolean guessType() {
+		if (parseHardcodedType()) {
 			return true;
-		} else if (RawData.length == 1) { 
-			if (RawData[0] == 0x00 || RawData[0] == 0x01) {
-				Type = FieldType.TYPE_Bool;
-				DataString = RawData[0] == 0x00 ? STR_FALSE : STR_TRUE;
+		} else if (rawData.length == 1) {
+			if (rawData[0] == 0x00 || rawData[0] == 0x01) {
+				type = FieldType.TYPE_Bool;
+				dataString = rawData[0] == 0x00 ? STR_FALSE : STR_TRUE;
 			} else {
-				Type = FieldType.TYPE_Char;
-				DataString = "'" + Character.toString((char)RawData[0]) + "'";
+				type = FieldType.TYPE_Char;
+				dataString = "\"" + Character.toString((char)rawData[0]) + "\"";
 			}
-		} else if (AlignedSize() == 8 && 
-				(RawData[AlignmentSkip() + 0] == 0x00 || RawData[AlignmentSkip() + 0] == 0x01) &&
-				(RawData[AlignmentSkip() + 4] == 0x00 || RawData[AlignmentSkip() + 4] == 0x01)) {
-			Type = FieldType.TYPE_TwoBool;
-			DataString = "t[" + (RawData[AlignmentSkip() + 4] == 0x00 ? STR_FALSE : STR_TRUE) + ", " + (RawData[AlignmentSkip() + 4] == 0x00 ? STR_FALSE : STR_TRUE) + "]";
-		} else if (AlignedSize() == 4) {
-			Type = FieldType.TYPE_Int;
-			byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
+		} else if (alignedSize() == 8 &&
+				(rawData[alignmentSkip() + 0] == 0x00 || rawData[alignmentSkip() + 0] == 0x01) &&
+				(rawData[alignmentSkip() + 4] == 0x00 || rawData[alignmentSkip() + 4] == 0x01)) {
+			type = FieldType.TYPE_TwoBool;
+			dataString = "[" + (rawData[alignmentSkip() + 4] == 0x00 ? STR_FALSE : STR_TRUE) + ", " + (rawData[alignmentSkip() + 4] == 0x00 ? STR_FALSE : STR_TRUE) + "]";
+		} else if (alignedSize() == 4) {
+			type = FieldType.TYPE_Int;
+			byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
 			int tempInt = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
-			DataString = Integer.toString(tempInt);
-			String UnHashed = NAME_TABLE.get(tempInt);
-			if (UnHashed != null) {
-				DataString = "#\"" + UnHashed + "\"";
+			dataString = Integer.toString(tempInt);
+			String unHashed = NAME_TABLE.get(tempInt);
+			if (unHashed != null) {
+			    hashedValue = dataString;
+				dataString = "\"" + unHashed + "\"";
 			}
-		} else if (ParseString()) {
+		} else if (parseString()) {
 			// Some strings are actually embedded files
-			if (DataString.length() >= 6) {
-				byte[] unquoteData = Arrays.copyOfRange(RawData, AlignmentSkip() + 4, RawData.length);
+			if (dataString.length() >= 6) {
+				byte[] unquoteData = Arrays.copyOfRange(rawData, alignmentSkip() + 4, rawData.length);
 				byte[] tempHeader = Arrays.copyOfRange(unquoteData, 0, 4);
 				if (Arrays.equals(tempHeader, DsonFile.MAGICNR_HEADER)) {
-					Type = FieldType.TYPE_File;
-					EmbeddedFile = new DsonFile(unquoteData, true);
-					DataString = EmbeddedFile.GetJSonString(0, false);
+					type = FieldType.TYPE_File;
+					embeddedFile = new DsonFile(unquoteData, true);
+					dataString = embeddedFile.getJSonString(0, false);
 				}
 			}
 		} else {
@@ -134,37 +130,37 @@ public class DsonField {
 		return true;
 	}
 	
-	private boolean ParseHardcodedType() {
-		return ParseFloatVector() || ParseIntArray() || ParseStringArray() || ParseFloat();
+	private boolean parseHardcodedType() {
+		return parseFloatVector() || parseIntArray() || parseStringArray() || parseFloat();
 	}
 	
-	private boolean ParseFloat() {
-		if (NameInArray(FLOAT_FIELD_NAMES)) {
-			if (AlignedSize() == 4) {
-				Type = FieldType.TYPE_Float;
-				byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
+	private boolean parseFloat() {
+		if (nameInArray(FLOAT_FIELD_NAMES)) {
+			if (alignedSize() == 4) {
+				type = FieldType.TYPE_Float;
+				byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
 				float tempFlt = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getFloat();
-				DataString = Float.toString(tempFlt);
+				dataString = Float.toString(tempFlt);
 				return true;
 			}
 		}
 		return false;
 	}
 	
-	private boolean ParseStringArray() {
-		if (NameInArray(STRINGARRAY_FIELD_NAMES)) {
-			Type = FieldType.TYPE_StringArray;
-			byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
+	private boolean parseStringArray() {
+		if (nameInArray(STRINGARRAY_FIELD_NAMES)) {
+			type = FieldType.TYPE_StringArray;
+			byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
 			@SuppressWarnings("unused")
 			int arrLen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
 			// read the rest
-			byte[] strings = Arrays.copyOfRange(RawData, AlignmentSkip() + 4, AlignmentSkip() + AlignedSize());
+			byte[] strings = Arrays.copyOfRange(rawData, alignmentSkip() + 4, alignmentSkip() + alignedSize());
 			ByteBuffer bf = ByteBuffer.wrap(strings).order(ByteOrder.LITTLE_ENDIAN);
 			StringBuilder sb = new StringBuilder();
 			sb.append("[");
 			while (bf.remaining() > 0) {
 				int strlen = bf.getInt();
-				byte[] tempArr2 = Arrays.copyOfRange(RawData, AlignmentSkip() + 4 + bf.position(), AlignmentSkip() + 4 + bf.position() + strlen - 1);
+				byte[] tempArr2 = Arrays.copyOfRange(rawData, alignmentSkip() + 4 + bf.position(), alignmentSkip() + 4 + bf.position() + strlen - 1);
 				sb.append("\"" + new String(tempArr2) + "\"");
 				bf.position(bf.position() + strlen);
 				if (bf.remaining() > 0) {
@@ -172,51 +168,63 @@ public class DsonField {
 				}
 			}
 			sb.append("]");
-			DataString = sb.toString();
+			dataString = sb.toString();
 			return true;
 		}
 		return false;
 	}
 
-	private boolean ParseIntArray() {
-		if (NameInArray(INTARRAY_FIELD_NAMES)) {
-			byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
+	private boolean parseIntArray() {
+		if (nameInArray(INTARRAY_FIELD_NAMES)) {
+			byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
 			int arrLen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
-			if (AlignedSize() == (arrLen + 1) * 4) {
-				Type = FieldType.TYPE_IntArray;
-				byte[] tempArr2 = Arrays.copyOfRange(RawData, AlignmentSkip() + 4, AlignmentSkip() + (arrLen + 1) * 4);
-				ByteBuffer Buffer = ByteBuffer.wrap(tempArr2).order(ByteOrder.LITTLE_ENDIAN);
+			if (alignedSize() == (arrLen + 1) * 4) {
+				type = FieldType.TYPE_IntArray;
+				byte[] tempArr2 = Arrays.copyOfRange(rawData, alignmentSkip() + 4, alignmentSkip() + (arrLen + 1) * 4);
+				ByteBuffer buffer = ByteBuffer.wrap(tempArr2).order(ByteOrder.LITTLE_ENDIAN);
 				StringBuilder sb = new StringBuilder();
+				StringBuilder hsb = new StringBuilder();
 				sb.append("[");
+				hsb.append("[");
+				boolean foundHashed = false;
 				for (int i = 0; i < arrLen; i++) {
-					int tempInt = Buffer.getInt();
-					String UnHashed = NAME_TABLE.get(tempInt);
-					if (UnHashed != null) {
-						UnHashed = "#\"" + UnHashed + "\"";
-						sb.append(UnHashed);
+					int tempInt = buffer.getInt();
+					String unHashed = NAME_TABLE.get(tempInt);
+					if (unHashed != null) {
+						unHashed = "\"" + unHashed + "\"";
+						sb.append(unHashed);
+						hsb.append(tempInt);
+						foundHashed = true;
 					} else {
 						sb.append(Integer.toString(tempInt));
+						hsb.append(Integer.toString(tempInt));
 					}
 					if (i != arrLen - 1) {
 						sb.append(", ");
+						hsb.append(", ");
 					}
 				}
 				sb.append("]");
-				DataString = sb.toString();
+				hsb.append("]");
+				dataString = sb.toString();
+
+				if (foundHashed) {
+				    hashedValue = hsb.toString();
+				}
 				return true;
 			}
 		}
 		return false;
 	}
 	
-	private boolean ParseFloatVector() {
-		if (NameInArray(FLOATVECTOR_FIELD_NAMES)) {
-			Type = FieldType.TYPE_FloatVector;
-			byte[] floats = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + AlignedSize());
+	private boolean parseFloatVector() {
+		if (nameInArray(FLOATVECTOR_FIELD_NAMES)) {
+			type = FieldType.TYPE_FloatVector;
+			byte[] floats = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + alignedSize());
 			ByteBuffer bf = ByteBuffer.wrap(floats).order(ByteOrder.LITTLE_ENDIAN);
 			StringBuilder sb = new StringBuilder();
 			// v for vector
-			sb.append("v[");
+			sb.append("[");
 			while (bf.remaining() > 0) {
 				float f = bf.getFloat();
 				sb.append(Float.toString(f));
@@ -225,25 +233,25 @@ public class DsonField {
 				}
 			}
 			sb.append("]");
-			DataString = sb.toString();
+			dataString = sb.toString();
 			return true;
 		}
 		return false;
 	}
 	
-	private boolean NameInArray(String[] arr) {
-		DsonField CheckField;
+	private boolean nameInArray(String[] arr) {
+		DsonField checkField;
 		boolean match;
 		for (int i = 0; i < arr.length; i++) {
 			String[] names = arr[i].split("@");
 			match = true;
-			CheckField = this;
+			checkField = this;
 			for (int j = names.length - 1; j >= 0; j--) {
-				if (CheckField == null || !(names[j].equals("*") || names[j].equals(CheckField.Name))) {
+				if (checkField == null || !(names[j].equals("*") || names[j].equals(checkField.name))) {
 					match = false;
 					break;
 				}
-				CheckField = CheckField.Parent;
+				checkField = checkField.parent;
 			}
 			if (match) {
 				return true;
@@ -253,17 +261,17 @@ public class DsonField {
 	}
 
 
-	private boolean ParseString() {
+	private boolean parseString() {
 		// A string has a 4-byte int for the length, followed by a null-term'd string. So it's at least 5 bytes long
-		if (AlignedSize() >= 5) {
-			byte[] tempArr = Arrays.copyOfRange(RawData, AlignmentSkip(), AlignmentSkip() + 4);
+		if (alignedSize() >= 5) {
+			byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
 			int strlen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
 			// We can't read a null-term string because some strings actually include the null character (like embedded files)
 			// String str = DsonFile.ReadNullTermString(RawData, AlignmentSkip() + 4);
-			if (AlignedSize() == 4 + strlen) {
-				Type = FieldType.TYPE_String;
-				byte[] tempArr2 = Arrays.copyOfRange(RawData, AlignmentSkip() + 4, AlignmentSkip() + 4 + strlen - 1);
-				DataString = "\"" + new String(tempArr2) + "\"";
+			if (alignedSize() == 4 + strlen) {
+				type = FieldType.TYPE_String;
+				byte[] tempArr2 = Arrays.copyOfRange(rawData, alignmentSkip() + 4, alignmentSkip() + 4 + strlen - 1);
+				dataString = "\"" + new String(tempArr2) + "\"";
 				return true;
 			}
 		}
@@ -271,44 +279,58 @@ public class DsonField {
 		
 	}
 	
-	private int RawSize() {
-		return RawData.length;
+	private int rawSize() {
+		return rawData.length;
 	}
 
 	// When loading, IF THIS FIELD'S TYPE WERE ALIGNED
-	private int AlignedSize() {
-		return RawSize() - AlignmentSkip();
+	private int alignedSize() {
+		return rawSize() - alignmentSkip();
 	}
 	
-	private int AlignmentSkip() {
-		return (4 - (DataStartInFile % 4)) % 4;
+	private int alignmentSkip() {
+		return (4 - (dataStartInFile % 4)) % 4;
 	}
 	
 	// ONLY for Object type!!
-	public void SetNumChildren(int num) {
-		Children = new DsonField[num];
+	public void setNumChildren(int num) {
+		children = new DsonField[num];
 	}
 
 	// only if there are empty Children entries!
-	public void AddChild(DsonField Field) {
-		for (int i = 0; i < Children.length; i++) {
-			if (Children[i] == null) {
-				Children[i] = Field;
-				Field.Parent = this;
+	public void addChild(DsonField Field) {
+		for (int i = 0; i < children.length; i++) {
+			if (children[i] == null) {
+				children[i] = Field;
+				Field.parent = this;
 				return;
 			}
 		}
 		assert(false);
 	}
 	
-	public boolean HasAllChilds() {
-		for (int i = 0; i < Children.length; i++) {
-			if (Children[i] == null) {
+	public boolean hasAllChilds() {
+		for (int i = 0; i < children.length; i++) {
+			if (children[i] == null) {
 				return false;
 			}
 		}
 		return true;
 	}
-	
 
+	public String getExtraComments() {
+	    StringBuilder sb = new StringBuilder();
+	    sb.append("Type: ");
+	    sb.append(type.name());
+	    if (hashedValue != null) {
+	        sb.append(", Hashed Integer(s): ");
+	        sb.append(hashedValue);
+	    }
+
+	    if (type == FieldType.TYPE_Unknown) {
+	        sb.append(", Raw Data: ");
+	        sb.append(DsonFile.LEBytesToHexStr(rawData));
+	    }
+	    return sb.toString();
+	}
 }

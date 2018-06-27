@@ -71,7 +71,7 @@ public class Main {
 		try {
 			byte[] FileData = Files.readAllBytes(Paths.get(infile));
 			DsonFile File = new DsonFile(FileData, false);
-			OutResult = File.GetJSonString(0, debug);
+			OutResult = File.getJSonString(0, debug);
 		} catch (IOException e) {
 			System.err.println("Could not read " + infile);
 			System.err.println(e.getMessage());
