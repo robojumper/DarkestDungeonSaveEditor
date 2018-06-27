@@ -9,10 +9,11 @@ There are still a few unknown variables in the file, in the code they're named w
     java -jar DDSaveReader.jar [--debug, -d] [--names, -n <namefile>] [--output, -o <outfile>] filename
 
 `-d` dumps all metadata without known purpose as comments into the JSON file at the appropriate place.
-This might come in handy when trying to find a pattern in them.
+This might come in handy when trying to find a pattern in them. With `-d`, the file is not valid JSON, but should be after removing all comments. Files translated without the `-d` flag should be valid JSON.
 
 `-n` provides a Name File, a newline separated list of strings that are recognized as hashed values.
 Darkest Dungeon hashes some strings using their own hash algorithm, which can make reading some files rather complicated for you.
+When combined with the `-d` flag, the hashed integers are added as comments.
 
 A list can be compiled by running
 
