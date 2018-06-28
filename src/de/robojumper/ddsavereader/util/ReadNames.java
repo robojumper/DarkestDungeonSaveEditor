@@ -179,6 +179,38 @@ public class ReadNames {
 			}
 		}));
 
+        // Tutorial event 
+        putParser(".png", (new Parser() {
+            final Pattern PATHPATTERN = Pattern.compile(".*tutorial_popup\\.([a-z_]*)\\.png");
+            @Override
+            public void parseFile(Path filePath) {
+                Matcher m = PATHPATTERN.matcher(filePath.toString());
+                if (m.matches()) {
+                    // zero is the entire string, not included in groupCount
+                    for (int i = 1; i <= m.groupCount(); i++) {
+                        String group = m.group(i);
+                        if (!group.equals("")) {
+                            NAMES.add(group);
+                        }
+                    }
+                }
+            }
+            @Override
+            public void parseFile(Path filePath, byte[] file) {
+            }
+        }));
+
+		// Stat database, hardcoded
+		NAMES.add("MONSTER_ENCOUNTERED");
+		NAMES.add("AMBUSHED");
+		NAMES.add("CURIO_INVESTIGATED");
+		NAMES.add("TRAIT_APPLIED");
+		NAMES.add("DEATHS_DOOR_APPLIED");
+		NAMES.add("ROOM_VISITED");
+		NAMES.add("BATTLE_COMPLETED");
+		NAMES.add("HALLWAY_STEP_COMPLETED");
+		NAMES.add("MONSTER_DEFEATED");
+		NAMES.add("UNDEFINED");
 	}
 	
 	static void putParser(String extension, Parser Parser) {
@@ -193,7 +225,6 @@ public class ReadNames {
 	
 	// args is a list of game or mod root directories
 	public static void main(String[] args) {
-		NAMES.clear();
 		for (int i = 0; i < args.length; i++) {
 			File RootDir = new File(args[i]);
 			if (RootDir.isDirectory()) {
@@ -206,9 +237,8 @@ public class ReadNames {
 							for (Entry<String, List<Parser>> entry : PARSERS.entrySet()) {
 								if (filename.endsWith(entry.getKey())) {
 									try {
-										byte[] Data = Files.readAllBytes(file);
 										for (Parser parser : entry.getValue()) {
-										    parser.parseFile(file, Data);
+										    parser.parseFile(file);
 										}
 									} catch (IOException e) {
 										// TODO Auto-generated catch block
@@ -234,6 +264,9 @@ public class ReadNames {
 	
 	
     interface Parser {
+        default void parseFile(Path filePath) throws IOException {
+            parseFile(filePath, Files.readAllBytes(filePath));
+        }
         void parseFile(Path filePath, byte[] file);
     }
     

@@ -12,7 +12,7 @@ public class DsonField {
 	static final String[] FLOAT_FIELD_NAMES = {"current_hp", "m_Stress", "actor@buff_group@*@amount", "chapters@*@*@percent", "non_rolled_additional_chances@*@chance"};
 	
 	// TODO: Make array a special kind of field with an Inner type??
-	static final String[] INTARRAY_FIELD_NAMES = {
+	static final String[] INTVECTOR_FIELD_NAMES = {
 		"read_page_indexes", "raid_read_page_indexes", "raid_unread_page_indexes",	// journal.json
 		"dungeons_unlocked", "played_video_list", // game_knowledge.json
 		"goal_ids", "trinket_retention_ids",	// quest.json
@@ -22,13 +22,15 @@ public class DsonField {
 		// example for how to make variable names more specific
 		"party@heroes", // raid.json
 		"narration_audio_event_queue_tags", // loading_screen.json
+		"dispatched_events" // tutorial.json
 	};
 	
-	static final String[] STRINGARRAY_FIELD_NAMES = {
+	static final String[] STRINGVECTOR_FIELD_NAMES = {
 		"goal_ids", // quest.json
+		"roaming_dungeon_2_ids@*@s" // campaign_mash.json
 	};
 	
-	static final String[] FLOATVECTOR_FIELD_NAMES = {
+	static final String[] FLOATARRAY_FIELD_NAMES = {
 		"map@bounds", "areas@*@bounds", "areas@*@tiles@*@mappos", "areas@*@tiles@*@sidepos", // map.json  
 	};
 
@@ -48,14 +50,14 @@ public class DsonField {
 		TYPE_String,        // aligned, int size + null-terminated string of size (including \0)
 		TYPE_File,          // Actually an object, but encoded as a string (embedded DsonFile). used in roster.json and map.json 
 		TYPE_Int,           // aligned, 4 byte integer
-		// Begin hardcode types: these types do not have enough characteristics to make the heuristic work
+		// Begin hardcoded types: these types do not have enough characteristics to make the heuristic work
 		// As such, the field names/paths are hardcoded above
 		// Fields matching the names will ALWAYS assume the corresponding type, even if parsing fails
 		// So they should be used sparingly and be as specific as possible
 		TYPE_Float,         // aligned, 4-byte float
-		TYPE_IntArray,      // aligned. 4-byte int [count], then [count] 4-byte integers
-		TYPE_StringArray,   // aligned, 4-byte int [count], then [count] null-terminated strings
-		TYPE_FloatVector,   // aligned, arbitrary number of 4-byte floats. emitted as v[1.0, 2.0, ...]
+		TYPE_IntVector,      // aligned. 4-byte int [count], then [count] 4-byte integers
+		TYPE_StringVector,   // aligned, 4-byte int [count], then [count] null-terminated strings
+		TYPE_FloatArray,   // aligned, arbitrary number of 4-byte floats. emitted as v[1.0, 2.0, ...]
 		TYPE_Unknown
 	};
 	
@@ -131,7 +133,7 @@ public class DsonField {
 	}
 	
 	private boolean parseHardcodedType() {
-		return parseFloatVector() || parseIntArray() || parseStringArray() || parseFloat();
+		return parseFloatArray() || parseIntVector() || parseStringVector() || parseFloat();
 	}
 	
 	private boolean parseFloat() {
@@ -147,9 +149,9 @@ public class DsonField {
 		return false;
 	}
 	
-	private boolean parseStringArray() {
-		if (nameInArray(STRINGARRAY_FIELD_NAMES)) {
-			type = FieldType.TYPE_StringArray;
+	private boolean parseStringVector() {
+		if (nameInArray(STRINGVECTOR_FIELD_NAMES)) {
+			type = FieldType.TYPE_StringVector;
 			byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
 			@SuppressWarnings("unused")
 			int arrLen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
@@ -174,12 +176,12 @@ public class DsonField {
 		return false;
 	}
 
-	private boolean parseIntArray() {
-		if (nameInArray(INTARRAY_FIELD_NAMES)) {
+	private boolean parseIntVector() {
+		if (nameInArray(INTVECTOR_FIELD_NAMES)) {
 			byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
 			int arrLen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
 			if (alignedSize() == (arrLen + 1) * 4) {
-				type = FieldType.TYPE_IntArray;
+				type = FieldType.TYPE_IntVector;
 				byte[] tempArr2 = Arrays.copyOfRange(rawData, alignmentSkip() + 4, alignmentSkip() + (arrLen + 1) * 4);
 				ByteBuffer buffer = ByteBuffer.wrap(tempArr2).order(ByteOrder.LITTLE_ENDIAN);
 				StringBuilder sb = new StringBuilder();
@@ -217,9 +219,9 @@ public class DsonField {
 		return false;
 	}
 	
-	private boolean parseFloatVector() {
-		if (nameInArray(FLOATVECTOR_FIELD_NAMES)) {
-			type = FieldType.TYPE_FloatVector;
+	private boolean parseFloatArray() {
+		if (nameInArray(FLOATARRAY_FIELD_NAMES)) {
+			type = FieldType.TYPE_FloatArray;
 			byte[] floats = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + alignedSize());
 			ByteBuffer bf = ByteBuffer.wrap(floats).order(ByteOrder.LITTLE_ENDIAN);
 			StringBuilder sb = new StringBuilder();
