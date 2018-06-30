@@ -53,3 +53,8 @@ bin/
 .settings/
 .project
 .classpath
+
+# Gradle Build
+bin/
+build/
+.gradle/

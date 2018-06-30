@@ -22,6 +22,10 @@ public class DsonFile {
 	// The first field that is being deserialized is always base_root
 	List<DsonField> rootFields;
 	
+	public DsonFile(byte[] File) {
+	    this(File, false);
+	}
+	
 	// Embed files are strings that have the last null-terminating character included in the data size
 	public DsonFile(byte[] File, boolean bIsEmbed) {
 		ByteBuffer buffer = ByteBuffer.wrap(File);
@@ -132,7 +136,7 @@ public class DsonFile {
 					fieldStack.push(field);
 					hierarchyStack.push(new Integer(runningObjIdx));
 				}
-				
+
 				// Then check if the object on top of the stack has all its children. If so, pop it
 				// In case an object was the last child of an object, we do this recursively
 				while (!fieldStack.isEmpty() && fieldStack.peek().type == FieldType.TYPE_Object && fieldStack.peek().hasAllChilds()) {
@@ -308,6 +312,11 @@ public class DsonFile {
 		return sb.toString();
 	}
 	
+	@Override
+	public String toString() {
+	    return getJSonString(0, false);
+	}
+	
 	// TODO: Properly handle Types
 	private void writeField(StringBuilder sb, DsonField field, int indent, boolean debug) { 
 
@@ -372,7 +381,7 @@ public class DsonFile {
 	}
 	
 	// Seems to be correct
-	public static int StringHash(String str) {
+	public static int stringHash(String str) {
 		int hash = 0;
 		for (int i = 0; i < str.length(); i++) {
 			hash = hash * 53 + str.charAt(i);

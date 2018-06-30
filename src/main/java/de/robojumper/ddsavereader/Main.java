@@ -57,7 +57,7 @@ public class Main {
 			    String line;
 			    while ((line = br.readLine()) != null) {
 			    	if (!line.equals("")) {
-			    		DsonField.NAME_TABLE.put(DsonFile.StringHash(line), line);
+			    		DsonField.NAME_TABLE.put(DsonFile.stringHash(line), line);
 			    	}
 			    }
 			} catch (IOException e) {
@@ -70,7 +70,7 @@ public class Main {
 		String OutResult = null;
 		try {
 			byte[] FileData = Files.readAllBytes(Paths.get(infile));
-			DsonFile File = new DsonFile(FileData, false);
+			DsonFile File = new DsonFile(FileData);
 			OutResult = File.getJSonString(0, debug);
 		} catch (IOException e) {
 			System.err.println("Could not read " + infile);

@@ -141,7 +141,6 @@ public class ReadNames {
 						}
 					}
 				}
-				
 			}
 		};
 		putParser(".inventory.items.darkest", inventoryParser);

@@ -33,4 +33,6 @@ There is no output file parameter, just pipe it to a file (append ` > names.txt`
 
 ## Attribution
 
-This application uses the [Google GSON Library](https://github.com/google/gson) 2.8.2, licensed under the [Apache License 2.0](https://github.com/robojumper/DarkestDungeonSaveReader/blob/master/Licenses/Apachev2.0.txt).
+This application uses the [Google GSON Library](https://github.com/google/gson) 2.8.5, licensed under the [Apache License 2.0](https://github.com/robojumper/DarkestDungeonSaveReader/blob/master/Licenses/Apachev2.0.txt).
+
+This application uses the [twitch4j Library](https://github.com/twitch4j/twitch4j) 0.10.2, licensed under the [MIT LICENSE](https://github.com/robojumper/DarkestDungeonSaveReader/blob/master/Licenses/MIT.txt).

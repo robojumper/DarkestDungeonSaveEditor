@@ -2,6 +2,7 @@ package de.robojumper.ddsavereader.file;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 
@@ -9,33 +10,34 @@ import java.util.HashMap;
 // Dson for Darkest Json
 public class DsonField {
 	
-	static final String[] FLOAT_FIELD_NAMES = {"current_hp", "m_Stress", "actor@buff_group@*@amount", "chapters@*@*@percent", "non_rolled_additional_chances@*@chance"};
+	static final String[][] FLOAT_FIELD_NAMES = {{"current_hp"}, {"m_Stress"},  {"actor", "buff_group", "*", "amount"}, {"chapters", "*", "*", "percent"}, {"non_rolled_additional_chances", "*", "chance"}, };
 	
 	// TODO: Make array a special kind of field with an Inner type??
-	static final String[] INTVECTOR_FIELD_NAMES = {
-		"read_page_indexes", "raid_read_page_indexes", "raid_unread_page_indexes",	// journal.json
-		"dungeons_unlocked", "played_video_list", // game_knowledge.json
-		"goal_ids", "trinket_retention_ids",	// quest.json
-		"last_party_guids", "dungeon_history", // roster.json
-		"result_event_history", // town_event.json
-		"additional_mash_disabled_infestation_monster_class_ids", // campaign_mash.json
-		// example for how to make variable names more specific
-		"party@heroes", // raid.json
-		"narration_audio_event_queue_tags", // loading_screen.json
-		"dispatched_events" // tutorial.json
+	static final String[][] INTVECTOR_FIELD_NAMES = {
+		{"read_page_indexes"}, {"raid_read_page_indexes"}, {"raid_unread_page_indexes"},	// journal.json
+		{"dungeons_unlocked"}, {"played_video_list"}, // game_knowledge.json
+		{"goal_ids"}, {"trinket_retention_ids"},	// quest.json
+		{"last_party_guids"}, {"dungeon_history"}, // roster.json
+		{"result_event_history"}, // town_event.json
+		{"additional_mash_disabled_infestation_monster_class_ids"}, // campaign_mash.json
+		{"party", "heroes"}, // raid.json
+		{"narration_audio_event_queue_tags"}, // loading_screen.json
+		{"dispatched_events"}, // tutorial.json
 	};
 	
-	static final String[] STRINGVECTOR_FIELD_NAMES = {
-		"goal_ids", // quest.json
-		"roaming_dungeon_2_ids@*@s" // campaign_mash.json
+	static final String[][] STRINGVECTOR_FIELD_NAMES = {
+		{"goal_ids"}, // quest.json
+		{"roaming_dungeon_2_ids", "*", "s"}, // campaign_mash.json
 	};
 	
-	static final String[] FLOATARRAY_FIELD_NAMES = {
-		"map@bounds", "areas@*@bounds", "areas@*@tiles@*@mappos", "areas@*@tiles@*@sidepos", // map.json  
+	static final String[][] FLOATARRAY_FIELD_NAMES = {
+		{"map", "bounds"}, {"areas", "*", "bounds"}, {"areas", "*", "tiles", "*", "mappos"}, {"areas", "*", "tiles", "*", "sidepos"}, // map.json  
 	};
+	
+
 
 	
-	// When loading, all Integers will check for a matching hash and replace their display string with #"<name>" (where <name> is the unhashed string)
+	// When loading, all Integers will check for a matching hash and replace their display string as "<name>" (where <name> is the unhashed string)
 	// This is much better than trying to find a good reverse. 
 	public static final HashMap<Integer, String> NAME_TABLE = new HashMap<Integer, String>();
 	
@@ -46,7 +48,7 @@ public class DsonField {
 		TYPE_Object,        // has a Meta1Block entry
 		TYPE_Bool,          // 1 byte, 0x00 or 0x01
 		TYPE_Char,          // 1 byte, only seems to be used in upgrades.json 
-		TYPE_TwoBool,       // aligned, 8 bytes (only used in gameplay options??). emitted as t[true, true]
+		TYPE_TwoBool,       // aligned, 8 bytes (only used in gameplay options??). emitted as [true, true]
 		TYPE_String,        // aligned, int size + null-terminated string of size (including \0)
 		TYPE_File,          // Actually an object, but encoded as a string (embedded DsonFile). used in roster.json and map.json 
 		TYPE_Int,           // aligned, 4 byte integer
@@ -55,9 +57,9 @@ public class DsonField {
 		// Fields matching the names will ALWAYS assume the corresponding type, even if parsing fails
 		// So they should be used sparingly and be as specific as possible
 		TYPE_Float,         // aligned, 4-byte float
-		TYPE_IntVector,      // aligned. 4-byte int [count], then [count] 4-byte integers
-		TYPE_StringVector,   // aligned, 4-byte int [count], then [count] null-terminated strings
-		TYPE_FloatArray,   // aligned, arbitrary number of 4-byte floats. emitted as v[1.0, 2.0, ...]
+		TYPE_IntVector,     // aligned. 4-byte int [count], then [count] 4-byte integers
+		TYPE_StringVector,  // aligned, 4-byte int [count], then [count] null-terminated strings
+		TYPE_FloatArray,    // aligned, arbitrary number of 4-byte floats. emitted as [1.0, 2.0, ...]
 		TYPE_Unknown
 	};
 	
@@ -122,7 +124,7 @@ public class DsonField {
 				if (Arrays.equals(tempHeader, DsonFile.MAGICNR_HEADER)) {
 					type = FieldType.TYPE_File;
 					embeddedFile = new DsonFile(unquoteData, true);
-					dataString = embeddedFile.getJSonString(0, false);
+					dataString = "MUST REBUILD MANUALLY WITH CORRECT INDENTATION";
 				}
 			}
 		} else {
@@ -225,7 +227,6 @@ public class DsonField {
 			byte[] floats = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + alignedSize());
 			ByteBuffer bf = ByteBuffer.wrap(floats).order(ByteOrder.LITTLE_ENDIAN);
 			StringBuilder sb = new StringBuilder();
-			// v for vector
 			sb.append("[");
 			while (bf.remaining() > 0) {
 				float f = bf.getFloat();
@@ -240,16 +241,15 @@ public class DsonField {
 		}
 		return false;
 	}
-	
-	private boolean nameInArray(String[] arr) {
+
+	private boolean nameInArray(String[][] arr) {
 		DsonField checkField;
 		boolean match;
 		for (int i = 0; i < arr.length; i++) {
-			String[] names = arr[i].split("@");
 			match = true;
 			checkField = this;
-			for (int j = names.length - 1; j >= 0; j--) {
-				if (checkField == null || !(names[j].equals("*") || names[j].equals(checkField.name))) {
+			for (int j = arr[i].length - 1; j >= 0; j--) {
+				if (checkField == null || !(arr[i][j].equals("*") || arr[i][j].equals(checkField.name))) {
 					match = false;
 					break;
 				}
@@ -273,7 +273,7 @@ public class DsonField {
 			if (alignedSize() == 4 + strlen) {
 				type = FieldType.TYPE_String;
 				byte[] tempArr2 = Arrays.copyOfRange(rawData, alignmentSkip() + 4, alignmentSkip() + 4 + strlen - 1);
-				dataString = "\"" + new String(tempArr2) + "\"";
+				dataString = "\"" + new String(tempArr2, StandardCharsets.UTF_8) + "\"";
 				return true;
 			}
 		}
