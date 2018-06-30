@@ -22,6 +22,20 @@ A list can be compiled by running
 `dir1`, ... are directories that contain Darkest Dungeon game data. These are usually the game root directory, but can also be mods.  
 There is no output file parameter, just pipe it to a file (append ` > names.txt`).
 
+## Save File Model
+
+The Application includes a save file watcher that automatically watches for changes to the save file and updates its internal save file model. This can be used to (for example) add a Twitch bot that can respond to queries by viewers. An example Twitch bot is provided, it can be run by setting the appropriate environment variables and starting the bot:
+
+	SET DDSAVEDIR=
+	SET DDCLIENTID=
+	SET DDCLIENTSECRET=
+	SET DDTOKEN=
+	SET DDCHANNEL=
+	
+	java -cp de.robojumper.ddsavereader.twitchbot.DDSampleTwitchBot 
+	
+However, you are free to use your own bot implementation, the save file watcher and model are separated from the bot itself.
+
 ## Download
 
 [Releases Page](https://github.com/robojumper/DarkestDungeonSaveReader/releases/)
