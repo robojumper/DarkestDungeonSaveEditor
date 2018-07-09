@@ -177,6 +177,14 @@ public class ReadNames {
 				addSimpleJSONArrayEntryIDs(file, "props", "name");
 			}
 		}));
+		
+	    // Obstacles 
+        putParser("quest.plot_quests.json", (new Parser() {
+            @Override
+            public void parseFile(Path filePath, byte[] file) {
+                addSimpleJSONArrayEntryIDs(file, "plot_quests", "id");
+            }
+        }));
 
         // Tutorial event 
         putParser(".png", (new Parser() {

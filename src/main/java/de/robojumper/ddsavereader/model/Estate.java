@@ -10,6 +10,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
+import com.google.gson.internal.LinkedTreeMap;
 
 import de.robojumper.ddsavereader.model.Estate.EstateData.InventoryObject.ItemEntry;
 import de.robojumper.ddsavereader.model.Estate.EstateData.WalletEntry;
@@ -95,6 +96,13 @@ public class Estate extends AbstractFile {
                 estateData.estateItems.items.entrySet().stream().filter(e -> e.getValue().amount > 0)
                         .map(e -> e.getValue().id + ": " + e.getValue().amount))
                 .collect(Collectors.joining(", "));
+    }
+    
+    public Map<String, Integer> getResources() {
+        Map<String, Integer> resources = new LinkedTreeMap<>();
+        estateData.wallet.values().stream().forEach(e -> resources.put(e.type, e.amount));
+        estateData.estateItems.items.values().stream().forEach(e -> resources.put(e.id, e.amount));
+        return resources;
     }
 
 }

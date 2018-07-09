@@ -10,24 +10,25 @@ import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 
 import de.robojumper.ddsavereader.file.DsonFile;
+import de.robojumper.ddsavereader.file.DsonTypes;
 
 /**
- * Class that can hold both string and int. Relevant for deserialized
- * objects that can contain hashed strings as ints, but may fail to
- * resolve some hashes.
+ * Class that can hold both an integer and an associated unhashed string.
+ * Important since the Hash function is bad and prone to accidental collisions
+ * that may unhash some unrelated integers.
+ * 
  * @author robojumper
- *
  */
 public class HashedString {
-    
-    private final int hashValue;
+
+    private final int hashValue; // May be null
     private final String str;
-    
+
     public HashedString(int i) {
-        this.str = null;
+        this.str = DsonTypes.NAME_TABLE.get(i);
         hashValue = i;
     }
-    
+
     public HashedString(String str) {
         this.str = str;
         this.hashValue = DsonFile.stringHash(str);
@@ -47,33 +48,28 @@ public class HashedString {
 
         @Override
         public void write(JsonWriter out, HashedString in) throws IOException {
-            if (in.str != null) {
-                out.value(in.str);
-            } else {
-                out.value(in.hashValue);
-            }
-            
+            out.value(in.hashValue);
         }
     }
-        
+
     public String getStringValue() {
         return this.str;
     }
-    
+
     public int getIntValue() {
         return this.hashValue;
     }
-    
+
     @Override
     public String toString() {
         return this.str != null ? this.str : Integer.toString(this.hashValue);
     }
-    
+
     @Override
     public int hashCode() {
-        return this.hashValue; 
+        return this.hashValue;
     }
-    
+
     @Override
     public boolean equals(Object other) {
         if (other != null && other instanceof HashedString) {

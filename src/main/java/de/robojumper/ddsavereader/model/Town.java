@@ -3,6 +3,7 @@ package de.robojumper.ddsavereader.model;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
@@ -55,6 +56,22 @@ public class Town extends AbstractFile {
         
         @SerializedName("buildings")
         Map<String, Building> buildings = new LinkedTreeMap<>();
+        
+        class DistrictsObject {
+            
+            class District {
+                @SerializedName("built")
+                boolean built = false;
+            }
+            
+            @SerializedName("buildings")
+            Map<String, District> districts = new LinkedTreeMap<>();
+        }
+        
+        @SerializedName("districts")
+        DistrictsObject districts = new DistrictsObject();
+        
+        
     }
 
     TownData townData = new TownData();
@@ -78,6 +95,10 @@ public class Town extends AbstractFile {
             }
         }
         return "";
+    }
+    
+    public String buildDistricts() {
+        return townData.districts.districts.entrySet().stream().filter(e -> e.getValue().built).map(e -> e.getKey()).collect(Collectors.joining(", "));
     }
 
 }

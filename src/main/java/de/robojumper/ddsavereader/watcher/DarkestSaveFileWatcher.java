@@ -20,15 +20,18 @@ import java.util.stream.Stream;
 import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.model.SaveState;
 
-public class DarkestSaveFileWatcher {
-
-    public DarkestSaveFileWatcher(String saveDir) throws IOException {
-        SaveState s = new SaveState();
-        watchSaveFiles(s, Paths.get(saveDir));
-    }
+public class DarkestSaveFileWatcher implements Runnable {
+    
+    private SaveState state;
+    private Path saveDir;
+    private WatchService watcher;
+    private WatchKey k;
+    
+    private volatile boolean wantsStop = false;
 
     public DarkestSaveFileWatcher(SaveState state, String saveDir) throws IOException {
-        watchSaveFiles(state, Paths.get(saveDir));
+        this.state= state;
+        this.saveDir =  Paths.get(saveDir);
     }
 
     /**
@@ -41,77 +44,24 @@ public class DarkestSaveFileWatcher {
      * @throws IOException
      *             If the directory cannot be watched
      */
-    public void watchSaveFiles(SaveState state, Path saveDir) throws IOException {
+    public void watchSaveFiles() throws IOException {
         try {
-            WatchService watcher = FileSystems.getDefault().newWatchService();
-            /*WatchKey k = */saveDir.register(watcher, ENTRY_MODIFY, ENTRY_CREATE);
-            new Thread(createWatcherRunnable(watcher, state, saveDir)).start();
+            watcher = FileSystems.getDefault().newWatchService();
+            k = saveDir.register(watcher, ENTRY_MODIFY, ENTRY_CREATE);
+            new Thread(this).start();
         } catch (IOException e) {
 
         }
     }
-
-    private static Runnable createWatcherRunnable(final WatchService watcher, final SaveState state,
-            final Path saveDir) {
-        return new Runnable() {
-
-            @Override
-            public void run() {
-                try (Stream<Path> paths = Files.walk(saveDir)) {
-                    paths.forEach(p -> tryHandleFile(p, state, saveDir));
-                } catch (IOException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
-                }
-                for (;;) {
-                    // wait for key to be signaled
-                    WatchKey key;
-                    try {
-                        key = watcher.take();
-                    } catch (InterruptedException x) {
-                        return;
-                    }
-
-                    for (WatchEvent<?> event : key.pollEvents()) {
-                        WatchEvent.Kind<?> kind = event.kind();
-
-                        // This key is registered only
-                        // for ENTRY_MODIFY events,
-                        // but an OVERFLOW event can
-                        // occur regardless if events
-                        // are lost or discarded.
-                        if (kind == OVERFLOW) {
-                            continue;
-                        }
-
-                        // The filename is the
-                        // context of the event.
-                        @SuppressWarnings("unchecked")
-                        WatchEvent<Path> ev = (WatchEvent<Path>) event;
-                        Path filename = ev.context();
-
-                        // Resolve the filename against the directory.
-                        // If the filename is "test" and the directory is "foo",
-                        // the resolved name is "test/foo".
-                        Path child = saveDir.resolve(filename);
-                        tryHandleFile(child, state, saveDir);
-                    }
-
-                    // Reset the key -- this step is critical if you want to
-                    // receive further watch events. If the key is no longer valid,
-                    // the directory is inaccessible so exit the loop.
-                    boolean valid = key.reset();
-                    if (!valid) {
-                        break;
-                    }
-                }
-            }
-        };
+    
+    public void stop() {
+        
     }
     
     static void tryHandleFile(Path file, SaveState state, Path saveDir) {
         try {
-            if (Files.isRegularFile(file) && file.getFileName().toString().endsWith(".json") && file.getParent().equals(saveDir)) {
+            if (Files.isRegularFile(file) && (file.getFileName().toString().matches(".*persist\\..*\\.json") || file.getFileName().toString().matches("novelty_tracker\\.json")) && file.getParent().equals(saveDir)) {
+                System.out.println("Reading " + file.getFileName().toString());
                 // Open file with read option only to allow for file deletion and
                 // modifications from other programs.
                 try (InputStream is = Files.newInputStream(file, StandardOpenOption.READ)) {
@@ -128,7 +78,8 @@ public class DarkestSaveFileWatcher {
                     buffer.flush();
                     stream.close();
                     byte[] byteArray = buffer.toByteArray();
-                    DsonFile f = new DsonFile(byteArray);
+                    // Don't unhash names as the Save State will do that
+                    DsonFile f = new DsonFile(byteArray, false);
                     String jsonString = f.toString();
                     state.update(file.getFileName().toString(), jsonString);
                 } catch (NoSuchFileException e) {
@@ -139,6 +90,63 @@ public class DarkestSaveFileWatcher {
             }
         } catch (Exception e) {
             System.err.println("Couldn't read/parse " + file.getFileName().toString());
+        }
+    }
+
+    @Override
+    public void run() {
+        try (Stream<Path> paths = Files.walk(saveDir)) {
+            paths.forEach(p -> tryHandleFile(p, state, saveDir));
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+        while (!wantsStop) {
+            // wait for key to be signaled
+            WatchKey key;
+            try {
+                key = watcher.take();
+            } catch (InterruptedException x) {
+                return;
+            }
+
+            for (WatchEvent<?> event : key.pollEvents()) {
+                WatchEvent.Kind<?> kind = event.kind();
+
+                // This key is registered only
+                // for ENTRY_MODIFY events,
+                // but an OVERFLOW event can
+                // occur regardless if events
+                // are lost or discarded.
+                if (kind == OVERFLOW) {
+                    continue;
+                }
+
+                // The filename is the
+                // context of the event.
+                @SuppressWarnings("unchecked")
+                WatchEvent<Path> ev = (WatchEvent<Path>) event;
+                Path filename = ev.context();
+
+                // Resolve the filename against the directory.
+                // If the filename is "test" and the directory is "foo",
+                // the resolved name is "test/foo".
+                Path child = saveDir.resolve(filename);
+                tryHandleFile(child, state, saveDir);
+            }
+
+            // Reset the key -- this step is critical if you want to
+            // receive further watch events. If the key is no longer valid,
+            // the directory is inaccessible so exit the loop.
+            boolean valid = key.reset();
+            if (!valid) {
+                break;
+            }
+        }
+        try {
+            k.cancel();
+            watcher.close();
+        } catch (IOException e) {
         }
     }
 }

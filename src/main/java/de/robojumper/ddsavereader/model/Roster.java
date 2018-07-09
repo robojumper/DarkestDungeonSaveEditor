@@ -1,9 +1,14 @@
 package de.robojumper.ddsavereader.model;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -40,6 +45,7 @@ public class Roster extends AbstractFile {
                     throw new IOException();
                 
                 Hero h = SaveState.makeGson().fromJson(in, Hero.class);
+                h.setID(id);
                 map.put(id, h);
                 
                 in.endObject();
@@ -67,6 +73,11 @@ public class Roster extends AbstractFile {
 
     }
     
+    class LastParty {
+        @SerializedName("last_party_guids")
+        int[] lastPartyGuids = new int[0];
+    }
+    
     class RosterData {
         @SerializedName("dismissed_hero_count")
         private int dismissedHeroCount = -1;
@@ -74,6 +85,9 @@ public class Roster extends AbstractFile {
         @SerializedName("heroes")
         @JsonAdapter(HeroMapAdapter.class)
         private final Map<Integer, Hero> heroes = new HashMap<>();
+        
+        @SerializedName("last_party")
+        LastParty party = new LastParty();
     }
 
     private RosterData rosterData = new RosterData();
@@ -111,7 +125,15 @@ public class Roster extends AbstractFile {
         return null;
     }
     
+    public Collection<Hero> getHeroes() {
+        return Collections.unmodifiableCollection(rosterData.heroes.values());
+    }
+    
     public int getNumDismissedHeroes() {
         return rosterData.dismissedHeroCount;
+    }
+    
+    public List<Hero> getParty() {
+        return Arrays.stream(rosterData.party.lastPartyGuids).mapToObj(i -> rosterData.heroes.get(i)).collect(Collectors.toList());
     }
 }

@@ -81,10 +81,15 @@ public class Commands {
         });
         
         Command weekCommand = (state, command, params) -> { 
-            return "Week " + state.getNumWeeks();
+            return "Week " + state.getCampaignLog().getNumWeeks();
         };
         COMMANDS.put("week", weekCommand);
         COMMANDS.put("weeks", weekCommand);
+        
+        COMMANDS.put("districts", (state, command, params) -> { 
+            return state.getTown().buildDistricts();
+        });
+        
     }
 
     public static String buildResponse(SaveState s, String content) {
@@ -96,7 +101,7 @@ public class Commands {
 
                 Command c = COMMANDS.get(command);
                 if (c != null) {
-                    synchronized (s.getSynchronizationLock()) {
+                    synchronized (s) {
                         return c.buildResponse(s, command, params);
                     }
                 }

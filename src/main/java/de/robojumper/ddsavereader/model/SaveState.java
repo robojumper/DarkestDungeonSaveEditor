@@ -6,10 +6,9 @@ import java.util.List;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.gson.TypeAdapter;
 
+import de.robojumper.ddsavereader.model.CampaignLog.Chapter;
 import de.robojumper.ddsavereader.model.helper.HashedString;
 
 /**
@@ -46,69 +45,88 @@ public class SaveState {
         }
         return b.create();
     }
+    
+    class Cache<T extends AbstractFile> {
+        private T data;
+        private boolean dirty;
+        private String jsonData;
+        
+        public Cache(T t) {
+            this.data = t;
+            this.dirty = false;
+            this.jsonData = "";
+        }
+        
+        public T get() {
+            synchronized (SaveState.this) {
+                if (this.dirty) {
+                    this.data.update(jsonData);
+                    this.dirty = false;
+                }
+            }
+            return this.data;
+        }
+        
+        public void update(String jsonData) {
+            synchronized (SaveState.this) {
+                this.jsonData = jsonData;
+                this.dirty = true;
+            }
+        }
+        
+    }
 
-    private Roster roster = new Roster();
-    private Estate estate = new Estate();
-    private Town town = new Town();
-    private int weeks = -1;
+    private Cache<Roster> roster = new Cache<>(new Roster());
+    private Cache<Estate> estate = new Cache<>(new Estate());
+    private Cache<Town> town = new Cache<>(new Town());
+    private Cache<CampaignLog> campaignLog = new Cache<>(new CampaignLog());
+    
     
     
     
     static {
         GLOBAL_TYPE_ADAPTERS.add(new TypeAdapterMapping<HashedString>(HashedString.class, new HashedString.HashedStringAdapter()));
+        GLOBAL_TYPE_ADAPTERS.add(new TypeAdapterMapping<Chapter>(Chapter.class, new CampaignLog.ChapterAdapter()));
     }
 
 
 
     public void update(String fileName, String jsonData) {
-        synchronized (getSynchronizationLock()) {
-            switch (fileName) {
-                case "persist.roster.json":
-                    roster.update(jsonData);
-                    break;
-                case "persist.estate.json":
-                    estate.update(jsonData);
-                    break;
-                case "persist.town.json":
-                    town.update(jsonData);
-                    break;
-                case "persist.campaign_log.json":
-                    updateWeeks(jsonData);
-                    break;
-                default:
-                    break;
-            }
+        switch (fileName) {
+            case "persist.roster.json":
+                roster.update(jsonData);
+                break;
+            case "persist.estate.json":
+                estate.update(jsonData);
+                break;
+            case "persist.town.json":
+                town.update(jsonData);
+                break;
+            case "persist.campaign_log.json":
+                campaignLog.update(jsonData);
+                break;
+            default:
+                break;
         }
     }
-    
-    private void updateWeeks(String jsonData) {
-        JsonParser parser = new JsonParser();
-        JsonObject o = parser.parse(jsonData).getAsJsonObject();
-        o = o.getAsJsonObject("base_root");
-        
-        this.weeks = o.get("total_weeks").getAsInt();
-    }
 
-    public Object getSynchronizationLock() {
-        return this;
-    }
     
     public Roster getRoster() {
-        return roster;
+        return roster.get();
     }
     
     public Estate getEstate() {
-        return estate;
+        return estate.get();
     }
     
     public Town getTown() {
-        return town;
+        return town.get();
     }
     
-    public int getNumWeeks() {
-        return weeks;
+    public CampaignLog getCampaignLog() {
+        return campaignLog.get();
     }
-    
+
     // https://stackoverflow.com/questions/8519669/replace-non-ascii-character-from-string/17786019
     public static String normalizeQueryString(String input) {
         return Normalizer.normalize(input, Normalizer.Form.NFD).replaceAll("[^\\x00-\\x7F]", "").toLowerCase();

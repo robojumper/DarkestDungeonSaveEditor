@@ -8,8 +8,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
-import de.robojumper.ddsavereader.file.DsonField;
 import de.robojumper.ddsavereader.file.DsonFile;
+import de.robojumper.ddsavereader.file.DsonTypes;
 
 public class Main {
 
@@ -57,7 +57,7 @@ public class Main {
 			    String line;
 			    while ((line = br.readLine()) != null) {
 			    	if (!line.equals("")) {
-			    		DsonField.NAME_TABLE.put(DsonFile.stringHash(line), line);
+			    	    DsonTypes.NAME_TABLE.put(DsonFile.stringHash(line), line);
 			    	}
 			    }
 			} catch (IOException e) {
@@ -70,7 +70,7 @@ public class Main {
 		String OutResult = null;
 		try {
 			byte[] FileData = Files.readAllBytes(Paths.get(infile));
-			DsonFile File = new DsonFile(FileData);
+			DsonFile File = new DsonFile(FileData, true);
 			OutResult = File.getJSonString(0, debug);
 		} catch (IOException e) {
 			System.err.println("Could not read " + infile);
@@ -82,7 +82,7 @@ public class Main {
 			try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(outfile), StandardCharsets.UTF_8)) {
 				writer.write(OutResult, 0, OutResult.length());
 			} catch (IOException e) {
-				System.err.println("Could not read " + infile);
+				System.err.println("Could not read " + outfile);
 				System.err.println(e.getMessage());
 				System.exit(1);
 			}

@@ -1,18 +1,18 @@
 package de.robojumper.ddsavereader.twitchbot;
 
-import java.io.IOException;
+/*import java.io.IOException;
 import me.philippheuer.twitch4j.TwitchClient;
 import me.philippheuer.twitch4j.TwitchClientBuilder;
 import me.philippheuer.twitch4j.events.Event;
 import me.philippheuer.twitch4j.events.IListener;
 import me.philippheuer.twitch4j.events.event.irc.ChannelMessageEvent;
 import de.robojumper.ddsavereader.model.SaveState;
-import de.robojumper.ddsavereader.watcher.DarkestSaveFileWatcher;
+import de.robojumper.ddsavereader.watcher.DarkestSaveFileWatcher;*/
 
 public class DDSampleTwitchBot {
 
     public static void main(String[] args) {
-        TwitchClient twitchClient;
+/*        TwitchClient twitchClient;
         @SuppressWarnings("unused")
         DarkestSaveFileWatcher watcher;
         SaveState saveState = new SaveState();
@@ -42,7 +42,6 @@ public class DDSampleTwitchBot {
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
-        }
-        
+        }*/
     }
 }

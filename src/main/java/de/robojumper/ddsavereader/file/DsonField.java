@@ -4,42 +4,9 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.HashMap;
-
 
 // Dson for Darkest Json
 public class DsonField {
-	
-	static final String[][] FLOAT_FIELD_NAMES = {{"current_hp"}, {"m_Stress"},  {"actor", "buff_group", "*", "amount"}, {"chapters", "*", "*", "percent"}, {"non_rolled_additional_chances", "*", "chance"}, };
-	
-	// TODO: Make array a special kind of field with an Inner type??
-	static final String[][] INTVECTOR_FIELD_NAMES = {
-		{"read_page_indexes"}, {"raid_read_page_indexes"}, {"raid_unread_page_indexes"},	// journal.json
-		{"dungeons_unlocked"}, {"played_video_list"}, // game_knowledge.json
-		{"goal_ids"}, {"trinket_retention_ids"},	// quest.json
-		{"last_party_guids"}, {"dungeon_history"}, // roster.json
-		{"result_event_history"}, // town_event.json
-		{"additional_mash_disabled_infestation_monster_class_ids"}, // campaign_mash.json
-		{"party", "heroes"}, // raid.json
-		{"narration_audio_event_queue_tags"}, // loading_screen.json
-		{"dispatched_events"}, // tutorial.json
-	};
-	
-	static final String[][] STRINGVECTOR_FIELD_NAMES = {
-		{"goal_ids"}, // quest.json
-		{"roaming_dungeon_2_ids", "*", "s"}, // campaign_mash.json
-	};
-	
-	static final String[][] FLOATARRAY_FIELD_NAMES = {
-		{"map", "bounds"}, {"areas", "*", "bounds"}, {"areas", "*", "tiles", "*", "mappos"}, {"areas", "*", "tiles", "*", "sidepos"}, // map.json  
-	};
-	
-
-
-	
-	// When loading, all Integers will check for a matching hash and replace their display string as "<name>" (where <name> is the unhashed string)
-	// This is much better than trying to find a good reverse. 
-	public static final HashMap<Integer, String> NAME_TABLE = new HashMap<Integer, String>();
 	
 	static final String STR_TRUE = "true";
 	static final String STR_FALSE = "false";
@@ -47,18 +14,18 @@ public class DsonField {
 	public enum FieldType {
 		TYPE_Object,        // has a Meta1Block entry
 		TYPE_Bool,          // 1 byte, 0x00 or 0x01
-		TYPE_Char,          // 1 byte, only seems to be used in upgrades.json 
+		TYPE_Char,          // 1 byte, only seems to be used in upgrades.json
 		TYPE_TwoBool,       // aligned, 8 bytes (only used in gameplay options??). emitted as [true, true]
 		TYPE_String,        // aligned, int size + null-terminated string of size (including \0)
 		TYPE_File,          // Actually an object, but encoded as a string (embedded DsonFile). used in roster.json and map.json 
 		TYPE_Int,           // aligned, 4 byte integer
 		// Begin hardcoded types: these types do not have enough characteristics to make the heuristic work
-		// As such, the field names/paths are hardcoded above
+		// As such, the field names/paths are hardcoded in DsonTypes
 		// Fields matching the names will ALWAYS assume the corresponding type, even if parsing fails
 		// So they should be used sparingly and be as specific as possible
 		TYPE_Float,         // aligned, 4-byte float
 		TYPE_IntVector,     // aligned. 4-byte int [count], then [count] 4-byte integers
-		TYPE_StringVector,  // aligned, 4-byte int [count], then [count] null-terminated strings
+		TYPE_StringVector,  // aligned, 4-byte int [count], then [count] string length + null-terminated string
 		TYPE_FloatArray,    // aligned, arbitrary number of 4-byte floats. emitted as [1.0, 2.0, ...]
 		TYPE_Unknown
 	};
@@ -90,17 +57,22 @@ public class DsonField {
 	public DsonField[] children;
 	
 	// If external code has not determined this field to be TYPE_Object, guess the type
-	public boolean guessType() {
-		if (parseHardcodedType()) {
+	public boolean guessType(boolean autoUnhashNames) {
+		if (parseHardcodedType(autoUnhashNames)) {
 			return true;
 		} else if (rawData.length == 1) {
-			if (rawData[0] == 0x00 || rawData[0] == 0x01) {
-				type = FieldType.TYPE_Bool;
-				dataString = rawData[0] == 0x00 ? STR_FALSE : STR_TRUE;
+		    if (rawData[0] >= 0x20 && rawData[0] >= 0x7E) {
+		        type = FieldType.TYPE_Char;
+                dataString = "\"" + Character.toString((char)rawData[0]) + "\"";
+		    } else {
+	            type = FieldType.TYPE_Bool;
+	            dataString = rawData[0] == 0x00 ? STR_FALSE : STR_TRUE;
+		    }
+			/*if (rawData[0] == 0x00 || rawData[0] == 0x01) {
+
 			} else {
-				type = FieldType.TYPE_Char;
-				dataString = "\"" + Character.toString((char)rawData[0]) + "\"";
-			}
+				
+			}*/
 		} else if (alignedSize() == 8 &&
 				(rawData[alignmentSkip() + 0] == 0x00 || rawData[alignmentSkip() + 0] == 0x01) &&
 				(rawData[alignmentSkip() + 4] == 0x00 || rawData[alignmentSkip() + 4] == 0x01)) {
@@ -111,10 +83,12 @@ public class DsonField {
 			byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
 			int tempInt = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
 			dataString = Integer.toString(tempInt);
-			String unHashed = NAME_TABLE.get(tempInt);
-			if (unHashed != null) {
-			    hashedValue = dataString;
-				dataString = "\"" + unHashed + "\"";
+			if (autoUnhashNames) {
+    			String unHashed = DsonTypes.NAME_TABLE.get(tempInt);
+    			if (unHashed != null) {
+    			    hashedValue = dataString;
+    				dataString = "\"" + unHashed + "\"";
+    			}
 			}
 		} else if (parseString()) {
 			// Some strings are actually embedded files
@@ -123,7 +97,7 @@ public class DsonField {
 				byte[] tempHeader = Arrays.copyOfRange(unquoteData, 0, 4);
 				if (Arrays.equals(tempHeader, DsonFile.MAGICNR_HEADER)) {
 					type = FieldType.TYPE_File;
-					embeddedFile = new DsonFile(unquoteData, true);
+					embeddedFile = new DsonFile(unquoteData, autoUnhashNames);
 					dataString = "MUST REBUILD MANUALLY WITH CORRECT INDENTATION";
 				}
 			}
@@ -134,12 +108,12 @@ public class DsonField {
 		return true;
 	}
 	
-	private boolean parseHardcodedType() {
-		return parseFloatArray() || parseIntVector() || parseStringVector() || parseFloat();
+	private boolean parseHardcodedType(boolean autoUnhashNames) {
+		return parseFloatArray() || parseIntVector(autoUnhashNames) || parseStringVector() || parseFloat();
 	}
 	
 	private boolean parseFloat() {
-		if (nameInArray(FLOAT_FIELD_NAMES)) {
+		if (nameInArray(DsonTypes.FLOAT_FIELD_NAMES)) {
 			if (alignedSize() == 4) {
 				type = FieldType.TYPE_Float;
 				byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
@@ -152,7 +126,7 @@ public class DsonField {
 	}
 	
 	private boolean parseStringVector() {
-		if (nameInArray(STRINGVECTOR_FIELD_NAMES)) {
+		if (nameInArray(DsonTypes.STRINGVECTOR_FIELD_NAMES)) {
 			type = FieldType.TYPE_StringVector;
 			byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
 			@SuppressWarnings("unused")
@@ -178,23 +152,27 @@ public class DsonField {
 		return false;
 	}
 
-	private boolean parseIntVector() {
-		if (nameInArray(INTVECTOR_FIELD_NAMES)) {
+	private boolean parseIntVector(boolean autoUnhashNames) {
+		if (nameInArray(DsonTypes.INTVECTOR_FIELD_NAMES)) {
 			byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
 			int arrLen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
 			if (alignedSize() == (arrLen + 1) * 4) {
 				type = FieldType.TYPE_IntVector;
 				byte[] tempArr2 = Arrays.copyOfRange(rawData, alignmentSkip() + 4, alignmentSkip() + (arrLen + 1) * 4);
+				
 				ByteBuffer buffer = ByteBuffer.wrap(tempArr2).order(ByteOrder.LITTLE_ENDIAN);
 				StringBuilder sb = new StringBuilder();
 				StringBuilder hsb = new StringBuilder();
+				
 				sb.append("[");
 				hsb.append("[");
+				
 				boolean foundHashed = false;
+				
 				for (int i = 0; i < arrLen; i++) {
 					int tempInt = buffer.getInt();
-					String unHashed = NAME_TABLE.get(tempInt);
-					if (unHashed != null) {
+					String unHashed;
+					if (autoUnhashNames && (unHashed = DsonTypes.NAME_TABLE.get(tempInt)) != null) {
 						unHashed = "\"" + unHashed + "\"";
 						sb.append(unHashed);
 						hsb.append(tempInt);
@@ -210,6 +188,7 @@ public class DsonField {
 				}
 				sb.append("]");
 				hsb.append("]");
+
 				dataString = sb.toString();
 
 				if (foundHashed) {
@@ -222,7 +201,7 @@ public class DsonField {
 	}
 	
 	private boolean parseFloatArray() {
-		if (nameInArray(FLOATARRAY_FIELD_NAMES)) {
+		if (nameInArray(DsonTypes.FLOATARRAY_FIELD_NAMES)) {
 			type = FieldType.TYPE_FloatArray;
 			byte[] floats = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + alignedSize());
 			ByteBuffer bf = ByteBuffer.wrap(floats).order(ByteOrder.LITTLE_ENDIAN);

@@ -58,3 +58,6 @@ bin/
 bin/
 build/
 .gradle/
+
+# Client Secret
+src/main/resources/client_secret.json

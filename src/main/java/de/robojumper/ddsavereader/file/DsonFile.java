@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Stack;
 
 import de.robojumper.ddsavereader.file.DsonField.FieldType;
-import de.robojumper.ddsavereader.file.DsonFile.Meta1Block.Meta1BlockEntry;
+import de.robojumper.ddsavereader.file.DsonFile.Meta2Block.Meta2BlockEntry;
 
 
 public class DsonFile {
@@ -22,12 +22,11 @@ public class DsonFile {
 	// The first field that is being deserialized is always base_root
 	List<DsonField> rootFields;
 	
-	public DsonFile(byte[] File) {
-	    this(File, false);
-	}
+	boolean autoUnhashNames;
 	
 	// Embed files are strings that have the last null-terminating character included in the data size
-	public DsonFile(byte[] File, boolean bIsEmbed) {
+	public DsonFile(byte[] File, boolean autoUnhashNames) {
+	    this.autoUnhashNames = autoUnhashNames;
 		ByteBuffer buffer = ByteBuffer.wrap(File);
 		buffer.order(ByteOrder.LITTLE_ENDIAN);
 		
@@ -83,10 +82,15 @@ public class DsonFile {
 			// It seems to work, in case it breaks, this is what you're looking for
 			// This should also be revisited when trying to get saving implemented 
 			for (int i = 0; i < meta2.entries.length; i++) {
+			    Meta2BlockEntry meta2Entry = meta2.entries[i];
 				DsonField field = new DsonField();
-				int off = meta2.entries[i].offset;
+				int off = meta2Entry.offset;
 				field.name = readNullTermString(Data, off);
-				field.meta1EntryIdx = meta2.entries[i].getMyMeta1BlockEntryIdx();
+				assert(field.name.length() == meta2Entry.getNameStringLength() - 1);
+				assert(stringHash(field.name) == meta2Entry.nameHash);
+				if (meta2Entry.isObject()) {
+				    field.meta1EntryIdx = meta2Entry.getMeta1BlockEntryIdx();
+				}
 				field.meta2EntryIdx = i;
 				// In the data, strings are null-term'd!
 				off += field.name.length() + 1;
@@ -107,13 +111,11 @@ public class DsonFile {
 					dataLen = Data.length - off;
 				}
 				field.rawData = Arrays.copyOfRange(Data, off, off + dataLen);
-				int[] objectsizes = meta2.entries[i].getObjectTypeInfo();
-				if (objectsizes != null) {
+				if (meta2Entry.isObject()) {
 					// we are an object type
 					field.type = FieldType.TYPE_Object;
-					field.dataString = "";
-					field.setNumChildren(objectsizes[0]);
-					assert(meta2.entries[i].getMyMeta1BlockEntry().hierarchyHint == hierarchyStack.peek().intValue());
+					field.setNumChildren(meta1.entries[meta2Entry.getMeta1BlockEntryIdx()].numDirectChildren);
+					assert(meta1.entries[meta2Entry.getMeta1BlockEntryIdx()].hierarchyHint == hierarchyStack.peek().intValue());
 					runningObjIdx++;
 				}
 				// Add the field
@@ -128,7 +130,7 @@ public class DsonFile {
 				}
 				// now guess the type that it knows about its parents
 				if (field.type != FieldType.TYPE_Object) {
-					field.guessType();
+					field.guessType(this.autoUnhashNames);
 				}
 				
 				// If we have an object, push it to the stack
@@ -138,7 +140,7 @@ public class DsonFile {
 				}
 
 				// Then check if the object on top of the stack has all its children. If so, pop it
-				// In case an object was the last child of an object, we do this recursively
+				// In case an object was the last child of an object, we do this iteratively
 				while (!fieldStack.isEmpty() && fieldStack.peek().type == FieldType.TYPE_Object && fieldStack.peek().hasAllChilds()) {
 					fieldStack.pop();
 					hierarchyStack.pop();
@@ -150,6 +152,7 @@ public class DsonFile {
 			assert(runningObjIdx + 1 == header.numObjects);
 		}
 	}
+
 	
 	static String readNullTermString(byte[] data, int start) {
 		StringBuilder sb = new StringBuilder();
@@ -163,26 +166,29 @@ public class DsonFile {
 	}
 	
 	
-	class HeaderBlock {
+	static class HeaderBlock {
 		byte[] MagicNumber = MAGICNR_HEADER;
 		byte[] epsilon = {0x00, 0x00, 0x00, 0x00};
 		int lengthOfHeader; // always 0x40?
-		int zeroes;
+		int zeroes = 0;
 		int numObjects16, numObjects; // numObjects16 = numObjects << 4
 		int startOfMeta1; // always 0x40?
-		long zeroes2;
-		long zeroes3;
+		long zeroes2 = 0;
+		long zeroes3 = 0;
 		int numMeta2Entries;
 		int startOfMeta2;
-		int zeroes4;
+		int zeroes4 = 0;
+	    int lengthOfData;
 		int startOfData;
-		int lengthOfData;
 	}
 
 	// The Meta1Block contains one entry for every Object field compressed in DATA.
-	class Meta1Block {
+	static class Meta1Block {
 		// list of contents
 		Meta1BlockEntry[] entries;
+		
+		Meta1Block() {
+        }
 		
 		Meta1Block(byte[] data) {
 			ByteBuffer buffer = ByteBuffer.wrap(data);
@@ -200,7 +206,7 @@ public class DsonFile {
 		}
 		
 		// data structure encapsulating a single entry in the Meta1Block
-		class Meta1BlockEntry {
+		static class Meta1BlockEntry {
 			// index of this object in the data - 1, and all sibling objects have the same (i.e. inherit from the first) 
 			int hierarchyHint;
 			// index into Meta2Block.Entries
@@ -213,21 +219,24 @@ public class DsonFile {
 	}
 	
 	
-	class Meta2Block {
+	static class Meta2Block {
 		
 		Meta2BlockEntry[] entries;
+		
+		Meta2Block() {
+        }
 		
 		Meta2Block(byte[] data) {
 			ByteBuffer buffer = ByteBuffer.wrap(data);
 			buffer.order(ByteOrder.LITTLE_ENDIAN);
 			assert(data.length % 0x0C == 0);
-			// The Meta2 block should always have a size that is a multiple of 0x10
+			// The Meta2 block should always have a size that is a multiple of 0x0C
 			entries = new Meta2BlockEntry[data.length / 0x0C];
 			for (int i = 0; buffer.remaining() != 0; i++) {
 				entries[i] = new Meta2BlockEntry();
-				buffer.get(entries[i].nameIdent);
+				entries[i].nameHash = buffer.getInt();
 				entries[i].offset = buffer.getInt();
-				buffer.get(entries[i].typeIdent);
+				entries[i].fieldInfo = buffer.getInt();
 			}
 		}
 		
@@ -244,48 +253,30 @@ public class DsonFile {
 			return bestOffset;
 		}
 
-		class Meta2BlockEntry {
+		static class Meta2BlockEntry {
 			// Hash of the Field Name
-			byte[] nameIdent = new byte[4];
+			int nameHash;
 			// offset from start of data block
 			int offset;
-			// unknown. TypeIdent might be misleading
-			byte[] typeIdent = new byte[4];
+			// Bitmask
+			// XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX
+			//                                       - 1 if object, 0 if not
+			//                                      -  Unknown (Always 0?)
+			//                           --- ---- --   Name string length, HOW LONG IS IT?
+			//  --- ---- ---- ---- ---- -              Object index, HOW LONG IS IT?
+			// -                                       Memory junk?
+			int fieldInfo;
 			
-			
-			Meta1BlockEntry getMyMeta1BlockEntry() {
-				int idx = getMyMeta1BlockEntryIdx();
-				if (idx < 0) {
-					return null;
-				} else {
-					return meta1.entries[idx];
-				}
+			boolean isObject() {
+			    return (fieldInfo & 0b1) == 1;
 			}
 			
-			int getMyMeta1BlockEntryIdx() {
-				for (int i = 0; i < meta1.entries.length; i++) {
-					// For some reason I thought Meta1 only includes one version for every type hash. Commented out
-//					if (Arrays.equals(NameIdent, Entries[Meta1.Entries[i].idx].NameIdent)) {
-					if (entries[meta1.entries[i].idx] == this) {
-						return i; 
-					}
-				}
-				return -1;
+			int getMeta1BlockEntryIdx() {
+			    return (fieldInfo & 0b1111111111111111111100000000000) >> 11;
 			}
 			
-			// If this is an object type, the return value has a length of two (2),
-			// where the first entry is the number of direct children and the second one the number of all
-			// otherwise, return null
-			int[] getObjectTypeInfo() {
-				Meta1BlockEntry entry;
-				entry = getMyMeta1BlockEntry();
-				if (entry != null) {
-					int[] ret = new int[2];
-					ret[0] = entry.numDirectChildren;
-					ret[1] = entry.numAllChildren;
-					return ret;
-				}
-				return null;
+			int getNameStringLength() {
+			    return (fieldInfo & 0b11111111100) >> 2;
 			}
 		}
 	}
@@ -323,7 +314,7 @@ public class DsonFile {
 		if (debug) {
 			sb.append(indt(indent) + "// INFO ");
 			// every field has a Meta2Index
-			sb.append("Meta2_Unknown: 0x" + LEBytesToHexStr(meta2.entries[field.meta2EntryIdx].typeIdent) + " ");
+			sb.append("Meta2_Unknown: 0x" + Integer.toHexString(meta2.entries[field.meta2EntryIdx].fieldInfo) + " ");
 			sb.append(field.getExtraComments());
 			sb.append("\n");
 		}
@@ -345,7 +336,7 @@ public class DsonFile {
 			sb.append("{\n");
 			indent++;
 			for (int i = 0; i < field.children.length; i++) {
-				writeField(sb, field.children[i], indent, debug);
+			    writeField(sb, field.children[i], indent, debug);
 				if (i != field.children.length - 1) {
 					sb.append(",");
 				}
