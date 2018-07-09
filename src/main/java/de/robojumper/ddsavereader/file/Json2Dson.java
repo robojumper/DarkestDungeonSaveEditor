@@ -89,8 +89,8 @@ public class Json2Dson {
         header = new HeaderBlock();
         data = new ByteArrayOutputStream();
 
-        header.lengthOfHeader = 0x40;
-        header.startOfMeta1 = 0x40;
+        header.headerLength = 0x40;
+        header.meta1Offset = 0x40;
 
         meta1Entries = new ArrayList<>();
         meta2Entries = new ArrayList<>();
@@ -102,12 +102,12 @@ public class Json2Dson {
             writeField(e);
         }
 
-        header.numObjects = meta1Entries.size();
-        header.numObjects16 = header.numObjects << 4;
+        header.numMeta1Entries = meta1Entries.size();
+        header.meta1Size = header.numMeta1Entries << 4;
         header.numMeta2Entries = meta2Entries.size();
-        header.startOfMeta2 = 0x40 + meta1Entries.size() * 0x10;
-        header.startOfData = 0x40 + meta1Entries.size() * 0x10 + meta2Entries.size() * 0x0C;
-        header.lengthOfData = data.size();
+        header.meta2Offset = 0x40 + meta1Entries.size() * 0x10;
+        header.dataOffset = 0x40 + meta1Entries.size() * 0x10 + meta2Entries.size() * 0x0C;
+        header.dataLength = data.size();
         hierarchyHintStack.pop();
         assert (hierarchyHintStack.isEmpty());
     }
@@ -128,7 +128,7 @@ public class Json2Dson {
             // Objects with the name raw_data are embedded files
             if (!name.equals("raw_data")) {
                 Meta1BlockEntry e1 = new Meta1BlockEntry();
-                e1.idx = meta2Entries.size() - 1;
+                e1.meta2EntryIdx = meta2Entries.size() - 1;
                 e2.fieldInfo |= 0b1 | ((meta1Entries.size() & 0b11111111111111111111) << 11);
                 e1.hierarchyHint = hierarchyHintStack.peek();
                 e1.numDirectChildren = elem.getAsJsonObject().entrySet().size();
@@ -213,23 +213,23 @@ public class Json2Dson {
                 .order(ByteOrder.LITTLE_ENDIAN);
         buffer.put(header.MagicNumber);
         buffer.put(header.epsilon);
-        buffer.putInt(header.lengthOfHeader);
+        buffer.putInt(header.headerLength);
         buffer.putInt(header.zeroes);
-        buffer.putInt(header.numObjects16);
-        buffer.putInt(header.numObjects);
-        buffer.putInt(header.startOfMeta1);
+        buffer.putInt(header.meta1Size);
+        buffer.putInt(header.numMeta1Entries);
+        buffer.putInt(header.meta1Offset);
         buffer.putLong(header.zeroes2);
         buffer.putLong(header.zeroes3);
         buffer.putInt(header.numMeta2Entries);
-        buffer.putInt(header.startOfMeta2);
+        buffer.putInt(header.meta2Offset);
         buffer.putInt(header.zeroes4);
-        buffer.putInt(header.lengthOfData);
-        buffer.putInt(header.startOfData);
+        buffer.putInt(header.dataLength);
+        buffer.putInt(header.dataOffset);
 
         for (int i = 0; i < meta1Entries.size(); i++) {
             Meta1BlockEntry e1 = meta1Entries.get(i);
             buffer.putInt(e1.hierarchyHint);
-            buffer.putInt(e1.idx);
+            buffer.putInt(e1.meta2EntryIdx);
             buffer.putInt(e1.numDirectChildren);
             buffer.putInt(e1.numAllChildren);
         }

@@ -36,36 +36,36 @@ public class DsonFile {
 		buffer.get(fileMagicNumber);
 		assert(Arrays.equals(fileMagicNumber, header.MagicNumber));
 		buffer.get(header.epsilon);
-		header.lengthOfHeader = buffer.getInt();
+		header.headerLength = buffer.getInt();
 		header.zeroes = buffer.getInt();
-		header.numObjects16 = buffer.getInt();
-		header.numObjects = buffer.getInt();
-		header.startOfMeta1 = buffer.getInt();
+		header.meta1Size = buffer.getInt();
+		header.numMeta1Entries = buffer.getInt();
+		header.meta1Offset = buffer.getInt();
 		header.zeroes2 = buffer.getLong();
 		header.zeroes3 = buffer.getLong();
 		header.numMeta2Entries = buffer.getInt();
-		header.startOfMeta2 = buffer.getInt();
+		header.meta2Offset = buffer.getInt();
 		header.zeroes4 = buffer.getInt();
-		header.lengthOfData = buffer.getInt();
-		header.startOfData = buffer.getInt();
+		header.dataLength = buffer.getInt();
+		header.dataOffset = buffer.getInt();
 		// technically the header could be longer, but we don't know what data would be there
 		// so just skip to the Meta1 block
 		{
-			buffer.position((int) header.startOfMeta1);
-			byte[] Meta1Data = new byte[header.startOfMeta2 - header.startOfMeta1];
+			buffer.position((int) header.meta1Offset);
+			byte[] Meta1Data = new byte[header.meta2Offset - header.meta1Offset];
 			buffer.get(Meta1Data);
 			meta1 = new Meta1Block(Meta1Data);
 		}
 		{
 			// the buffer really should be at startOfMeta2 now
-			assert(buffer.position() == header.startOfMeta2);
-			byte[] Meta2Data = new byte[header.startOfData - header.startOfMeta2];
+			assert(buffer.position() == header.meta2Offset);
+			byte[] Meta2Data = new byte[header.dataOffset - header.meta2Offset];
 			buffer.get(Meta2Data);
 			meta2 = new Meta2Block(Meta2Data);
 			assert(header.numMeta2Entries == meta2.entries.length);;
 		}
 		{
-			byte[] Data = new byte[header.lengthOfData];
+			byte[] Data = new byte[header.dataLength];
 			buffer.get(Data);
 			assert(buffer.remaining() == 0);
 			// parse the objects
@@ -149,7 +149,7 @@ public class DsonFile {
 			// we really should not have any pending fields at this point
 			assert(fieldStack.isEmpty());
 			// runningObjIdx starts at -1
-			assert(runningObjIdx + 1 == header.numObjects);
+			assert(runningObjIdx + 1 == header.numMeta1Entries);
 		}
 	}
 
@@ -169,17 +169,18 @@ public class DsonFile {
 	static class HeaderBlock {
 		byte[] MagicNumber = MAGICNR_HEADER;
 		byte[] epsilon = {0x00, 0x00, 0x00, 0x00};
-		int lengthOfHeader; // always 0x40?
+		int headerLength; // = header size
 		int zeroes = 0;
-		int numObjects16, numObjects; // numObjects16 = numObjects << 4
-		int startOfMeta1; // always 0x40?
+		int meta1Size; // = numMeta1Entries << 4
+		int numMeta1Entries;
+		int meta1Offset; // = header size
 		long zeroes2 = 0;
 		long zeroes3 = 0;
 		int numMeta2Entries;
-		int startOfMeta2;
+		int meta2Offset;
 		int zeroes4 = 0;
-	    int lengthOfData;
-		int startOfData;
+	    int dataLength;
+		int dataOffset; 
 	}
 
 	// The Meta1Block contains one entry for every Object field compressed in DATA.
@@ -199,7 +200,7 @@ public class DsonFile {
 			for (int i = 0; buffer.remaining() != 0; i++) {
 				entries[i] = new Meta1BlockEntry();
 				entries[i].hierarchyHint = buffer.getInt();
-				entries[i].idx = buffer.getInt();
+				entries[i].meta2EntryIdx = buffer.getInt();
 				entries[i].numDirectChildren = buffer.getInt();
 				entries[i].numAllChildren = buffer.getInt();
 			}
@@ -210,7 +211,7 @@ public class DsonFile {
 			// index of this object in the data - 1, and all sibling objects have the same (i.e. inherit from the first) 
 			int hierarchyHint;
 			// index into Meta2Block.Entries
-			int idx;
+			int meta2EntryIdx;
 			// number of direct children fields of this property
 			int numDirectChildren;
 			// number of all child fields

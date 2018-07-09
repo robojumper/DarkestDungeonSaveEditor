@@ -5,9 +5,11 @@ There are still a few unknown variables in the file.
 
 ## Motivation & Fundamentals
 
-Darkest Dungeon uses a proprietary save fomat. The files have a `.json` extension, but are actually binary files with four distinct blocks. The first block is a header with metainformation about the whole file. The second block contains informations about all objects in the file. The third block contains data about all fields in the file, and the fourth block is the actual data with field names and field data.
+Darkest Dungeon uses a proprietary save fomat. The files have a `.json` extension, but are actually binary files with four distinct blocks. The first block is a header with metainformation about the whole file. The second block contains information about all objects in the file. The third block contains information about all fields in the file, and the fourth block is the actual data with field names and field data.
 
 While the general structure of the format resembles JSON, there are subtle differences. For one, there are types in the binary data that don't exist in JSON in the same way. A very simple example is `int` vs. `float`: The game doesn't include any information to distinguish between the two, both are 4-byte sized data. There are also some more exotic types. Hence, the application needs to include hardcoded information about some types (see `DsonTypes.java`).
+
+A full documentation of the format can be found in [docs/dson.md](docs/dson.md).
 
 
 ## Decoding
@@ -78,3 +80,6 @@ This application uses the [Google GSON Library](https://github.com/google/gson) 
 
 This application uses the [Google API Client Libraries](https://github.com/google/google-api-java-client) 1.23.0, licensed under the [Apache License 2.0](Licenses/Apachev2.0.txt).
 
+## License
+
+This application is licensed under the [MIT License](LICENSE).
