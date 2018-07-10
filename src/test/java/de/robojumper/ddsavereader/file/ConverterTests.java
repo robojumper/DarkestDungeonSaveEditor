@@ -8,6 +8,7 @@ import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.file.Json2Dson;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.fail;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -36,22 +37,31 @@ public class ConverterTests {
 
         // Every file must decode without throwing exceptions
         for (int i = 0; i < files.size(); i++) {
-            System.out.println("Decoding " + fileList.get(i));
-            String file = new DsonFile(files.get(i), false).getJSonString(0, false);
-            decodedFiles.add(file.getBytes(StandardCharsets.UTF_8));
+            try {
+                String file = new DsonFile(files.get(i), false).getJSonString(0, false);
+                decodedFiles.add(file.getBytes(StandardCharsets.UTF_8));
+            } catch (Exception e) {
+                fail(fileList.get(i) + " doesn't decode", e);
+            }
         }
 
         // Every file must re-encode without throwing exceptions
         for (int i = 0; i < decodedFiles.size(); i++) {
-            System.out.println("Re-encoding " + fileList.get(i));
-            reEncodedFiles.add(new Json2Dson(decodedFiles.get(i)).bytes());
+            try {
+                reEncodedFiles.add(new Json2Dson(decodedFiles.get(i)).bytes());
+            } catch (Exception e) {
+                fail(fileList.get(i) + " doesn't re-endode", e);
+            }
+            // Weird quirk
+            if (!fileList.get(i).equals("persist.progression.json")) {
+                assertEquals(reEncodedFiles.get(i).length, files.get(i).length, fileList.get(i) + " encodes to different number of bytes");
+            }
         }
 
         // Every file must re-decode to the same bytes
         for (int i = 0; i < reEncodedFiles.size(); i++) {
-            System.out.println("Re-decoding " + fileList.get(i));
             String jsonString = new DsonFile(reEncodedFiles.get(i), false).getJSonString(0, false);
-            assertEquals(jsonString.getBytes(StandardCharsets.UTF_8), decodedFiles.get(i));
+            assertEquals(jsonString.getBytes(StandardCharsets.UTF_8), decodedFiles.get(i), fileList.get(i) + " re-decodes differently");
         }
     }
 

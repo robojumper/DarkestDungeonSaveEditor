@@ -1,7 +1,6 @@
 # Darkest Dungeon Save Reader
-DSON (Darkest JSON) to JSON converter.
 
-There are still a few unknown variables in the file.
+A Darkest Dungeon Save Game Reader, Editor and Writer.
 
 ## Motivation & Fundamentals
 
@@ -70,9 +69,19 @@ If you are using the spreadsheets service, you can instead add the `client_secre
 
 [Releases Page](https://github.com/robojumper/DarkestDungeonSaveReader/releases/)
 
+## Contributing
+
+Contributions via Pull Requests or Issue reports welcome! For Pull Requests, please make sure that the unit tests pass and include your own save files as tests.
+
+## Tests
+
+In `src/tests`, there are a number of save files, some are mine, some are picked from other places on the internet. By running `gradlew test`, the tests check if all of them can be loaded, and produce somewhat correct save files again.  
+If the game updates, we'll probably need to update those save files too (I don't expect major changes to the format, but there might be the occasional new field that needs to be identified).   
+
 ## Plans
 
 * Figure out unknown variables
+* Add a proper GUI
 
 ## Attribution
 
