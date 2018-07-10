@@ -5,7 +5,9 @@ import java.nio.ByteOrder;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Stack;
 
 import de.robojumper.ddsavereader.file.DsonField.FieldType;
@@ -374,13 +376,18 @@ public class DsonFile {
         if (field.children.length > 0) {
             sb.append("{\n");
             indent++;
+            Set<String> emittedFields = new HashSet<>();
             for (int i = 0; i < field.children.length; i++) {
-                writeField(sb, field.children[i], indent, debug);
-                if (i != field.children.length - 1) {
-                    sb.append(",");
+                // DD has a quirk in one file where one object pops up twice (serialized twice?)
+                // This is not valid JSON and removing it doesn't cause any issues, so let's just remove it here
+                if (!emittedFields.contains(field.children[i].name)) {
+                    writeField(sb, field.children[i], indent, debug);
+                    emittedFields.add(field.children[i].name);
+                    sb.append(',');
+                    sb.append('\n');
                 }
-                sb.append("\n");
             }
+            sb.deleteCharAt(sb.length() - 2);
             indent--;
             sb.append(indt(indent) + "}");
         } else {

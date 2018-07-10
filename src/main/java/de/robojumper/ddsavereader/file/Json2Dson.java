@@ -124,8 +124,8 @@ public class Json2Dson {
         data.write(0);
 
         if (elem.isJsonObject()) {
-            // Objects with the name raw_data are embedded files
-            if (!name.equals("raw_data")) {
+            // Objects with the name raw_data or static_save are embedded files
+            if (!name.equals("raw_data") && !name.equals("static_save")) {
                 Meta1BlockEntry e1 = new Meta1BlockEntry();
                 e1.meta2EntryIdx = meta2Entries.size() - 1;
                 e2.fieldInfo |= 0b1 | ((meta1Entries.size() & 0b11111111111111111111) << 11);

@@ -37,7 +37,7 @@ mainClassName = "de.robojumper.ddsavereader.Main"
 task fatJar(type: Jar) {
     manifest {
         attributes 'Implementation-Title': 'Darkest Dungeon Save Reader',
-                'Implementation-Version': 'v0.0.28',
+                'Implementation-Version': 'v0.0.33',
                 'Main-Class': 'de.robojumper.ddsavereader.Main'
     }
     baseName = project.name
