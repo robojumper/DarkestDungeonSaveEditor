@@ -2,6 +2,7 @@ package de.robojumper.ddsavereader.file;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -25,7 +26,7 @@ public class DsonFile {
 	boolean autoUnhashNames;
 	
 	// Embed files are strings that have the last null-terminating character included in the data size
-	public DsonFile(byte[] File, boolean autoUnhashNames) {
+	public DsonFile(byte[] File, boolean autoUnhashNames) throws ParseException {
 	    this.autoUnhashNames = autoUnhashNames;
 		ByteBuffer buffer = ByteBuffer.wrap(File);
 		buffer.order(ByteOrder.LITTLE_ENDIAN);
@@ -34,7 +35,9 @@ public class DsonFile {
 		header = new HeaderBlock();
 		byte[] fileMagicNumber = new byte[4];
 		buffer.get(fileMagicNumber);
-		assert(Arrays.equals(fileMagicNumber, header.MagicNumber));
+		if (!Arrays.equals(fileMagicNumber, header.MagicNumber)) {
+		    throw new ParseException("Not a Dson File", 0);
+		}
 		buffer.get(header.epsilon);
 		header.headerLength = buffer.getInt();
 		header.zeroes = buffer.getInt();
@@ -51,23 +54,34 @@ public class DsonFile {
 		// technically the header could be longer, but we don't know what data would be there
 		// so just skip to the Meta1 block
 		{
-			buffer.position((int) header.meta1Offset);
+		    if (buffer.position() != header.meta1Offset) {
+                throw new ParseException("Header doesn't end at start of Meta1 Block", buffer.position());
+            }
 			byte[] Meta1Data = new byte[header.meta2Offset - header.meta1Offset];
 			buffer.get(Meta1Data);
 			meta1 = new Meta1Block(Meta1Data);
+			if (header.numMeta1Entries != meta1.entries.length) {
+                throw new ParseException("Wrong number of Meta1 Entries", buffer.position());
+            }
 		}
 		{
 			// the buffer really should be at startOfMeta2 now
-			assert(buffer.position() == header.meta2Offset);
+		    if (buffer.position() != header.meta2Offset) {
+		        throw new ParseException("Meta1 Block doesn't end at start of Meta2 Block", buffer.position());
+		    }
 			byte[] Meta2Data = new byte[header.dataOffset - header.meta2Offset];
 			buffer.get(Meta2Data);
 			meta2 = new Meta2Block(Meta2Data);
-			assert(header.numMeta2Entries == meta2.entries.length);;
+			if (header.numMeta2Entries != meta2.entries.length) {
+                throw new ParseException("Wrong number of Meta2 Entries", buffer.position());
+            }
 		}
 		{
 			byte[] Data = new byte[header.dataLength];
 			buffer.get(Data);
-			assert(buffer.remaining() == 0);
+			if (buffer.remaining() != 0) {
+                throw new ParseException("Data not completely consumed", buffer.position());
+            }
 			// parse the objects
 			Stack<DsonField> fieldStack = new Stack<DsonField>();
 			// For HierarchyHint
@@ -86,8 +100,12 @@ public class DsonFile {
 				DsonField field = new DsonField();
 				int off = meta2Entry.offset;
 				field.name = readNullTermString(Data, off);
-				assert(field.name.length() == meta2Entry.getNameStringLength() - 1);
-				assert(stringHash(field.name) == meta2Entry.nameHash);
+				if (field.name.length() != meta2Entry.getNameStringLength() - 1) {
+	                throw new ParseException("Wrong name length", off);
+	            }
+				if (stringHash(field.name) != meta2Entry.nameHash) {
+                    throw new ParseException("Wrong string hash", off);
+                }
 				if (meta2Entry.isObject()) {
 				    field.meta1EntryIdx = meta2Entry.getMeta1BlockEntryIdx();
 				}
@@ -115,22 +133,30 @@ public class DsonFile {
 					// we are an object type
 					field.type = FieldType.TYPE_Object;
 					field.setNumChildren(meta1.entries[meta2Entry.getMeta1BlockEntryIdx()].numDirectChildren);
-					assert(meta1.entries[meta2Entry.getMeta1BlockEntryIdx()].hierarchyHint == hierarchyStack.peek().intValue());
+					if (meta1.entries[meta2Entry.getMeta1BlockEntryIdx()].hierarchyHint != hierarchyStack.peek().intValue()) {
+	                    throw new ParseException("Wrong hierarchy hint", off);
+	                }
 					runningObjIdx++;
 				}
 				// Add the field
 				// If our stack is empty, the field needs to be of type object!
 				// (At least I haven't seen it any other way, since all files began with base_root 
 				if (fieldStack.isEmpty()) {
-					assert(field.type == FieldType.TYPE_Object);
+				    if (field.type != FieldType.TYPE_Object) {
+                        throw new ParseException("No top level object", off);
+                    }
 					rootFields.add(field);
 				} else {
 					// We have a stack element, add Field as a child
-					fieldStack.peek().addChild(field);
+				    if (!fieldStack.peek().addChild(field)) {
+				        throw new ParseException("Object didn't specify enough child fields", buffer.position());
+				    }
 				}
 				// now guess the type that it knows about its parents
 				if (field.type != FieldType.TYPE_Object) {
-					field.guessType(this.autoUnhashNames);
+				    if (!field.guessType(autoUnhashNames)) {
+				        throw new ParseException("Couldn't parse field " + field.name, off);
+				    }
 				}
 				
 				// If we have an object, push it to the stack
@@ -147,9 +173,12 @@ public class DsonFile {
 				}
 			}
 			// we really should not have any pending fields at this point
-			assert(fieldStack.isEmpty());
-			// runningObjIdx starts at -1
-			assert(runningObjIdx + 1 == header.numMeta1Entries);
+			if (!fieldStack.isEmpty()) {
+                throw new ParseException("Fields without all children fields encountered", buffer.position());
+            }
+			if (runningObjIdx + 1 != header.numMeta1Entries) {
+                throw new ParseException("Wrong number of objects", buffer.position());
+            }
 		}
 	}
 
@@ -191,10 +220,12 @@ public class DsonFile {
 		Meta1Block() {
         }
 		
-		Meta1Block(byte[] data) {
+		Meta1Block(byte[] data) throws ParseException {
 			ByteBuffer buffer = ByteBuffer.wrap(data);
 			buffer.order(ByteOrder.LITTLE_ENDIAN);
-			assert(data.length % 0x10 == 0);
+			if (data.length % 0x10 != 0) {
+			    throw new ParseException("Meta1 has wrong number of bytes", buffer.position());
+			}
 			// The Meta1 block should always have a size that is a multiple of 0x10
 			entries = new Meta1BlockEntry[data.length / 0x10];
 			for (int i = 0; buffer.remaining() != 0; i++) {
@@ -227,10 +258,12 @@ public class DsonFile {
 		Meta2Block() {
         }
 		
-		Meta2Block(byte[] data) {
+		Meta2Block(byte[] data) throws ParseException {
 			ByteBuffer buffer = ByteBuffer.wrap(data);
 			buffer.order(ByteOrder.LITTLE_ENDIAN);
-			assert(data.length % 0x0C == 0);
+			if (data.length % 0x0C != 0) {
+                throw new ParseException("Meta2 has wrong number of bytes", buffer.position());
+            }
 			// The Meta2 block should always have a size that is a multiple of 0x0C
 			entries = new Meta2BlockEntry[data.length / 0x0C];
 			for (int i = 0; buffer.remaining() != 0; i++) {

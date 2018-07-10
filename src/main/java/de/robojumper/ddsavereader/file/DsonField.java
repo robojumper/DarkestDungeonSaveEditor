@@ -3,6 +3,7 @@ package de.robojumper.ddsavereader.file;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
 import java.util.Arrays;
 
 // Dson for Darkest Json
@@ -57,7 +58,7 @@ public class DsonField {
 	public DsonField[] children;
 	
 	// If external code has not determined this field to be TYPE_Object, guess the type
-	public boolean guessType(boolean autoUnhashNames) {
+	public boolean guessType(boolean autoUnhashNames) throws ParseException {
 		if (parseHardcodedType(autoUnhashNames)) {
 			return true;
 		} else if (rawData.length == 1) {
@@ -279,15 +280,15 @@ public class DsonField {
 	}
 
 	// only if there are empty Children entries!
-	public void addChild(DsonField Field) {
+	public boolean addChild(DsonField Field) {
 		for (int i = 0; i < children.length; i++) {
 			if (children[i] == null) {
 				children[i] = Field;
 				Field.parent = this;
-				return;
+				return true;
 			}
 		}
-		assert(false);
+		return false;
 	}
 	
 	public boolean hasAllChilds() {

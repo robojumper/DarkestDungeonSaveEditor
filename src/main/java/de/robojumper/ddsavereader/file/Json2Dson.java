@@ -109,7 +109,6 @@ public class Json2Dson {
         header.dataOffset = 0x40 + meta1Entries.size() * 0x10 + meta2Entries.size() * 0x0C;
         header.dataLength = data.size();
         hierarchyHintStack.pop();
-        assert (hierarchyHintStack.isEmpty());
     }
 
     private void writeField(Entry<String, JsonElement> field) throws IOException {
@@ -207,7 +206,7 @@ public class Json2Dson {
 
     }
 
-    private byte[] bytes() {
+    public byte[] bytes() {
         ByteBuffer buffer = ByteBuffer
                 .allocate(0x40 + meta1Entries.size() * 0x10 + meta2Entries.size() * 0x0C + data.size())
                 .order(ByteOrder.LITTLE_ENDIAN);
@@ -241,7 +240,6 @@ public class Json2Dson {
             buffer.putInt(e2.fieldInfo);
         }
         buffer.put(data.toByteArray());
-        assert (buffer.remaining() == 0);
         return buffer.array();
     }
 
