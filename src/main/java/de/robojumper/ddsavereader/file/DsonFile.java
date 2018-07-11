@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.Stack;
 
-import de.robojumper.ddsavereader.file.DsonField.FieldType;
+import de.robojumper.ddsavereader.file.DsonTypes.FieldType;
 import de.robojumper.ddsavereader.file.DsonFile.Meta2Block.Meta2BlockEntry;
 
 public class DsonFile {
@@ -134,7 +134,7 @@ public class DsonFile {
                 field.rawData = Arrays.copyOfRange(Data, off, off + dataLen);
                 if (meta2Entry.isObject()) {
                     // we are an object type
-                    field.type = FieldType.TYPE_Object;
+                    field.type = FieldType.TYPE_OBJECT;
                     field.setNumChildren(meta1.entries[meta2Entry.getMeta1BlockEntryIdx()].numDirectChildren);
                     if (meta1.entries[meta2Entry.getMeta1BlockEntryIdx()].hierarchyHint != hierarchyStack.peek()
                             .intValue()) {
@@ -147,7 +147,7 @@ public class DsonFile {
                 // (At least I haven't seen it any other way, since all files began with
                 // base_root
                 if (fieldStack.isEmpty()) {
-                    if (field.type != FieldType.TYPE_Object) {
+                    if (field.type != FieldType.TYPE_OBJECT) {
                         throw new ParseException("No top level object", off);
                     }
                     rootFields.add(field);
@@ -158,14 +158,14 @@ public class DsonFile {
                     }
                 }
                 // now guess the type that it knows about its parents
-                if (field.type != FieldType.TYPE_Object) {
+                if (field.type != FieldType.TYPE_OBJECT) {
                     if (!field.guessType(autoUnhashNames)) {
                         throw new ParseException("Couldn't parse field " + field.name, off);
                     }
                 }
 
                 // If we have an object, push it to the stack
-                if (field.type == FieldType.TYPE_Object) {
+                if (field.type == FieldType.TYPE_OBJECT) {
                     fieldStack.push(field);
                     hierarchyStack.push(new Integer(runningObjIdx));
                 }
@@ -173,7 +173,7 @@ public class DsonFile {
                 // Then check if the object on top of the stack has all its children. If so, pop
                 // it
                 // In case an object was the last child of an object, we do this iteratively
-                while (!fieldStack.isEmpty() && fieldStack.peek().type == FieldType.TYPE_Object
+                while (!fieldStack.isEmpty() && fieldStack.peek().type == FieldType.TYPE_OBJECT
                         && fieldStack.peek().hasAllChilds()) {
                     fieldStack.pop();
                     hierarchyStack.pop();
@@ -361,9 +361,9 @@ public class DsonFile {
         }
 
         sb.append(indt(indent) + "\"" + field.name + "\" : ");
-        if (field.type == FieldType.TYPE_Object) {
+        if (field.type == FieldType.TYPE_OBJECT) {
             writeObject(sb, field, indent, debug);
-        } else if (field.type == FieldType.TYPE_File) {
+        } else if (field.type == FieldType.TYPE_FILE) {
             // HACK: rebuild string for indent, debug
             sb.append(field.embeddedFile.getJSonString(indent, debug));
         } else {

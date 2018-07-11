@@ -5,7 +5,6 @@ import org.testng.annotations.*;
 import com.google.common.io.ByteStreams;
 
 import de.robojumper.ddsavereader.file.DsonFile;
-import de.robojumper.ddsavereader.file.Json2Dson;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.fail;
@@ -48,7 +47,7 @@ public class ConverterTests {
         // Every file must re-encode without throwing exceptions
         for (int i = 0; i < decodedFiles.size(); i++) {
             try {
-                reEncodedFiles.add(new Json2Dson(decodedFiles.get(i)).bytes());
+                reEncodedFiles.add(new DsonWriter(decodedFiles.get(i)).bytes());
             } catch (Exception e) {
                 fail(fileList.get(i) + " doesn't re-endode", e);
             }

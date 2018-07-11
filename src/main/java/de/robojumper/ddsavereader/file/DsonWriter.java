@@ -3,89 +3,42 @@ package de.robojumper.ddsavereader.file;
 import de.robojumper.ddsavereader.file.DsonFile.*;
 import de.robojumper.ddsavereader.file.DsonFile.Meta1Block.Meta1BlockEntry;
 import de.robojumper.ddsavereader.file.DsonFile.Meta2Block.Meta2BlockEntry;
+import de.robojumper.ddsavereader.file.DsonTypes.FieldType;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.Map.Entry;
+import java.util.Stack;
+import java.util.function.Function;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-public class Json2Dson {
+public class DsonWriter {
 
     HeaderBlock header;
     ByteArrayOutputStream data;
     ArrayList<Meta1BlockEntry> meta1Entries;
-    Deque<Integer> hierarchyHintStack;
-    Deque<String> nameStack;
+    // Stack over Deque for random access .get
+    Stack<Integer> hierarchyHintStack;
+    Stack<String> nameStack;
     ArrayList<Meta2BlockEntry> meta2Entries;
 
-    public static void main(String[] args) {
-        String arg;
-        int i = 0;
-        String outfile = "", infile = "";
-
-        while (i < args.length && args[i].startsWith("-")) {
-            arg = args[i++];
-
-            if (arg.equals("-o") || arg.equals("--output")) {
-                if (i < args.length) {
-                    outfile = args[i++];
-                } else {
-                    System.err.println("--output requires a filename");
-                }
-            }
-        }
-
-        if (i == args.length - 1) {
-            infile = args[i++];
-        } else {
-            System.err.println(
-                    "Usage: java -cp DDSaveReader.jar de.robojumper.ddsavereader.file.Json2Dson [--output, -o outfile] filename");
-            System.exit(1);
-        }
-
-        byte[] OutResult = null;
-        try {
-            byte[] FileData = Files.readAllBytes(Paths.get(infile));
-            Json2Dson d = new Json2Dson(FileData);
-            OutResult = d.bytes();
-        } catch (IOException e) {
-            System.err.println("Could not read " + infile);
-            System.err.println(e.getMessage());
-            System.exit(1);
-        }
-
-        if (!outfile.equals("")) {
-            try {
-                Files.write(Paths.get(outfile), OutResult);
-            } catch (IOException e) {
-                System.err.println("Could not read " + outfile);
-                System.err.println(e.getMessage());
-                System.exit(1);
-            }
-        }
-    }
-
-    public Json2Dson(String jsonData) throws IOException {
+    public DsonWriter(String jsonData) throws IOException {
         this(new JsonParser().parse(jsonData).getAsJsonObject());
     }
 
-    public Json2Dson(byte[] data) throws IOException {
+    public DsonWriter(byte[] data) throws IOException {
         this(new JsonParser().parse(new String(data)).getAsJsonObject());
     }
 
-    public Json2Dson(JsonObject o) throws IOException {
+    public DsonWriter(JsonObject o) throws IOException {
         header = new HeaderBlock();
         data = new ByteArrayOutputStream();
 
@@ -94,8 +47,8 @@ public class Json2Dson {
 
         meta1Entries = new ArrayList<>();
         meta2Entries = new ArrayList<>();
-        hierarchyHintStack = new ArrayDeque<>();
-        nameStack = new ArrayDeque<>();
+        hierarchyHintStack = new Stack<>();
+        nameStack = new Stack<>();
         hierarchyHintStack.push(-1);
 
         for (Entry<String, JsonElement> e : o.entrySet()) {
@@ -122,6 +75,8 @@ public class Json2Dson {
         e2.offset = data.size();
         data.write(name.getBytes(StandardCharsets.UTF_8));
         data.write(0);
+        
+        Function<Integer, String> nameMapper = (i) -> i == 0 ? name : (i <= nameStack.size() ? nameStack.get(nameStack.size() - i) : null);
 
         if (elem.isJsonObject()) {
             // Objects with the name raw_data or static_save are embedded files
@@ -143,7 +98,7 @@ public class Json2Dson {
                 e1.numAllChildren = meta2Entries.size() - prevNumChilds;
             } else {
                 // Write an actual embedded file as a string
-                Json2Dson d = new Json2Dson(elem.getAsJsonObject());
+                DsonWriter d = new DsonWriter(elem.getAsJsonObject());
                 align();
                 byte[] embedData = d.bytes();
                 data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(embedData.length).array());
@@ -152,20 +107,20 @@ public class Json2Dson {
         } else {
             // Now for the tricky part: Not an object, now we need to determine the type
             // Same as in DsonField, we first check the hardcoded types
-            if (nameInArray(name, DsonTypes.FLOATARRAY_FIELD_NAMES)) {
+            if (DsonTypes.isA(FieldType.TYPE_FLOATARRAY, nameMapper)) {
                 align();
                 JsonArray arr = elem.getAsJsonArray();
                 for (JsonElement s : arr) {
                     data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putFloat(s.getAsFloat()).array());
                 }
-            } else if (nameInArray(name, DsonTypes.INTVECTOR_FIELD_NAMES)) {
+            } else if (DsonTypes.isA(FieldType.TYPE_INTVECTOR, nameMapper)) {
                 align();
                 JsonArray arr = elem.getAsJsonArray();
                 data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(arr.size()).array());
                 for (JsonElement s : arr) {
                     data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(s.getAsInt()).array());
                 }
-            } else if (nameInArray(name, DsonTypes.STRINGVECTOR_FIELD_NAMES)) {
+            } else if (DsonTypes.isA(FieldType.TYPE_STRINGVECTOR, nameMapper)) {
                 align();
                 JsonArray arr = elem.getAsJsonArray();
                 data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(arr.size()).array());
@@ -175,14 +130,11 @@ public class Json2Dson {
                     data.write(s.getAsString().getBytes(StandardCharsets.UTF_8));
                     data.write(0);
                 }
-            } else if (nameInArray(name, DsonTypes.FLOAT_FIELD_NAMES)) {
+            } else if (DsonTypes.isA(FieldType.TYPE_FLOAT, nameMapper)) {
                 align();
                 data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putFloat(elem.getAsFloat()).array());
-            } else if (nameInArray(name, DsonTypes.CHAR_FIELD_NAMES)) {
+            } else if (DsonTypes.isA(FieldType.TYPE_CHAR, nameMapper)) {
                 data.write(elem.getAsString().getBytes(StandardCharsets.UTF_8)[0]);
-            } else if (nameInArray(name, DsonTypes.FLOAT_FIELD_NAMES)) {
-                align();
-                data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putFloat(elem.getAsFloat()).array());
             } else if (elem.isJsonPrimitive() && elem.getAsJsonPrimitive().isNumber()) {
                 align();
                 data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(elem.getAsInt()).array());
@@ -245,31 +197,5 @@ public class Json2Dson {
 
     private void align() throws IOException {
         data.write(new byte[(4 - (data.size() % 4)) % 4]);
-    }
-
-    private boolean nameInArray(String name, String[][] arr) {
-        String checkString;
-        boolean match;
-        Object[] names = nameStack.toArray();
-        for (int i = 0; i < arr.length; i++) {
-            match = true;
-            checkString = name;
-            for (int j = arr[i].length - 1; j >= 0; j--) {
-                if (checkString == null || !(arr[i][j].equals("*") || arr[i][j].equals(checkString))) {
-                    match = false;
-                    break;
-                }
-                int stackIndex = arr[i].length - 1 - j;
-                if (stackIndex < names.length) {
-                    checkString = (String) names[stackIndex];
-                } else {
-                    checkString = null;
-                }
-            }
-            if (match) {
-                return true;
-            }
-        }
-        return false;
     }
 }

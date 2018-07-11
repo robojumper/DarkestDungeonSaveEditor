@@ -35,7 +35,7 @@ There is no output file parameter, just pipe it to a file (append ` > names.txt`
 
 There also is an experimental save writer:
 
-    java -cp DDSaveReader.jar de.robojumper.ddsavereader.file.Json2Dson [--output, -o outfile] filename
+    java -cp DDSaveReader.jar de.robojumper.ddsavereader.Json2Dson [--output, -o outfile] filename
     
 The input file must be a save file decoded **without a name file** and **without the debug parameter**. Providing a name file changes the JSON structure and replaces some integers with strings, which breaks the game compatibility.
 
