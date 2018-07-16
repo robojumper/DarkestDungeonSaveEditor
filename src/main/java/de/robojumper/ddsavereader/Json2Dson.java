@@ -3,6 +3,7 @@ package de.robojumper.ddsavereader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.text.ParseException;
 
 import de.robojumper.ddsavereader.file.DsonWriter;
 
@@ -38,7 +39,7 @@ public class Json2Dson {
             byte[] FileData = Files.readAllBytes(Paths.get(infile));
             DsonWriter d = new DsonWriter(FileData);
             OutResult = d.bytes();
-        } catch (IOException e) {
+        } catch (IOException | ParseException e) {
             System.err.println("Could not read " + infile);
             System.err.println(e.getMessage());
             System.exit(1);

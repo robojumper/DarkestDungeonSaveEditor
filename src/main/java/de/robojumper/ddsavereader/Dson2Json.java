@@ -12,7 +12,7 @@ import java.text.ParseException;
 import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.file.DsonTypes;
 
-public class Main {
+public class Dson2Json {
 
 	public static void main(String[] args) {
 		String arg;

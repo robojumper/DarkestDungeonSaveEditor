@@ -15,22 +15,24 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
+import java.text.ParseException;
+import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
 import de.robojumper.ddsavereader.file.DsonFile;
-import de.robojumper.ddsavereader.model.SaveState;
 
 public class DarkestSaveFileWatcher implements Runnable {
     
-    private SaveState state;
+    private BiConsumer<String, DsonParseResult> callback;
     private Path saveDir;
     private WatchService watcher;
     private WatchKey k;
     
     private volatile boolean wantsStop = false;
+    private volatile boolean stopped = false;
 
-    public DarkestSaveFileWatcher(SaveState state, String saveDir) throws IOException {
-        this.state= state;
+    public DarkestSaveFileWatcher(BiConsumer<String, DsonParseResult> callback, String saveDir) throws IOException {
+        this.callback = callback;
         this.saveDir =  Paths.get(saveDir);
     }
 
@@ -55,10 +57,14 @@ public class DarkestSaveFileWatcher implements Runnable {
     }
     
     public void stop() {
-        
+        this.wantsStop = true;
     }
     
-    static void tryHandleFile(Path file, SaveState state, Path saveDir) {
+    public boolean isRunning() {
+        return !stopped;
+    }
+    
+    static void tryHandleFile(Path file, BiConsumer<String, DsonParseResult> callback, Path saveDir) {
         try {
             if (Files.isRegularFile(file) && (file.getFileName().toString().matches(".*persist\\..*\\.json") || file.getFileName().toString().matches("novelty_tracker\\.json")) && file.getParent().equals(saveDir)) {
                 System.out.println("Reading " + file.getFileName().toString());
@@ -78,10 +84,16 @@ public class DarkestSaveFileWatcher implements Runnable {
                     buffer.flush();
                     stream.close();
                     byte[] byteArray = buffer.toByteArray();
-                    // Don't unhash names as the Save State will do that
-                    DsonFile f = new DsonFile(byteArray, false);
-                    String jsonString = f.toString();
-                    state.update(file.getFileName().toString(), jsonString);
+                    DsonParseResult result = null;
+                    try {
+                        // Don't unhash names as the Save State will do that
+                        DsonFile f = new DsonFile(byteArray, false);
+                        String jsonString = f.toString();
+                        result = new DsonParseResult(jsonString, false);
+                    } catch (ParseException e) {
+                        result = new DsonParseResult(file.getFileName().toString() + ":" + e.getErrorOffset() + " - " + e.getMessage(), false);
+                    }
+                    callback.accept(file.getFileName().toString(), result);
                 } catch (NoSuchFileException e) {
                     System.err.println("Couldn't read/parse " + file.getFileName().toString());
                 }
@@ -95,8 +107,13 @@ public class DarkestSaveFileWatcher implements Runnable {
 
     @Override
     public void run() {
+        mainLoop();
+        this.stopped = true;
+    }
+    
+    private void mainLoop() {
         try (Stream<Path> paths = Files.walk(saveDir)) {
-            paths.forEach(p -> tryHandleFile(p, state, saveDir));
+            paths.forEach(p -> tryHandleFile(p, callback, saveDir));
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
@@ -132,7 +149,7 @@ public class DarkestSaveFileWatcher implements Runnable {
                 // If the filename is "test" and the directory is "foo",
                 // the resolved name is "test/foo".
                 Path child = saveDir.resolve(filename);
-                tryHandleFile(child, state, saveDir);
+                tryHandleFile(child, callback, saveDir);
             }
 
             // Reset the key -- this step is critical if you want to
@@ -147,6 +164,19 @@ public class DarkestSaveFileWatcher implements Runnable {
             k.cancel();
             watcher.close();
         } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+    }
+    
+    public static class DsonParseResult {
+        public final String data;   
+        public final boolean encounteredError;
+        
+        
+        public DsonParseResult(String data, boolean encounteredError) {
+            this.data = data;
+            this.encounteredError = encounteredError;
         }
     }
 }

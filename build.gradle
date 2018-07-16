@@ -1,3 +1,8 @@
+plugins {
+	id 'de.fuerstenau.buildconfig' version '1.1.8'
+}
+
+
 apply plugin: 'java'
 apply plugin: 'application'
 apply plugin: 'eclipse'
@@ -11,7 +16,6 @@ sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
 
-
 dependencies {
     testCompile 'org.testng:testng:6.8.8'
     compile 'com.google.code.gson:gson:2.8.5'
@@ -19,6 +23,19 @@ dependencies {
     compile 'com.google.oauth-client:google-oauth-client-jetty:1.23.0'
     compile 'com.google.apis:google-api-services-sheets:v4-rev516-1.23.0'
     
+}
+
+buildConfig {
+    appName = project.name
+    version = project.version
+    
+    buildConfigField 'String', 'DISPLAY_NAME', "$displayname"
+    buildConfigField 'String', 'GITHUB_URL', "$githuburl"
+    
+    
+    clsName = 'BuildConfig'
+    packageName = project.group
+    charset = 'UTF-8'
 }
 
 test {
@@ -31,16 +48,16 @@ jar {
 	}
 }
 
-mainClassName = "de.robojumper.ddsavereader.Main"
+mainClassName = "de.robojumper.ddsavereader.ui.MainWindow"
 
 //create a single Jar with all dependencies
 task fatJar(type: Jar) {
     manifest {
-        attributes 'Implementation-Title': 'Darkest Dungeon Save Reader',
-                'Implementation-Version': 'v0.0.33',
-                'Main-Class': 'de.robojumper.ddsavereader.Main'
+        attributes 'Implementation-Title': project.name,
+                'Implementation-Version': project.version,
+                'Main-Class': mainClassName
     }
-    baseName = project.name
+    baseName = 'DDSaveReader'
     from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
     with jar
 }

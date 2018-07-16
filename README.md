@@ -13,7 +13,7 @@ A full documentation of the format can be found in [docs/dson.md](docs/dson.md).
 
 ## Decoding
 
-    java -jar DDSaveReader.jar [--debug, -d] [--names, -n <namefile>] [--output, -o <outfile>] filename
+    java -cp DDSaveReader.jar de.robojumper.ddsavereader.Dson2Json [--debug, -d] [--names, -n <namefile>] [--output, -o <outfile>] filename
 
 `-d` dumps all metadata without known purpose as comments into the JSON file at the appropriate place.
 This might come in handy when trying to find a pattern in them. With `-d`, the file is not valid JSON, but should be after removing all comments. Files translated without the `-d` flag should be valid JSON.

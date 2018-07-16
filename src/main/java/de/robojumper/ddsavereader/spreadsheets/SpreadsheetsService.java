@@ -19,7 +19,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 import com.google.api.client.auth.oauth2.Credential;
@@ -38,14 +40,16 @@ import com.google.api.services.sheets.v4.model.*;
 
 import de.robojumper.ddsavereader.model.CampaignLog.BaseRTTI;
 import de.robojumper.ddsavereader.model.CampaignLog.Chapter;
+import de.fuerstenau.buildconfig.BuildConfig;
 import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.file.DsonTypes;
 import de.robojumper.ddsavereader.model.Hero;
 import de.robojumper.ddsavereader.model.SaveState;
 import de.robojumper.ddsavereader.watcher.DarkestSaveFileWatcher;
+import de.robojumper.ddsavereader.watcher.DarkestSaveFileWatcher.DsonParseResult;
 
 public class SpreadsheetsService {
-    private static final String APPLICATION_NAME = "robojumper-DarkestDungeonSpreadsheets/1.0";
+    private static final String APPLICATION_NAME = "robojumper-" + BuildConfig.NAME + "/" + BuildConfig.VERSION;
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
     // Directory to store user credentials.
     private static final File CREDENTIALS_FOLDER = new File(System.getProperty("user.home"), ".store/ddspreadsheets");
@@ -60,6 +64,8 @@ public class SpreadsheetsService {
     private static final int PARTY_SHEET_ID = 543400;
 
     private static final String COLS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    private static ScheduledFuture<?> future = null;
 
     /**
      * Creates an authorized Credential object.
@@ -120,7 +126,17 @@ public class SpreadsheetsService {
                 .setApplicationName(APPLICATION_NAME).build();
 
         final SaveState state = new SaveState();
-        DarkestSaveFileWatcher watcher = new DarkestSaveFileWatcher(state, args[1]);
+        final DarkestSaveFileWatcher watcher = new DarkestSaveFileWatcher(
+                new BiConsumer<String, DarkestSaveFileWatcher.DsonParseResult>() {
+
+                    @Override
+                    public void accept(String t, DsonParseResult u) {
+                        if (!u.encounteredError) {
+                            state.update(t, u.data);
+                        }
+
+                    }
+                }, args[1]);
         watcher.watchSaveFiles();
 
         final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
@@ -338,6 +354,10 @@ public class SpreadsheetsService {
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
+
+                if (!watcher.isRunning()) {
+                    future.cancel(false);
+                }
             }
 
             private boolean hasSheet(Spreadsheet spreadSheet, String sheetName) {
@@ -369,7 +389,7 @@ public class SpreadsheetsService {
             }
         };
 
-        scheduler.scheduleAtFixedRate(sheetUpdater, 3, 120, TimeUnit.SECONDS);
+        future = scheduler.scheduleAtFixedRate(sheetUpdater, 3, 120, TimeUnit.SECONDS);
     }
 
 }
