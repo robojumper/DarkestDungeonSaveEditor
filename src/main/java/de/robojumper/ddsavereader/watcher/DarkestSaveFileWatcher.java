@@ -20,6 +20,7 @@ import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
 import de.robojumper.ddsavereader.file.DsonFile;
+import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
 
 public class DarkestSaveFileWatcher implements Runnable {
     
@@ -87,7 +88,7 @@ public class DarkestSaveFileWatcher implements Runnable {
                     DsonParseResult result = null;
                     try {
                         // Don't unhash names as the Save State will do that
-                        DsonFile f = new DsonFile(byteArray, false);
+                        DsonFile f = new DsonFile(byteArray, UnhashBehavior.NONE);
                         String jsonString = f.toString();
                         result = new DsonParseResult(jsonString, false);
                     } catch (ParseException e) {

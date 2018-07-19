@@ -14,6 +14,12 @@ import de.robojumper.ddsavereader.file.DsonTypes.FieldType;
 import de.robojumper.ddsavereader.file.DsonFile.Meta2Block.Meta2BlockEntry;
 
 public class DsonFile {
+    
+    public enum UnhashBehavior {
+        NONE, // Don't unhash, works in all cases
+        UNHASH, // Simple unhash, useful for simply looking at the files
+        POUNDUNHASH, // Unhash as ###string, useful combination: Reasonable safety against accidental collisions, still somewhat readable
+    };
 
     private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
     public static byte[] MAGICNR_HEADER = { 0x01, (byte) 0xB1, 0x00, 0x00 };
@@ -24,12 +30,12 @@ public class DsonFile {
     // The first field that is being deserialized is always base_root
     List<DsonField> rootFields;
 
-    boolean autoUnhashNames;
+    UnhashBehavior autoUnhashNames;
 
     // Embed files are strings that have the last null-terminating character
     // included in the data size
-    public DsonFile(byte[] File, boolean autoUnhashNames) throws ParseException {
-        this.autoUnhashNames = autoUnhashNames;
+    public DsonFile(byte[] File, UnhashBehavior behavior) throws ParseException {
+        this.autoUnhashNames = behavior;
         ByteBuffer buffer = ByteBuffer.wrap(File);
         buffer.order(ByteOrder.LITTLE_ENDIAN);
 
@@ -159,7 +165,7 @@ public class DsonFile {
                 }
                 // now guess the type that it knows about its parents
                 if (field.type != FieldType.TYPE_OBJECT) {
-                    if (!field.guessType(autoUnhashNames)) {
+                    if (!field.guessType(behavior)) {
                         throw new ParseException("Couldn't parse field " + field.name, off);
                     }
                 }

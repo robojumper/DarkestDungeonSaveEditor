@@ -7,6 +7,7 @@ import java.text.ParseException;
 import java.util.Arrays;
 import java.util.function.Function;
 
+import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
 import de.robojumper.ddsavereader.file.DsonTypes.FieldType;
 
 // Dson for Darkest Json
@@ -58,8 +59,8 @@ public class DsonField {
 
     // If external code has not determined this field to be TYPE_Object, guess the
     // type
-    public boolean guessType(boolean autoUnhashNames) throws ParseException {
-        if (parseHardcodedType(autoUnhashNames)) {
+    public boolean guessType(UnhashBehavior behavior) throws ParseException {
+        if (parseHardcodedType(behavior)) {
             return true;
         } else if (rawData.length == 1) {
             if (rawData[0] >= 0x20 && rawData[0] >= 0x7E) {
@@ -79,11 +80,11 @@ public class DsonField {
             byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
             int tempInt = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
             dataString = Integer.toString(tempInt);
-            if (autoUnhashNames) {
+            if (behavior == UnhashBehavior.UNHASH || behavior == UnhashBehavior.POUNDUNHASH) {
                 String unHashed = DsonTypes.NAME_TABLE.get(tempInt);
                 if (unHashed != null) {
                     hashedValue = dataString;
-                    dataString = "\"" + unHashed + "\"";
+                    dataString = (behavior == UnhashBehavior.POUNDUNHASH) ? ("\"" + unHashed + "\"") : ("\"###" + unHashed + "\"");
                 }
             }
         } else if (parseString()) {
@@ -93,7 +94,7 @@ public class DsonField {
                 byte[] tempHeader = Arrays.copyOfRange(unquoteData, 0, 4);
                 if (Arrays.equals(tempHeader, DsonFile.MAGICNR_HEADER)) {
                     type = FieldType.TYPE_FILE;
-                    embeddedFile = new DsonFile(unquoteData, autoUnhashNames);
+                    embeddedFile = new DsonFile(unquoteData, behavior);
                     dataString = "MUST REBUILD MANUALLY WITH CORRECT INDENTATION";
                 }
             }
@@ -104,8 +105,8 @@ public class DsonField {
         return true;
     }
 
-    private boolean parseHardcodedType(boolean autoUnhashNames) {
-        return parseFloatArray() || parseIntVector(autoUnhashNames) || parseStringVector() || parseFloat();
+    private boolean parseHardcodedType(UnhashBehavior behavior) {
+        return parseFloatArray() || parseIntVector(behavior) || parseStringVector() || parseFloat();
     }
 
     private boolean parseFloat() {
@@ -149,7 +150,7 @@ public class DsonField {
         return false;
     }
 
-    private boolean parseIntVector(boolean autoUnhashNames) {
+    private boolean parseIntVector(UnhashBehavior behavior) {
         if (DsonTypes.isA(FieldType.TYPE_INTVECTOR, nameMapper)) {
             byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
             int arrLen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
@@ -169,8 +170,8 @@ public class DsonField {
                 for (int i = 0; i < arrLen; i++) {
                     int tempInt = buffer.getInt();
                     String unHashed;
-                    if (autoUnhashNames && (unHashed = DsonTypes.NAME_TABLE.get(tempInt)) != null) {
-                        unHashed = "\"" + unHashed + "\"";
+                    if ((behavior == UnhashBehavior.UNHASH || behavior == UnhashBehavior.POUNDUNHASH) && (unHashed = DsonTypes.NAME_TABLE.get(tempInt)) != null) {
+                        unHashed = (behavior == UnhashBehavior.POUNDUNHASH) ? ("\"" + unHashed + "\"") : ("\"###" + unHashed + "\"");
                         sb.append(unHashed);
                         hsb.append(tempInt);
                         foundHashed = true;

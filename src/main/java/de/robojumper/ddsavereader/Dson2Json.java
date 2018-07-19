@@ -11,6 +11,7 @@ import java.text.ParseException;
 
 import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.file.DsonTypes;
+import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
 
 public class Dson2Json {
 
@@ -71,7 +72,7 @@ public class Dson2Json {
 		String OutResult = null;
 		try {
 			byte[] FileData = Files.readAllBytes(Paths.get(infile));
-			DsonFile File = new DsonFile(FileData, true);
+			DsonFile File = new DsonFile(FileData, UnhashBehavior.UNHASH);
 			OutResult = File.getJSonString(0, debug);
 		} catch (IOException | ParseException e) {
 			System.err.println("Could not read " + infile);

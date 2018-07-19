@@ -5,6 +5,7 @@ import org.testng.annotations.*;
 import com.google.common.io.ByteStreams;
 
 import de.robojumper.ddsavereader.file.DsonFile;
+import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.fail;
@@ -37,7 +38,7 @@ public class ConverterTests {
         // Every file must decode without throwing exceptions
         for (int i = 0; i < files.size(); i++) {
             try {
-                String file = new DsonFile(files.get(i), false).getJSonString(0, false);
+                String file = new DsonFile(files.get(i), UnhashBehavior.POUNDUNHASH).getJSonString(0, false);
                 decodedFiles.add(file.getBytes(StandardCharsets.UTF_8));
             } catch (Exception e) {
                 fail(fileList.get(i) + " doesn't decode", e);
@@ -59,7 +60,7 @@ public class ConverterTests {
 
         // Every file must re-decode to the same bytes
         for (int i = 0; i < reEncodedFiles.size(); i++) {
-            String jsonString = new DsonFile(reEncodedFiles.get(i), false).getJSonString(0, false);
+            String jsonString = new DsonFile(reEncodedFiles.get(i), UnhashBehavior.POUNDUNHASH).getJSonString(0, false);
             assertEquals(jsonString.getBytes(StandardCharsets.UTF_8), decodedFiles.get(i), fileList.get(i) + " re-decodes differently");
         }
     }
