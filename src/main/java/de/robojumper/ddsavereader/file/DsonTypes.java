@@ -1,5 +1,6 @@
 package de.robojumper.ddsavereader.file;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.function.Function;
 
@@ -64,6 +65,24 @@ public class DsonTypes {
     // display string as "<name>" (where <name> is the unhashed string)
     // This is much better than trying to find a good reverse.
     public static final HashMap<Integer, String> NAME_TABLE = new HashMap<Integer, String>();
+    
+    public static void offerName(String name) {
+    	NAME_TABLE.put(DsonTypes.stringHash(name), name);
+    }
+    
+    public static void offerNames(Collection<String> names) {
+    	for (String name : names) {
+    		NAME_TABLE.put(DsonTypes.stringHash(name), name);
+    	}
+    }
+
+	public static int stringHash(String str) {
+	    int hash = 0;
+	    for (int i = 0; i < str.length(); i++) {
+	        hash = hash * 53 + str.charAt(i);
+	    }
+	    return hash;
+	}
 
     /**
      * Determines whether a field is hardcoded as specific type.

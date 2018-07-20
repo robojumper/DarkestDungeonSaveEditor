@@ -21,6 +21,7 @@ import java.util.stream.Stream;
 
 import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
+import de.robojumper.ddsavereader.util.Helpers;
 
 public class DarkestSaveFileWatcher implements Runnable {
     
@@ -67,7 +68,7 @@ public class DarkestSaveFileWatcher implements Runnable {
     
     static void tryHandleFile(Path file, BiConsumer<String, DsonParseResult> callback, Path saveDir) {
         try {
-            if (Files.isRegularFile(file) && (file.getFileName().toString().matches(".*persist\\..*\\.json") || file.getFileName().toString().matches("novelty_tracker\\.json")) && file.getParent().equals(saveDir)) {
+            if (Files.isRegularFile(file) && Helpers.isSaveFileName(file.getFileName().toString()) && file.getParent().equals(saveDir)) {
                 System.out.println("Reading " + file.getFileName().toString());
                 // Open file with read option only to allow for file deletion and
                 // modifications from other programs.
@@ -92,7 +93,9 @@ public class DarkestSaveFileWatcher implements Runnable {
                         String jsonString = f.toString();
                         result = new DsonParseResult(jsonString, false);
                     } catch (ParseException e) {
-                        result = new DsonParseResult(file.getFileName().toString() + ":" + e.getErrorOffset() + " - " + e.getMessage(), false);
+                        result = new DsonParseResult(file.getFileName().toString() + ":" + e.getErrorOffset() + " - " + e.getMessage(), true);
+                    } catch (Exception e) {
+                    	result = new DsonParseResult(file.getFileName().toString() + ":" + e.getMessage(), true);
                     }
                     callback.accept(file.getFileName().toString(), result);
                 } catch (NoSuchFileException e) {

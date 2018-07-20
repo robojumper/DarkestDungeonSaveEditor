@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.text.ParseException;
 
 import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.file.DsonTypes;
@@ -59,7 +58,7 @@ public class Dson2Json {
 			    String line;
 			    while ((line = br.readLine()) != null) {
 			    	if (!line.equals("")) {
-			    	    DsonTypes.NAME_TABLE.put(DsonFile.stringHash(line), line);
+			    		DsonTypes.offerName(line);
 			    	}
 			    }
 			} catch (IOException e) {
@@ -74,7 +73,7 @@ public class Dson2Json {
 			byte[] FileData = Files.readAllBytes(Paths.get(infile));
 			DsonFile File = new DsonFile(FileData, UnhashBehavior.UNHASH);
 			OutResult = File.getJSonString(0, debug);
-		} catch (IOException | ParseException e) {
+		} catch (Exception e) {
 			System.err.println("Could not read " + infile);
 			System.err.println(e.getMessage());
 			System.exit(1);

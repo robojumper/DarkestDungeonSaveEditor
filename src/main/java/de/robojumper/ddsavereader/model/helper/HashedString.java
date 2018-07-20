@@ -9,7 +9,6 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 
-import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.file.DsonTypes;
 
 /**
@@ -31,7 +30,7 @@ public class HashedString {
 
     public HashedString(String str) {
         this.str = str;
-        this.hashValue = DsonFile.stringHash(str);
+        this.hashValue = DsonTypes.stringHash(str);
     }
 
     public static class HashedStringAdapter extends TypeAdapter<HashedString> {

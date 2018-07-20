@@ -70,7 +70,7 @@ public class DsonWriter {
         String name = field.getKey();
         JsonElement elem = field.getValue();
         Meta2BlockEntry e2 = new Meta2BlockEntry();
-        e2.nameHash = DsonFile.stringHash(name);
+        e2.nameHash = DsonTypes.stringHash(name);
         e2.fieldInfo = ((name.length() + 1) & 0b111111111) << 2;
         meta2Entries.add(e2);
 
@@ -165,7 +165,7 @@ public class DsonWriter {
     
     private byte[] stringBytes(String s) {
         if (s.startsWith("###")) {
-            int hash = DsonFile.stringHash(s.substring(3));
+            int hash = DsonTypes.stringHash(s.substring(3));
             return intBytes(hash);
         } else {
             byte[] bytes = s.getBytes(StandardCharsets.UTF_8);

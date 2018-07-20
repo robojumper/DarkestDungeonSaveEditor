@@ -41,7 +41,6 @@ import com.google.api.services.sheets.v4.model.*;
 import de.robojumper.ddsavereader.model.CampaignLog.BaseRTTI;
 import de.robojumper.ddsavereader.model.CampaignLog.Chapter;
 import de.fuerstenau.buildconfig.BuildConfig;
-import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.file.DsonTypes;
 import de.robojumper.ddsavereader.model.Hero;
 import de.robojumper.ddsavereader.model.SaveState;
@@ -52,7 +51,7 @@ public class SpreadsheetsService {
     private static final String APPLICATION_NAME = "robojumper-" + BuildConfig.NAME + "/" + BuildConfig.VERSION;
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
     // Directory to store user credentials.
-    private static final File CREDENTIALS_FOLDER = new File(System.getProperty("user.home"), ".store/ddspreadsheets");
+    private static final File CREDENTIALS_FOLDER = new File(System.getProperty("user.home"), ".store/ddsavereader");
 
     private static final List<String> SCOPES = Collections.singletonList(SheetsScopes.SPREADSHEETS);
     private static final String CLIENT_SECRET_DIR = "/client_secret.json";
@@ -112,7 +111,7 @@ public class SpreadsheetsService {
             String line;
             while ((line = br.readLine()) != null) {
                 if (!line.equals("")) {
-                    DsonTypes.NAME_TABLE.put(DsonFile.stringHash(line), line);
+                    DsonTypes.offerName(line);
                 }
             }
         } catch (IOException e) {

@@ -112,7 +112,7 @@ public class DsonFile {
                 if (field.name.length() != meta2Entry.getNameStringLength() - 1) {
                     throw new ParseException("Wrong name length", off);
                 }
-                if (stringHash(field.name) != meta2Entry.nameHash) {
+                if (DsonTypes.stringHash(field.name) != meta2Entry.nameHash) {
                     throw new ParseException("Wrong string hash", off);
                 }
                 if (meta2Entry.isObject()) {
@@ -421,14 +421,5 @@ public class DsonFile {
             sb.append("    ");
         }
         return sb.toString();
-    }
-
-    // Seems to be correct
-    public static int stringHash(String str) {
-        int hash = 0;
-        for (int i = 0; i < str.length(); i++) {
-            hash = hash * 53 + str.charAt(i);
-        }
-        return hash;
     }
 }

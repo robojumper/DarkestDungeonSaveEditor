@@ -8,6 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -230,10 +232,10 @@ public class ReadNames {
 	}
 	
 	// args is a list of game or mod root directories
-	public static Set<String> collectNames(String[] args) {
+	public static Set<String> collectNames(Collection<String> paths) {
 	    final Set<String> names = new HashSet<String>();
-		for (int i = 0; i < args.length; i++) {
-			File rootDir = new File(args[i]);
+		for (String path : paths) {
+			File rootDir = new File(path);
 			if (rootDir.isDirectory()) {
 				try {
 					Files.walkFileTree(rootDir.toPath(), new SimpleFileVisitor<Path>() {
@@ -266,7 +268,7 @@ public class ReadNames {
 	}
 	
 	public static void main(String[] args) {
-	    Set<String> names = collectNames(args);
+	    Set<String> names = collectNames(Arrays.asList(args));
 	    for (String str : names) {
 	        System.out.println(str);
 	    }
