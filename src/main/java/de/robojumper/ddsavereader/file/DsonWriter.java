@@ -77,8 +77,9 @@ public class DsonWriter {
         e2.offset = data.size();
         data.write(name.getBytes(StandardCharsets.UTF_8));
         data.write(0);
-        
-        Function<Integer, String> nameMapper = (i) -> i == 0 ? name : (i <= nameStack.size() ? nameStack.get(nameStack.size() - i) : null);
+
+        Function<Integer, String> nameMapper = (i) -> i == 0 ? name
+                : (i <= nameStack.size() ? nameStack.get(nameStack.size() - i) : null);
         try {
             if (elem.isJsonObject()) {
                 // Objects with the name raw_data or static_save are embedded files
@@ -120,7 +121,11 @@ public class DsonWriter {
                     JsonArray arr = elem.getAsJsonArray();
                     data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(arr.size()).array());
                     for (JsonElement s : arr) {
-                        data.write(intBytes(s.getAsInt()));
+                        if (s.getAsJsonPrimitive().isString()) {
+                            data.write(stringBytes(s.getAsString()));
+                        } else {
+                            data.write(intBytes(s.getAsInt()));
+                        }
                     }
                 } else if (DsonTypes.isA(FieldType.TYPE_STRINGVECTOR, nameMapper)) {
                     align();
@@ -131,7 +136,8 @@ public class DsonWriter {
                     }
                 } else if (DsonTypes.isA(FieldType.TYPE_FLOAT, nameMapper)) {
                     align();
-                    data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putFloat(elem.getAsFloat()).array());
+                    data.write(
+                            ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putFloat(elem.getAsFloat()).array());
                 } else if (DsonTypes.isA(FieldType.TYPE_CHAR, nameMapper)) {
                     data.write(elem.getAsString().getBytes(StandardCharsets.UTF_8)[0]);
                 } else if (elem.isJsonPrimitive() && elem.getAsJsonPrimitive().isNumber()) {
@@ -144,8 +150,8 @@ public class DsonWriter {
                     align();
                     JsonArray arr = elem.getAsJsonArray();
                     for (JsonElement s : arr) {
-                        data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(s.getAsBoolean() ? 1 : 0)
-                                .array());
+                        data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+                                .putInt(s.getAsBoolean() ? 1 : 0).array());
                     }
                 } else if (elem.isJsonPrimitive() && elem.getAsJsonPrimitive().isBoolean()) {
                     data.write(elem.getAsBoolean() ? 0x01 : 0x00);
@@ -158,25 +164,25 @@ public class DsonWriter {
         }
 
     }
-    
+
     private byte[] floatBytes(float f) {
         return ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putFloat(f).array();
     }
-    
+
     private byte[] stringBytes(String s) {
         if (s.startsWith("###")) {
             int hash = DsonTypes.stringHash(s.substring(3));
             return intBytes(hash);
         } else {
             byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
-            return ByteBuffer.allocate(5 + bytes.length).order(ByteOrder.LITTLE_ENDIAN).putInt(bytes.length + 1).put(bytes).put((byte) 0).array();
+            return ByteBuffer.allocate(5 + bytes.length).order(ByteOrder.LITTLE_ENDIAN).putInt(bytes.length + 1)
+                    .put(bytes).put((byte) 0).array();
         }
     }
-    
+
     private byte[] intBytes(int i) {
         return ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(i).array();
     }
-
 
     public byte[] bytes() {
         ByteBuffer buffer = ByteBuffer

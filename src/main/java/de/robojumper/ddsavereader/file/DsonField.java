@@ -84,7 +84,8 @@ public class DsonField {
                 String unHashed = DsonTypes.NAME_TABLE.get(tempInt);
                 if (unHashed != null) {
                     hashedValue = dataString;
-                    dataString = (behavior == UnhashBehavior.POUNDUNHASH) ? ("\"###" + unHashed + "\"") : ("\"" + unHashed + "\"");
+                    dataString = (behavior == UnhashBehavior.POUNDUNHASH) ? ("\"###" + unHashed + "\"")
+                            : ("\"" + unHashed + "\"");
                 }
             }
         } else if (parseString()) {
@@ -170,8 +171,10 @@ public class DsonField {
                 for (int i = 0; i < arrLen; i++) {
                     int tempInt = buffer.getInt();
                     String unHashed;
-                    if ((behavior == UnhashBehavior.UNHASH || behavior == UnhashBehavior.POUNDUNHASH) && (unHashed = DsonTypes.NAME_TABLE.get(tempInt)) != null) {
-                        unHashed = (behavior == UnhashBehavior.POUNDUNHASH) ? ("\"###" + unHashed + "\"") : ("\"" + unHashed + "\"");
+                    if ((behavior == UnhashBehavior.UNHASH || behavior == UnhashBehavior.POUNDUNHASH)
+                            && (unHashed = DsonTypes.NAME_TABLE.get(tempInt)) != null) {
+                        unHashed = (behavior == UnhashBehavior.POUNDUNHASH) ? ("\"###" + unHashed + "\"")
+                                : ("\"" + unHashed + "\"");
                         sb.append(unHashed);
                         hsb.append(tempInt);
                         foundHashed = true;

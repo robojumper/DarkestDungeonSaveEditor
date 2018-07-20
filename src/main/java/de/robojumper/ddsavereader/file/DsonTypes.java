@@ -65,36 +65,34 @@ public class DsonTypes {
     // display string as "<name>" (where <name> is the unhashed string)
     // This is much better than trying to find a good reverse.
     public static final HashMap<Integer, String> NAME_TABLE = new HashMap<Integer, String>();
-    
+
     public static void offerName(String name) {
-    	NAME_TABLE.put(DsonTypes.stringHash(name), name);
-    }
-    
-    public static void offerNames(Collection<String> names) {
-    	for (String name : names) {
-    		NAME_TABLE.put(DsonTypes.stringHash(name), name);
-    	}
+        NAME_TABLE.put(DsonTypes.stringHash(name), name);
     }
 
-	public static int stringHash(String str) {
-	    int hash = 0;
-	    for (int i = 0; i < str.length(); i++) {
-	        hash = hash * 53 + str.charAt(i);
-	    }
-	    return hash;
-	}
+    public static void offerNames(Collection<String> names) {
+        for (String name : names) {
+            NAME_TABLE.put(DsonTypes.stringHash(name), name);
+        }
+    }
+
+    public static int stringHash(String str) {
+        int hash = 0;
+        for (int i = 0; i < str.length(); i++) {
+            hash = hash * 53 + str.charAt(i);
+        }
+        return hash;
+    }
 
     /**
      * Determines whether a field is hardcoded as specific type.
      * 
-     * @param type
-     *            One of TYPE_CHAR, TYPE_FLOAT, TYPE_INTVECTOR, TYPE_STRINGVECTOR,
-     *            TYPE_FLOATARRAY
-     * @param nameMapper
-     *            Function that returns field and parent field names.
-     *            nameMapper.apply(0) is the field's name, nameMapper.apply(1) is
-     *            the parent field's name, ... If there are "not enough" parents,
-     *            returns null
+     * @param type       One of TYPE_CHAR, TYPE_FLOAT, TYPE_INTVECTOR,
+     *                   TYPE_STRINGVECTOR, TYPE_FLOATARRAY
+     * @param nameMapper Function that returns field and parent field names.
+     *                   nameMapper.apply(0) is the field's name,
+     *                   nameMapper.apply(1) is the parent field's name, ... If
+     *                   there are "not enough" parents, returns null
      * @return True if a matching field is found.
      */
     static boolean isA(FieldType type, Function<Integer, String> nameMapper) {

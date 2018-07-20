@@ -21,13 +21,25 @@ import java.util.List;
 
 public class ConverterTests {
 
+    @BeforeClass
+    public void readNames() throws IOException {
+        BufferedReader br = new BufferedReader(
+                new InputStreamReader(ConverterTests.class.getClassLoader().getResourceAsStream("./names.txt")));
+        String line;
+        while ((line = br.readLine()) != null) {
+            if (!line.equals("")) {
+                DsonTypes.offerName(line);
+            }
+        }
+    }
+
     public void testCorrectConversion(String folderName) throws ParseException, IOException {
         List<byte[]> files = new ArrayList<>();
         List<byte[]> decodedFiles = new ArrayList<>();
         List<byte[]> reEncodedFiles = new ArrayList<>();
-        
+
         System.out.println("Folder " + folderName);
-        
+
         List<String> fileList = getResourceFiles(folderName);
 
         for (String s : fileList) {
@@ -54,14 +66,16 @@ public class ConverterTests {
             }
             // Weird quirk
             if (!fileList.get(i).equals("persist.progression.json")) {
-                assertEquals(reEncodedFiles.get(i).length, files.get(i).length, fileList.get(i) + " encodes to different number of bytes");
+                assertEquals(reEncodedFiles.get(i).length, files.get(i).length,
+                        fileList.get(i) + " encodes to different number of bytes");
             }
         }
 
         // Every file must re-decode to the same bytes
         for (int i = 0; i < reEncodedFiles.size(); i++) {
             String jsonString = new DsonFile(reEncodedFiles.get(i), UnhashBehavior.POUNDUNHASH).getJSonString(0, false);
-            assertEquals(jsonString.getBytes(StandardCharsets.UTF_8), decodedFiles.get(i), fileList.get(i) + " re-decodes differently");
+            assertEquals(jsonString.getBytes(StandardCharsets.UTF_8), decodedFiles.get(i),
+                    fileList.get(i) + " re-decodes differently");
         }
     }
 
