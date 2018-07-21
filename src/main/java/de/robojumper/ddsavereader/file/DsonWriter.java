@@ -12,14 +12,14 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.ArrayList;
-import java.util.Map.Entry;
 import java.util.Stack;
 import java.util.function.Function;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonParser.Feature;
+import com.fasterxml.jackson.core.JsonToken;
 
 public class DsonWriter {
 
@@ -32,14 +32,14 @@ public class DsonWriter {
     ArrayList<Meta2BlockEntry> meta2Entries;
 
     public DsonWriter(String jsonData) throws IOException, ParseException {
-        this(new JsonParser().parse(jsonData).getAsJsonObject());
+        this(new JsonFactory().configure(Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true).createParser(jsonData));
     }
 
     public DsonWriter(byte[] data) throws IOException, ParseException {
-        this(new JsonParser().parse(new String(data, StandardCharsets.UTF_8)).getAsJsonObject());
+        this(new JsonFactory().configure(Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true).createParser(data));
     }
 
-    public DsonWriter(JsonObject o) throws IOException, ParseException {
+    private DsonWriter(JsonParser reader) throws IOException, ParseException {
         header = new HeaderBlock();
         data = new ByteArrayOutputStream();
 
@@ -52,8 +52,27 @@ public class DsonWriter {
         nameStack = new Stack<>();
         hierarchyHintStack.push(-1);
 
-        for (Entry<String, JsonElement> e : o.entrySet()) {
-            writeField(e);
+        try {
+            // If we already have a token, we were invoked for an inner object.
+            // getCurrentToken() returns null if we start fresh, so we enter the right
+            // condition
+            if (reader.getCurrentToken() != JsonToken.START_OBJECT && reader.nextToken() != JsonToken.START_OBJECT) {
+                throw new ParseException("Expected START_OBJECT", (int) reader.getCurrentLocation().getCharOffset());
+            }
+
+            while (true) {
+                JsonToken t = reader.nextToken();
+                if (t != JsonToken.FIELD_NAME) {
+                    break;
+                }
+                writeField(reader.getCurrentName(), reader);
+            }
+
+            if (reader.getCurrentToken() != JsonToken.END_OBJECT) {
+                throw new ParseException("Expected END_OBJECT", (int) reader.getCurrentLocation().getCharOffset());
+            }
+        } catch (JsonParseException e) {
+            throw new ParseException(e.getMessage(), (int) reader.getCurrentLocation().getCharOffset());
         }
 
         header.numMeta1Entries = meta1Entries.size();
@@ -65,10 +84,7 @@ public class DsonWriter {
         hierarchyHintStack.pop();
     }
 
-    // TODO: Switch to manual parsing in order to give better error locations
-    private void writeField(Entry<String, JsonElement> field) throws IOException, ParseException {
-        String name = field.getKey();
-        JsonElement elem = field.getValue();
+    private void writeField(String name, JsonParser reader) throws IOException, ParseException {
         Meta2BlockEntry e2 = new Meta2BlockEntry();
         e2.nameHash = DsonTypes.stringHash(name);
         e2.fieldInfo = ((name.length() + 1) & 0b111111111) << 2;
@@ -81,27 +97,39 @@ public class DsonWriter {
         Function<Integer, String> nameMapper = (i) -> i == 0 ? name
                 : (i <= nameStack.size() ? nameStack.get(nameStack.size() - i) : null);
         try {
-            if (elem.isJsonObject()) {
-                // Objects with the name raw_data or static_save are embedded files
+            reader.nextToken();
+            if (reader.getCurrentToken() == JsonToken.START_OBJECT) {
                 if (!name.equals("raw_data") && !name.equals("static_save")) {
                     Meta1BlockEntry e1 = new Meta1BlockEntry();
                     e1.meta2EntryIdx = meta2Entries.size() - 1;
                     e2.fieldInfo |= 0b1 | ((meta1Entries.size() & 0b11111111111111111111) << 11);
                     e1.hierarchyHint = hierarchyHintStack.peek();
-                    e1.numDirectChildren = elem.getAsJsonObject().entrySet().size();
                     meta1Entries.add(e1);
                     int prevNumChilds = meta2Entries.size();
                     hierarchyHintStack.push(meta1Entries.size() - 1);
                     nameStack.push(name);
-                    for (Entry<String, JsonElement> childElem : elem.getAsJsonObject().entrySet()) {
-                        writeField(childElem);
+                    int numDirectChildren = 0;
+                    while (true) {
+                        JsonToken childToken = reader.nextToken();
+                        if (childToken != JsonToken.FIELD_NAME) {
+                            break;
+                        }
+                        writeField(reader.getCurrentName(), reader);
+                        numDirectChildren += 1;
                     }
+
+                    if (reader.getCurrentToken() != JsonToken.END_OBJECT) {
+                        throw new ParseException("Expected END_OBJECT",
+                                (int) reader.getCurrentLocation().getCharOffset());
+                    }
+                    e1.numDirectChildren = numDirectChildren;
+
                     nameStack.pop();
                     hierarchyHintStack.pop();
                     e1.numAllChildren = meta2Entries.size() - prevNumChilds;
                 } else {
                     // Write an actual embedded file as a string
-                    DsonWriter d = new DsonWriter(elem.getAsJsonObject());
+                    DsonWriter d = new DsonWriter(reader);
                     align();
                     byte[] embedData = d.bytes();
                     data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(embedData.length).array());
@@ -112,57 +140,105 @@ public class DsonWriter {
                 // Same as in DsonField, we first check the hardcoded types
                 if (DsonTypes.isA(FieldType.TYPE_FLOATARRAY, nameMapper)) {
                     align();
-                    JsonArray arr = elem.getAsJsonArray();
-                    for (JsonElement s : arr) {
-                        data.write(floatBytes(s.getAsFloat()));
+                    if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
+                        throw new ParseException("Expected START_ARRAY",
+                                (int) reader.getCurrentLocation().getCharOffset());
+                    }
+                    while (reader.nextToken() == JsonToken.VALUE_NUMBER_FLOAT) {
+                        data.write(floatBytes(reader.getFloatValue()));
+                    }
+                    if (reader.getCurrentToken() != JsonToken.END_ARRAY) {
+                        throw new ParseException("Expected VALUE_NUMBER_FLOAT or END_ARRAY",
+                                (int) reader.getCurrentLocation().getCharOffset());
                     }
                 } else if (DsonTypes.isA(FieldType.TYPE_INTVECTOR, nameMapper)) {
                     align();
-                    JsonArray arr = elem.getAsJsonArray();
-                    data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(arr.size()).array());
-                    for (JsonElement s : arr) {
-                        if (s.getAsJsonPrimitive().isString()) {
-                            data.write(stringBytes(s.getAsString()));
-                        } else {
-                            data.write(intBytes(s.getAsInt()));
-                        }
+                    if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
+                        throw new ParseException("Expected START_ARRAY",
+                                (int) reader.getCurrentLocation().getCharOffset());
                     }
+                    ByteArrayOutputStream vecData = new ByteArrayOutputStream();
+                    int numElem = 0;
+                    while (reader.nextToken() == JsonToken.VALUE_NUMBER_INT
+                            || reader.getCurrentToken() == JsonToken.VALUE_STRING) {
+                        if (reader.getCurrentToken() == JsonToken.VALUE_STRING) {
+                            vecData.write(stringBytes(reader.getValueAsString()));
+                        } else {
+                            vecData.write(intBytes(reader.getIntValue()));
+                        }
+                        numElem += 1;
+                    }
+                    if (reader.getCurrentToken() != JsonToken.END_ARRAY) {
+                        throw new ParseException("Expected VALUE_NUMBER_INT, VALUE_STRING or END_ARRAY",
+                                (int) reader.getCurrentLocation().getCharOffset());
+                    }
+                    data.write(intBytes(numElem));
+                    data.write(vecData.toByteArray());
                 } else if (DsonTypes.isA(FieldType.TYPE_STRINGVECTOR, nameMapper)) {
                     align();
-                    JsonArray arr = elem.getAsJsonArray();
-                    data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(arr.size()).array());
-                    for (JsonElement s : arr) {
-                        data.write(stringBytes(s.getAsString()));
+                    if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
+                        throw new ParseException("Expected START_ARRAY",
+                                (int) reader.getCurrentLocation().getCharOffset());
                     }
+                    ByteArrayOutputStream vecData = new ByteArrayOutputStream();
+                    int numElem = 0;
+                    while (reader.nextToken() == JsonToken.VALUE_STRING) {
+                        numElem += 1;
+                        vecData.write(stringBytes(reader.getValueAsString()));
+                    }
+                    if (reader.getCurrentToken() != JsonToken.END_ARRAY) {
+                        throw new ParseException("Expected VALUE_NUMBER_INT, VALUE_STRING or END_ARRAY",
+                                (int) reader.getCurrentLocation().getCharOffset());
+                    }
+                    data.write(intBytes(numElem));
+                    data.write(vecData.toByteArray());
                 } else if (DsonTypes.isA(FieldType.TYPE_FLOAT, nameMapper)) {
                     align();
-                    data.write(
-                            ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putFloat(elem.getAsFloat()).array());
-                } else if (DsonTypes.isA(FieldType.TYPE_CHAR, nameMapper)) {
-                    data.write(elem.getAsString().getBytes(StandardCharsets.UTF_8)[0]);
-                } else if (elem.isJsonPrimitive() && elem.getAsJsonPrimitive().isNumber()) {
-                    align();
-                    data.write(intBytes(elem.getAsInt()));
-                } else if (elem.isJsonPrimitive() && elem.getAsJsonPrimitive().isString()) {
-                    align();
-                    data.write(stringBytes(elem.getAsString()));
-                } else if (elem.isJsonArray() && elem.getAsJsonArray().size() == 2) {
-                    align();
-                    JsonArray arr = elem.getAsJsonArray();
-                    for (JsonElement s : arr) {
-                        data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
-                                .putInt(s.getAsBoolean() ? 1 : 0).array());
+                    if (reader.getCurrentToken() != JsonToken.VALUE_NUMBER_FLOAT) {
+                        throw new ParseException("Expected VALUE_NUMBER_FLOAT",
+                                (int) reader.getCurrentLocation().getCharOffset());
                     }
-                } else if (elem.isJsonPrimitive() && elem.getAsJsonPrimitive().isBoolean()) {
-                    data.write(elem.getAsBoolean() ? 0x01 : 0x00);
+                    data.write(floatBytes(reader.getFloatValue()));
+                } else if (DsonTypes.isA(FieldType.TYPE_CHAR, nameMapper)) {
+                    if (reader.getCurrentToken() != JsonToken.VALUE_STRING) {
+                        throw new ParseException(
+                                name + ": Expected VALUE_STRING, got " + reader.getCurrentToken().asString(),
+                                (int) reader.getCurrentLocation().getCharOffset());
+                    }
+                    data.write(reader.getValueAsString().getBytes(StandardCharsets.UTF_8)[0]);
+                } else if (reader.getCurrentToken() == JsonToken.VALUE_NUMBER_INT) {
+                    align();
+                    data.write(intBytes(reader.getIntValue()));
+                } else if (reader.getCurrentToken() == JsonToken.VALUE_STRING) {
+                    align();
+                    data.write(stringBytes(reader.getValueAsString()));
+                } else if (reader.getCurrentToken() == JsonToken.START_ARRAY) {
+                    align();
+                    for (int i = 0; i < 2; i++) {
+                        if (reader.nextToken() == JsonToken.VALUE_TRUE
+                                || reader.getCurrentToken() == JsonToken.VALUE_FALSE) {
+                            data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+                                    .putInt(reader.getBooleanValue() ? 1 : 0).array());
+                        } else {
+                            throw new ParseException("Expected VALUE_TRUE or VALUE_FALSE",
+                                    (int) reader.getCurrentLocation().getCharOffset());
+                        }
+                    }
+                    if (reader.nextToken() != JsonToken.END_ARRAY) {
+                        throw new ParseException("Expected END_ARRAY",
+                                (int) reader.getCurrentLocation().getCharOffset());
+                    }
+                } else if (reader.getCurrentToken() == JsonToken.VALUE_TRUE
+                        || reader.getCurrentToken() == JsonToken.VALUE_FALSE) {
+                    data.write(reader.getBooleanValue() ? 0x01 : 0x00);
                 } else {
-                    throw new ParseException("Field " + name + " cannot be written", 0);
+                    throw new ParseException("Field " + name + " not identified",
+                            (int) reader.getCurrentLocation().getCharOffset());
                 }
             }
         } catch (ClassCastException | IllegalStateException e) {
-            throw new ParseException("Error writing " + field, 0);
+            throw new ParseException("Error writing " + name, (int) reader.getCurrentLocation().getCharOffset());
         }
-
     }
 
     private byte[] floatBytes(float f) {

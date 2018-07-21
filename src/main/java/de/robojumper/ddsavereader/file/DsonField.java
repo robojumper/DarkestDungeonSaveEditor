@@ -63,7 +63,7 @@ public class DsonField {
         if (parseHardcodedType(behavior)) {
             return true;
         } else if (rawData.length == 1) {
-            if (rawData[0] >= 0x20 && rawData[0] >= 0x7E) {
+            if (rawData[0] >= 0x20 && rawData[0] <= 0x7E) {
                 type = FieldType.TYPE_CHAR;
                 dataString = "\"" + Character.toString((char) rawData[0]) + "\"";
             } else {
