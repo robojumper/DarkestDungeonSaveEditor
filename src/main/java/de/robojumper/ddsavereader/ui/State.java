@@ -24,7 +24,6 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -99,6 +98,8 @@ public class State {
 
     private Set<String> names = new HashSet<>();
 
+    private String lastSheetID = "";
+
     public void init() {
         try {
             Properties prop = new Properties();
@@ -110,6 +111,7 @@ public class State {
             setGameDir((String) prop.getOrDefault("gameDir", ""), false);
             setModsDir((String) prop.getOrDefault("modsDir", ""), true);
             setSaveDir((String) prop.getOrDefault("saveDir", ""));
+            lastSheetID = (String) prop.getOrDefault("sheetId", "");
         } catch (IOException | ClassCastException e) {
             return;
         }
@@ -125,10 +127,19 @@ public class State {
             prop.setProperty("saveDir", saveDir);
             prop.setProperty("gameDir", gameDir);
             prop.setProperty("modsDir", modsDir);
+            prop.setProperty("sheetId", lastSheetID);
             prop.store(new FileOutputStream(SETTINGS_FILE), BuildConfig.DISPLAY_NAME + "/" + BuildConfig.VERSION);
         } catch (IOException e) {
             return;
         }
+    }
+
+    public void setLastSheetID(String sheetID) {
+        this.lastSheetID = sheetID;
+    }
+
+    public String getLastSheetID() {
+        return lastSheetID;
     }
 
     public void setSaveDir(String dir) {
@@ -237,7 +248,8 @@ public class State {
     }
 
     public boolean canSave() {
-        return files.values().stream().filter(s -> s.changed() && !s.canSave()).count() == 0 && files.values().stream().filter(s -> s.changed()).count() > 0;
+        return files.values().stream().filter(s -> s.changed() && !s.canSave()).count() == 0
+                && files.values().stream().filter(s -> s.changed()).count() > 0;
     }
 
     private void rescanNames() {
@@ -340,7 +352,9 @@ public class State {
     }
 
     public Collection<String> getBackupNames() {
-        return Arrays.stream(new File(BACKUP_DIR, profileString).listFiles()).filter((f) -> f.getName().endsWith(".zip")).sorted((a, b) -> (int)(b.lastModified() - a.lastModified()))
+        return Arrays.stream(new File(BACKUP_DIR, profileString).listFiles())
+                .filter((f) -> f.getName().endsWith(".zip"))
+                .sorted((a, b) -> (int) (b.lastModified() - a.lastModified()))
                 .map(s -> s.getName().replaceAll("\\.zip", "")).collect(Collectors.toList());
     }
 

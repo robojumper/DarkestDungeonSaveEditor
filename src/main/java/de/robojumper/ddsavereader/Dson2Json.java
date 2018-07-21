@@ -47,7 +47,7 @@ public class Dson2Json {
 		if (i == args.length - 1) {
 			infile = args[i++];
 		} else {
-			System.err.println("Usage: java -jar DDSaveReader.jar [--debug, -d] [--names, -n namefile] [--output, -o outfile] filename");
+			System.err.println("Usage: java -jar DDSaveReader.jar decode [--debug, -d] [--names, -n <namefile>] [--output, -o <outfile>] filename");
 			System.exit(1);
 		}
 		

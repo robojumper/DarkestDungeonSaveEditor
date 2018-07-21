@@ -29,8 +29,7 @@ public class Json2Dson {
         if (i == args.length - 1) {
             infile = args[i++];
         } else {
-            System.err.println(
-                    "Usage: java -cp DDSaveReader.jar de.robojumper.ddsavereader.Json2Dson [--output, -o outfile] filename");
+            System.err.println("Usage: java -jar DDSaveReader.jar encode [--output, -o outfile] filename");
             System.exit(1);
         }
 

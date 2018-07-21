@@ -46,9 +46,10 @@ jar {
 	if (!project.hasProperty("includeSecret")) {
 		exclude 'client_secret.json'
 	}
+	baseName = 'DDSaveReader'
 }
 
-mainClassName = "de.robojumper.ddsavereader.ui.MainWindow"
+mainClassName = "de.robojumper.ddsavereader.Main"
 
 //create a single Jar with all dependencies
 task fatJar(type: Jar) {
@@ -58,6 +59,7 @@ task fatJar(type: Jar) {
                 'Main-Class': mainClassName
     }
     baseName = 'DDSaveReader'
+    archiveName = "$baseName" + ".jar"
     from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
     with jar
 }

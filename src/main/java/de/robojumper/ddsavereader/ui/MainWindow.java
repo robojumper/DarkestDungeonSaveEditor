@@ -11,8 +11,13 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.security.GeneralSecurityException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import javax.swing.Box;
@@ -41,6 +46,8 @@ import javax.swing.text.DefaultHighlighter;
 import javax.swing.text.Highlighter;
 
 import de.fuerstenau.buildconfig.BuildConfig;
+import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService;
+import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService.SheetUpdater;
 import de.robojumper.ddsavereader.ui.State.SaveFile;
 import de.robojumper.ddsavereader.ui.State.Status;
 
@@ -54,6 +61,7 @@ public class MainWindow {
     private JButton saveButton;
     private JButton makeBackupButton, restoreBackupButton;
     private JButton discardChangesButton, reloadButton;
+    private JMenuItem mntmSpreadsheets;
 
     private State state = new State();
 
@@ -133,6 +141,62 @@ public class MainWindow {
         });
         fileMenu.add(mntmOpenBackupDirectory);
         fileMenu.add(mntmExit);
+
+        JMenu mnTools = new JMenu("Tools");
+        menuBar.add(mnTools);
+
+        mntmSpreadsheets = new JMenuItem("Spreadsheets");
+        mntmSpreadsheets.setEnabled(false);
+        mntmSpreadsheets.addActionListener(e -> {
+            if (state.getSaveStatus() == Status.OK) {
+                String result = JOptionPane.showInputDialog(frame, "Set Spreadsheet ID",
+                        state.getLastSheetID());
+                if (result != null) {
+                    state.setLastSheetID(result);
+                    SheetUpdater sheetUpdater;
+                    try {
+                        sheetUpdater = SpreadsheetsService.makeUpdaterRunnable(result, state.getSaveDir());
+                    } catch (IOException | GeneralSecurityException e1) {
+                        JOptionPane.showMessageDialog(null, "An unknown error occurred.", "Spreadsheets", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                    
+                    final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    
+                    // Hack box so that we can refer to the future (no pun intented)
+                    final class Box<T> {
+                        private T obj;
+                        void set(T obj) { this.obj = obj; }
+                        T get() { return this.obj; }
+                        Box() { this(null); }
+                        Box(T obj) { set(obj); }
+                    }
+                    
+                    Box<ScheduledFuture<?>> future = new Box<>();
+                    JLabel runningLabel = new JLabel("Running...");
+                    future.set(scheduler.scheduleAtFixedRate(new Runnable() {
+    
+                        @Override
+                        public void run() {
+                            if (sheetUpdater.isRunning()) {
+                                sheetUpdater.run();
+                            } else {
+                                if (future.get() != null) {
+                                    future.get().cancel(false);
+                                    runningLabel.setText("Stopped!");
+                                }
+                            }
+    
+                        }
+                    }, 3, 120, TimeUnit.SECONDS));
+                    
+                    JOptionPane.showMessageDialog(null, runningLabel, "Spreadsheets", JOptionPane.PLAIN_MESSAGE);
+                    sheetUpdater.cancel();
+                    future.get().cancel(false);
+                }
+            }
+        });
+        mnTools.add(mntmSpreadsheets);
 
         JMenu mnHelp = new JMenu("Help");
         menuBar.add(mnHelp);
@@ -301,7 +365,7 @@ public class MainWindow {
         discardChangesButton.addActionListener(e -> {
             Component c = tabbedPane.getSelectedComponent();
             if (c != null) {
-                String fileName = ((Tab)c).fileName;
+                String fileName = ((Tab) c).fileName;
                 SaveFile s = state.getSaveFile(fileName);
                 Tab t = (Tab) tabbedPane.getSelectedComponent();
                 t.area.setText(s.originalContents);
@@ -354,6 +418,7 @@ public class MainWindow {
         savePathBox.setText(state.getSaveDir());
         saveFileStatus.setIcon(state.getSaveStatus().icon);
         reloadButton.setEnabled(state.getSaveStatus() == Status.OK);
+        mntmSpreadsheets.setEnabled(state.getSaveStatus() == Status.OK);
         updateBackupButtons();
     }
 
@@ -463,8 +528,8 @@ public class MainWindow {
             int result = JOptionPane.showConfirmDialog(frame,
                     "You have " + state.getNumUnsavedChanges()
                             + " unsaved changes! Are you sure you want to discard them?",
-                    "Discard Changes", JOptionPane.OK_CANCEL_OPTION);
-            if (result == JOptionPane.CANCEL_OPTION) {
+                    "Discard Changes", JOptionPane.YES_NO_OPTION);
+            if (result == JOptionPane.NO_OPTION) {
                 return false;
             }
         }

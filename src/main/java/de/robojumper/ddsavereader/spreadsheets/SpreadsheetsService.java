@@ -22,7 +22,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
 
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
@@ -64,16 +63,12 @@ public class SpreadsheetsService {
 
     private static final String COLS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-    private static ScheduledFuture<?> future = null;
-
     /**
      * Creates an authorized Credential object.
      * 
-     * @param HTTP_TRANSPORT
-     *            The network HTTP Transport.
+     * @param HTTP_TRANSPORT The network HTTP Transport.
      * @return An authorized Credential object.
-     * @throws IOException
-     *             If there is no client_secret.
+     * @throws IOException If there is no client_secret.
      */
     private static Credential getCredentials(final NetHttpTransport HTTP_TRANSPORT) throws IOException {
         // Load client secrets.
@@ -97,27 +92,105 @@ public class SpreadsheetsService {
         return new AuthorizationCodeInstalledApp(flow, new LocalServerReceiver()).authorize("user");
     }
 
-    public static void main(String... args) throws IOException, GeneralSecurityException {
-        System.out.println(Arrays.stream(args).collect(Collectors.joining("\n")));
+    public static void main(String... args) {
+        String arg;
+        int i = 0;
+        String inDir = "", namefile = "", spreadsheetID = "";
 
-        if (args.length != 3) {
-            System.out.println(
-                    "Usage: java -cp DDSaveReader.jar de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService SpreadsheetID SaveDir NameList");
-        }
+        while (i < args.length && args[i].startsWith("-")) {
+            arg = args[i++];
 
-        final String spreadsheetId = args[0];
-
-        try (BufferedReader br = new BufferedReader(new FileReader(Paths.get(args[2]).toFile()))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                if (!line.equals("")) {
-                    DsonTypes.offerName(line);
+            if (arg.equals("-n") || arg.equals("--names")) {
+                if (i < args.length) {
+                    namefile = args[i++];
+                } else {
+                    System.err.println("--names requires a filename");
                 }
             }
-        } catch (IOException e) {
-            System.err.println("Could not read " + args[2]);
+
+            if (arg.equals("-s") || arg.equals("--sheet")) {
+                if (i < args.length) {
+                    namefile = args[i++];
+                } else {
+                    System.err.println("--sheet requires a spreadsheet ID");
+                }
+            }
         }
 
+        if (i == args.length - 1) {
+            inDir = args[i++];
+        } else {
+            System.err.println(
+                    "Usage: java -jar DDSaveReader.jar sheets [--names, -n <namefile>] [--sheet, -s <sheetid>] saveDir");
+            System.exit(1);
+        }
+
+        // for now, read in the names from a specified text file
+        // This could be read in from game data!
+        if (!namefile.equals("")) {
+            try (BufferedReader br = new BufferedReader(new FileReader(Paths.get(namefile).toFile()))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    if (!line.equals("")) {
+                        DsonTypes.offerName(line);
+                    }
+                }
+            } catch (IOException e) {
+                System.err.println("Could not read " + namefile);
+                System.err.println(e.getMessage());
+                System.exit(1);
+            }
+        }
+        try {
+            run(spreadsheetID, inDir, 120, TimeUnit.SECONDS);
+        } catch (IOException | GeneralSecurityException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    public static void run(String spreadsheetId, String saveDir, int interval, TimeUnit timeUnit)
+            throws IOException, GeneralSecurityException {
+        final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        SheetUpdater sheetUpdater = makeUpdaterRunnable(spreadsheetId, saveDir);
+
+        // Hack box so that we can refer to the future (no pun intented)
+        final class Box<T> {
+            private T obj;
+            void set(T obj) { this.obj = obj; }
+            T get() { return this.obj; }
+            Box() { this(null); }
+            Box(T obj) { set(obj); }
+        }
+        
+        Box<ScheduledFuture<?>> future = new Box<>();
+        future.set(scheduler.scheduleAtFixedRate(new Runnable() {
+
+            @Override
+            public void run() {
+                if (sheetUpdater.isRunning()) {
+                    sheetUpdater.run();
+                } else {
+                    if (future.get() != null) {
+                        future.get().cancel(false);
+                    }
+                }
+
+            }
+        }, 3, interval, timeUnit));
+    }
+
+    /**
+     * Returns a Runnable that updates the sheet's data whenever run() is called.
+     * 
+     * @param spreadsheetId Spreadsheet ID to update.
+     * @param saveDir       Save directory to watch.
+     * @return The Runnable.
+     * @throws IOException
+     * @throws GeneralSecurityException
+     */
+    public static SheetUpdater makeUpdaterRunnable(String spreadsheetId, String saveDir)
+            throws IOException, GeneralSecurityException {
         // Build a new authorized API client service.
         final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
 
@@ -135,12 +208,13 @@ public class SpreadsheetsService {
                         }
 
                     }
-                }, args[1]);
+                }, saveDir);
         watcher.watchSaveFiles();
 
-        final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        return new SheetUpdater() {
 
-        final Runnable sheetUpdater = new Runnable() {
+            private boolean shouldBeRunning = true;
+            private boolean isRunning = true;
 
             @Override
             public void run() {
@@ -355,7 +429,12 @@ public class SpreadsheetsService {
                 }
 
                 if (!watcher.isRunning()) {
-                    future.cancel(false);
+                    this.isRunning = false;
+                }
+
+                if (!this.shouldBeRunning) {
+                    watcher.stop();
+                    this.isRunning = false;
                 }
             }
 
@@ -386,9 +465,23 @@ public class SpreadsheetsService {
                                 new CellFormat().setTextFormat(new TextFormat().setBold(Boolean.TRUE))))
                         .setFields("*")));
             }
-        };
 
-        future = scheduler.scheduleAtFixedRate(sheetUpdater, 3, 120, TimeUnit.SECONDS);
+            @Override
+            public boolean isRunning() {
+                return this.isRunning;
+            }
+
+            @Override
+            public void cancel() {
+                this.shouldBeRunning = false;
+            }
+        };
+    }
+
+    public abstract static class SheetUpdater implements Runnable {
+        public abstract boolean isRunning();
+
+        public abstract void cancel();
     }
 
 }
