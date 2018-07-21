@@ -18,7 +18,6 @@ import java.util.function.Function;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonParser.Feature;
 import com.fasterxml.jackson.core.JsonToken;
 
 public class DsonWriter {
@@ -32,11 +31,11 @@ public class DsonWriter {
     ArrayList<Meta2BlockEntry> meta2Entries;
 
     public DsonWriter(String jsonData) throws IOException, ParseException {
-        this(new JsonFactory().configure(Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true).createParser(jsonData));
+        this(new JsonFactory().createParser(jsonData));
     }
 
     public DsonWriter(byte[] data) throws IOException, ParseException {
-        this(new JsonFactory().configure(Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true).createParser(data));
+        this(new JsonFactory().createParser(data));
     }
 
     private DsonWriter(JsonParser reader) throws IOException, ParseException {

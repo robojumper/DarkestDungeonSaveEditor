@@ -97,8 +97,10 @@ public class DsonField {
                     type = FieldType.TYPE_FILE;
                     embeddedFile = new DsonFile(unquoteData, behavior);
                     dataString = "MUST REBUILD MANUALLY WITH CORRECT INDENTATION";
+                    return true;
                 }
             }
+            dataString = dataString.replaceAll("\n", "\\\\n");
         } else {
             return false;
         }
@@ -138,7 +140,7 @@ public class DsonField {
                 int strlen = bf.getInt();
                 byte[] tempArr2 = Arrays.copyOfRange(rawData, alignmentSkip() + 4 + bf.position(),
                         alignmentSkip() + 4 + bf.position() + strlen - 1);
-                sb.append("\"" + new String(tempArr2, StandardCharsets.UTF_8) + "\"");
+                sb.append("\"" + new String(tempArr2, StandardCharsets.UTF_8).replaceAll("\n", "\\\\n") + "\"");
                 bf.position(bf.position() + strlen);
                 if (bf.remaining() > 0) {
                     sb.append(", ");
