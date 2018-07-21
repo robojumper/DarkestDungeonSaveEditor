@@ -31,7 +31,7 @@ public class DsonTypes {
                 new String[][] { { "read_page_indexes" }, { "raid_read_page_indexes" }, { "raid_unread_page_indexes" }, // journal.json
                         { "dungeons_unlocked" }, { "played_video_list" }, // game_knowledge.json
                         { "trinket_retention_ids" }, // quest.json
-                        { "last_party_guids" }, { "dungeon_history" }, // roster.json
+                        { "last_party_guids" }, { "dungeon_history" }, { "buff_group_guids" },  // roster.json
                         { "result_event_history" }, // town_event.json
                         { "additional_mash_disabled_infestation_monster_class_ids" }, // campaign_mash.json
                         { "party", "heroes" }, // raid.json

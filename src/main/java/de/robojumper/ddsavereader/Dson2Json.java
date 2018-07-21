@@ -71,7 +71,7 @@ public class Dson2Json {
 		String OutResult = null;
 		try {
 			byte[] FileData = Files.readAllBytes(Paths.get(infile));
-			DsonFile File = new DsonFile(FileData, UnhashBehavior.UNHASH);
+			DsonFile File = new DsonFile(FileData, UnhashBehavior.POUNDUNHASH);
 			OutResult = File.getJSonString(0, debug);
 		} catch (Exception e) {
 			System.err.println("Could not read " + infile);

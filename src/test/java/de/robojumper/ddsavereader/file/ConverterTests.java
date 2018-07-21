@@ -93,6 +93,11 @@ public class ConverterTests {
     public void testRedditProfile() throws ParseException, IOException {
         testCorrectConversion("profileReddit");
     }
+    
+    @Test
+    public void testONightmareFile() throws ParseException, IOException {
+        testCorrectConversion("oNightmareFile");
+    }
 
     private List<String> getResourceFiles(String path) throws IOException {
         List<String> filenames = new ArrayList<>();

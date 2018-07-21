@@ -36,7 +36,7 @@ public class DsonWriter {
     }
 
     public DsonWriter(byte[] data) throws IOException, ParseException {
-        this(new JsonParser().parse(new String(data)).getAsJsonObject());
+        this(new JsonParser().parse(new String(data, StandardCharsets.UTF_8)).getAsJsonObject());
     }
 
     public DsonWriter(JsonObject o) throws IOException, ParseException {
