@@ -5,18 +5,19 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Desktop;
 import java.awt.EventQueue;
-import java.awt.TextArea;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.function.Consumer;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -36,6 +37,8 @@ import javax.swing.border.TitledBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.DefaultHighlighter;
+import javax.swing.text.Highlighter;
 
 import de.fuerstenau.buildconfig.BuildConfig;
 import de.robojumper.ddsavereader.ui.State.SaveFile;
@@ -47,8 +50,10 @@ public class MainWindow {
     private JTextField gameDataPathBox, savePathBox, workshopPathBox;
     private JLabel saveFileStatus, gameDataStatus, workshopStatus;
     private JTabbedPane tabbedPane;
-    private JLabel saveStatus;
+    private JLabel saveStatus, errorLabel;
     private JButton saveButton;
+    private JButton makeBackupButton, restoreBackupButton;
+    private JButton discardChangesButton, reloadButton;
 
     private State state = new State();
 
@@ -77,17 +82,12 @@ public class MainWindow {
     }
 
     private void initSettings() {
-        state.setFileSaveStatusReceiver(n -> {
-            EventQueue.invokeLater(() -> {
-                saveStatus.setIcon(state.canSave() ? Status.OK.icon : Status.ERROR.icon);
-                saveButton.setEnabled(state.canSave());
-            });
-        });
         state.init();
         updateSaveDir();
         updateGameDir();
         updateModsDir();
         updateFiles();
+        updateSaveStatus();
     }
 
     /**
@@ -119,37 +119,40 @@ public class MainWindow {
         menuBar.add(fileMenu);
 
         JMenuItem mntmExit = new JMenuItem("Exit");
-        mntmExit.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                attemptExit();
+        mntmExit.addActionListener(e -> {
+            attemptExit();
+        });
+
+        JMenuItem mntmOpenBackupDirectory = new JMenuItem("Open Backup Directory");
+        mntmOpenBackupDirectory.addActionListener(e -> {
+            try {
+                Desktop.getDesktop().open(new File(state.getBackupPath()));
+            } catch (IOException e1) {
+                e1.printStackTrace();
             }
         });
+        fileMenu.add(mntmOpenBackupDirectory);
         fileMenu.add(mntmExit);
 
         JMenu mnHelp = new JMenu("Help");
         menuBar.add(mnHelp);
 
         JMenuItem mntmAbout = new JMenuItem("About");
-        mntmAbout.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                Object[] options = { "OK", "Go to GitHub Page" };
-                int result = JOptionPane.showOptionDialog(frame,
-                        BuildConfig.DISPLAY_NAME + " " + BuildConfig.VERSION + "\nBy: /u/robojumper\nGitHub: "
-                                + BuildConfig.GITHUB_URL,
-                        "About", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
-                switch (result) {
-                case 0:
-                    break;
-                case 1:
-                    try {
-                        Desktop.getDesktop().browse(new URI(BuildConfig.GITHUB_URL));
-                    } catch (IOException | URISyntaxException e1) {
-                        e1.printStackTrace();
-                    }
+        mntmAbout.addActionListener(e -> {
+            Object[] options = { "OK", "Go to GitHub Page" };
+            int result = JOptionPane.showOptionDialog(frame,
+                    BuildConfig.DISPLAY_NAME + " " + BuildConfig.VERSION + "\nBy: /u/robojumper\nGitHub: "
+                            + BuildConfig.GITHUB_URL,
+                    "About", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+            switch (result) {
+            case 0:
+                break;
+            case 1:
+                try {
+                    Desktop.getDesktop().browse(new URI(BuildConfig.GITHUB_URL));
+                } catch (IOException | URISyntaxException e1) {
+                    e1.printStackTrace();
                 }
-                ;
             }
         });
         mnHelp.add(mntmAbout);
@@ -178,15 +181,57 @@ public class MainWindow {
         savePathBox.setColumns(10);
 
         JButton chooseSavePathButton = new JButton("Browse...");
-        chooseSavePathButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if (confirmLoseChanges()) {
-                    directoryChooser("", s -> state.setSaveDir(s));
-                    updateSaveDir();
+        chooseSavePathButton.addActionListener(e -> {
+            if (confirmLoseChanges()) {
+                directoryChooser("", s -> state.setSaveDir(s));
+                updateSaveDir();
+                updateFiles();
+            }
+        });
+
+        makeBackupButton = new JButton("Make Backup...");
+        makeBackupButton.setEnabled(false);
+        makeBackupButton.addActionListener(e -> {
+            if (state.getSaveStatus() == Status.OK) {
+                String result = JOptionPane.showInputDialog(frame, "Choose backup name",
+                        new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date()));
+                if (result == null) {
+                    return;
+                } else {
+                    result = result.replaceAll("[:\\\\/*?|<>]", "_");
+                    if (state.hasBackup(result)) {
+                        int confirmed = JOptionPane.showConfirmDialog(frame,
+                                "Backup " + result + " already exists. Overwrite?", "Backup already exists",
+                                JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+                        switch (confirmed) {
+                        case JOptionPane.YES_OPTION:
+                            break;
+                        case JOptionPane.NO_OPTION:
+                            return;
+                        }
+                    }
+                    state.makeBackup(result);
+                    updateBackupButtons();
                 }
             }
         });
+        savePathPanel.add(makeBackupButton);
+
+        restoreBackupButton = new JButton("Load Backup...");
+        restoreBackupButton.addActionListener(e -> {
+            if (state.getSaveStatus() == Status.OK && state.hasAnyBackups() && confirmLoseChanges()) {
+                String[] backups = state.getBackupNames().toArray(new String[0]);
+                Object result = JOptionPane.showInputDialog(frame, "Choose backup", "Restore",
+                        JOptionPane.OK_CANCEL_OPTION, null, backups, backups[0]);
+                if (result != null) {
+                    state.restoreBackup((String) result);
+                    state.loadFiles();
+                    updateFiles();
+                }
+            }
+        });
+        restoreBackupButton.setEnabled(false);
+        savePathPanel.add(restoreBackupButton);
         savePathPanel.add(chooseSavePathButton);
 
         JPanel gameDataPathPanel = new JPanel();
@@ -205,13 +250,10 @@ public class MainWindow {
         gameDataPathBox.setColumns(10);
 
         JButton chooseGamePathButton = new JButton("Browse...");
-        chooseGamePathButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if (confirmLoseChanges()) {
-                    directoryChooser("", s -> state.setGameDir(s));
-                    updateGameDir();
-                }
+        chooseGamePathButton.addActionListener(e -> {
+            if (confirmLoseChanges()) {
+                directoryChooser("", s -> state.setGameDir(s));
+                updateGameDir();
             }
         });
         gameDataPathPanel.add(chooseGamePathButton);
@@ -232,13 +274,10 @@ public class MainWindow {
         workshopPathBox.setColumns(10);
 
         JButton chooseWorkshopPathButton = new JButton("Browse...");
-        chooseWorkshopPathButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if (confirmLoseChanges()) {
-                    directoryChooser("", s -> state.setModsDir(s));
-                    updateModsDir();
-                }
+        chooseWorkshopPathButton.addActionListener(e -> {
+            if (confirmLoseChanges()) {
+                directoryChooser("", s -> state.setModsDir(s));
+                updateModsDir();
             }
         });
         workshopPathPanel.add(chooseWorkshopPathButton);
@@ -246,28 +285,23 @@ public class MainWindow {
 
         JPanel panel = new JPanel();
         contentPanel.add(panel, BorderLayout.CENTER);
-        panel.setLayout(new BoxLayout(panel, BoxLayout.X_AXIS));
+        panel.setLayout(new BoxLayout(panel, BoxLayout.LINE_AXIS));
 
         tabbedPane = new JTabbedPane(JTabbedPane.TOP);
+        tabbedPane.addChangeListener(e -> {
+            updateSaveStatus();
+        });
         panel.add(tabbedPane);
-
-        JPanel dummyTab = new JPanel();
-        tabbedPane.addTab("Dummy Tab", null, dummyTab, "*");
-        dummyTab.setLayout(new BoxLayout(dummyTab, BoxLayout.LINE_AXIS));
-
-        TextArea textArea = new TextArea();
-        dummyTab.add(textArea);
 
         JPanel buttonPanel = new JPanel();
         frame.getContentPane().add(buttonPanel, BorderLayout.SOUTH);
         buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.LINE_AXIS));
 
-        JButton discardChangesButton = new JButton("Discard File Changes");
-        discardChangesButton.addActionListener(new ActionListener() {
-
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String fileName = ((Tab) tabbedPane.getSelectedComponent()).fileName;
+        discardChangesButton = new JButton("Discard File Changes");
+        discardChangesButton.addActionListener(e -> {
+            Component c = tabbedPane.getSelectedComponent();
+            if (c != null) {
+                String fileName = ((Tab)c).fileName;
                 SaveFile s = state.getSaveFile(fileName);
                 Tab t = (Tab) tabbedPane.getSelectedComponent();
                 t.area.setText(s.originalContents);
@@ -279,21 +313,30 @@ public class MainWindow {
         Component horizontalGlue = Box.createHorizontalGlue();
         buttonPanel.add(horizontalGlue);
 
+        errorLabel = new JLabel("Optional Error Text");
+        buttonPanel.add(errorLabel);
+
+        Component horizontalStrut = Box.createHorizontalStrut(20);
+        buttonPanel.add(horizontalStrut);
+
         saveStatus = new JLabel("");
         saveStatus.setIcon(Resources.OK_ICON);
         buttonPanel.add(saveStatus);
 
         saveButton = new JButton("Save All Changes");
-        buttonPanel.add(saveButton);
-
-        JButton reloadButton = new JButton("Reload All");
-        reloadButton.addActionListener(new ActionListener() {
-
-            @Override
-            public void actionPerformed(ActionEvent e) {
+        saveButton.addActionListener(e -> {
+            if (state.canSave()) {
+                state.saveChanges();
                 state.loadFiles();
                 updateFiles();
             }
+        });
+        buttonPanel.add(saveButton);
+
+        reloadButton = new JButton("Reload All");
+        reloadButton.addActionListener(e -> {
+            state.loadFiles();
+            updateFiles();
         });
         buttonPanel.add(reloadButton);
     }
@@ -310,6 +353,13 @@ public class MainWindow {
     private void updateSaveDir() {
         savePathBox.setText(state.getSaveDir());
         saveFileStatus.setIcon(state.getSaveStatus().icon);
+        reloadButton.setEnabled(state.getSaveStatus() == Status.OK);
+        updateBackupButtons();
+    }
+
+    private void updateBackupButtons() {
+        makeBackupButton.setEnabled(state.getSaveStatus() == Status.OK);
+        restoreBackupButton.setEnabled(state.hasAnyBackups());
     }
 
     private void updateGameDir() {
@@ -324,7 +374,7 @@ public class MainWindow {
 
     private void updateFiles() {
         tabbedPane.removeAll();
-        for (SaveFile f : state.saveFiles()) {
+        for (SaveFile f : state.getSaveFiles()) {
             Tab compPanel = new Tab();
             compPanel.fileName = f.name;
             compPanel.setLayout(new BoxLayout(compPanel, BoxLayout.LINE_AXIS));
@@ -350,21 +400,55 @@ public class MainWindow {
                 private void update(DocumentEvent e) {
                     try {
                         state.changeFile(f.name, e.getDocument().getText(0, e.getDocument().getLength()));
+                        updateSaveStatus();
                     } catch (BadLocationException e1) {
                         e1.printStackTrace();
                     }
-                    updateTitle(compPanel);
+                    updateFile(compPanel);
                 }
             });
             JScrollPane sp = new JScrollPane(a);
             compPanel.add(sp);
-            tabbedPane.addTab((f.changed() ? "*" : "") + f.name, compPanel);
+            tabbedPane.addTab((f.changed() ? "*" : "") + f.name, iconFor(f), compPanel);
         }
     }
 
-    private void updateTitle(Tab t) {
+    private void updateFile(Tab t) {
         SaveFile f = state.getSaveFile(t.fileName);
         tabbedPane.setTitleAt(tabbedPane.indexOfComponent(t), (f.changed() ? "*" : "") + f.name);
+        tabbedPane.setIconAt(tabbedPane.indexOfComponent(t), iconFor(f));
+        t.area.getHighlighter().removeAllHighlights();
+        if (!f.canSave()) {
+            Highlighter.HighlightPainter redPainter = new DefaultHighlighter.DefaultHighlightPainter(Color.RED);
+            int[] errorLine = f.getErrorLine();
+            try {
+                t.area.getHighlighter().addHighlight(errorLine[0], errorLine[1], redPainter);
+            } catch (BadLocationException e) {
+            }
+        }
+        discardChangesButton.setEnabled(f.changed());
+    }
+
+    private static Icon iconFor(SaveFile f) {
+        if (f.changed()) {
+            return f.canSave() ? Resources.OK_ICON : Resources.ERROR_ICON;
+        } else {
+            return f.canSave() ? null : Resources.WARNING_ICON;
+        }
+    }
+
+    private void updateSaveStatus() {
+        saveStatus.setIcon(state.canSave() ? Status.OK.icon : Status.ERROR.icon);
+        saveButton.setEnabled(state.canSave());
+        Component tab = tabbedPane.getSelectedComponent();
+        if (tab != null) {
+            SaveFile f = state.getSaveFile(((Tab) tab).fileName);
+            errorLabel.setText(f.canSave() ? "" : f.errorReason);
+            discardChangesButton.setEnabled(f.changed());
+        } else {
+            errorLabel.setText("");
+            discardChangesButton.setEnabled(false);
+        }
     }
 
     protected void attemptExit() {

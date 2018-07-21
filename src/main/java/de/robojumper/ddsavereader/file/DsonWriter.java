@@ -161,6 +161,10 @@ public class DsonWriter {
                     while (reader.nextToken() == JsonToken.VALUE_NUMBER_INT
                             || reader.getCurrentToken() == JsonToken.VALUE_STRING) {
                         if (reader.getCurrentToken() == JsonToken.VALUE_STRING) {
+                            if (!reader.getValueAsString().startsWith("###")) {
+                                throw new ParseException("Must be hashed string",
+                                        (int) reader.getCurrentLocation().getCharOffset());
+                            }
                             vecData.write(stringBytes(reader.getValueAsString()));
                         } else {
                             vecData.write(intBytes(reader.getIntValue()));
