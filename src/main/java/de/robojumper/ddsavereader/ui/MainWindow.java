@@ -45,6 +45,10 @@ import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultHighlighter;
 import javax.swing.text.Highlighter;
 
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rtextarea.RTextScrollPane;
+
 import de.fuerstenau.buildconfig.BuildConfig;
 import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService;
 import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService.SheetUpdater;
@@ -443,7 +447,9 @@ public class MainWindow {
             Tab compPanel = new Tab();
             compPanel.fileName = f.name;
             compPanel.setLayout(new BoxLayout(compPanel, BoxLayout.LINE_AXIS));
-            JTextArea a = new JTextArea(f.contents);
+            RSyntaxTextArea a = new RSyntaxTextArea(f.contents);
+            a.setCodeFoldingEnabled(true);
+            a.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JSON);
             compPanel.area = a;
             a.getDocument().addDocumentListener(new DocumentListener() {
 
@@ -472,7 +478,7 @@ public class MainWindow {
                     updateFile(compPanel);
                 }
             });
-            JScrollPane sp = new JScrollPane(a);
+            RTextScrollPane sp = new RTextScrollPane(a);
             compPanel.add(sp);
             tabbedPane.addTab((f.changed() ? "*" : "") + f.name, iconFor(f), compPanel);
         }
@@ -484,7 +490,7 @@ public class MainWindow {
         tabbedPane.setIconAt(tabbedPane.indexOfComponent(t), iconFor(f));
         t.area.getHighlighter().removeAllHighlights();
         if (!f.canSave()) {
-            Highlighter.HighlightPainter redPainter = new DefaultHighlighter.DefaultHighlightPainter(Color.RED);
+            Highlighter.HighlightPainter redPainter = new DefaultHighlighter.DefaultHighlightPainter(new Color(255, 127, 127));
             int[] errorLine = f.getErrorLine();
             try {
                 t.area.getHighlighter().addHighlight(errorLine[0], errorLine[1], redPainter);
@@ -539,6 +545,6 @@ public class MainWindow {
     private class Tab extends JPanel {
         private static final long serialVersionUID = 7066962308849880236L;
         private String fileName;
-        private JTextArea area;
+        private RSyntaxTextArea area;
     }
 }
