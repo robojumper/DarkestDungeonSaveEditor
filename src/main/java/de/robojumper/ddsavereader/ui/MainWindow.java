@@ -47,6 +47,10 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
+import com.google.api.client.auth.oauth2.Credential;
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.http.javanet.NetHttpTransport;
+
 import de.fuerstenau.buildconfig.BuildConfig;
 import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService;
 import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService.SheetUpdater;
@@ -151,51 +155,91 @@ public class MainWindow {
         mntmSpreadsheets.setEnabled(false);
         mntmSpreadsheets.addActionListener(e -> {
             if (state.getSaveStatus() == Status.OK) {
-                String result = JOptionPane.showInputDialog(frame, "Set Spreadsheet ID",
-                        state.getLastSheetID());
-                if (result != null) {
-                    state.setLastSheetID(result);
-                    SheetUpdater sheetUpdater;
-                    try {
-                        sheetUpdater = SpreadsheetsService.makeUpdaterRunnable(result, state.getSaveDir());
-                    } catch (IOException | GeneralSecurityException e1) {
-                        JOptionPane.showMessageDialog(null, "An unknown error occurred.", "Spreadsheets", JOptionPane.ERROR_MESSAGE);
+                SheetUpdater sheetUpdater;
+                try {
+                    final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
+                    Credential cred = SpreadsheetsService.getCredentials(HTTP_TRANSPORT);
+                    if (cred == null) {
+                        Object[] options = { "OK", "Go to GitHub ReadMe" };
+                        int openInstructions = JOptionPane.showOptionDialog(frame,
+                                "It seems like the Spreadsheet application wasn't set up. See the Readme file for instructions!",
+                                "Error", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, null, options,
+                                options[0]);
+                        switch (openInstructions) {
+                        case 0:
+                            break;
+                        case 1:
+                            try {
+                                Desktop.getDesktop().browse(new URI(BuildConfig.GITHUB_URL
+                                        + "/blob/master/README.md#spreadsheets"));
+                            } catch (IOException | URISyntaxException e1) {
+                                e1.printStackTrace();
+                            }
+                        }
                         return;
                     }
-                    
-                    final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-    
-                    // Hack box so that we can refer to the future (no pun intented)
-                    final class Box<T> {
-                        private T obj;
-                        void set(T obj) { this.obj = obj; }
-                        T get() { return this.obj; }
-                        Box() { this(null); }
-                        Box(T obj) { set(obj); }
+                    String sheetID = JOptionPane.showInputDialog(frame, "Set Spreadsheet ID",
+                            state.getLastSheetID());
+                    if (sheetID != null) {
+                        state.setLastSheetID(sheetID);
+                        sheetUpdater = SpreadsheetsService.makeUpdaterRunnable(sheetID, state.getSaveDir(), cred,
+                            HTTP_TRANSPORT);
+                    } else {
+                        return;
                     }
-                    
-                    Box<ScheduledFuture<?>> future = new Box<>();
-                    JLabel runningLabel = new JLabel("Running...");
-                    future.set(scheduler.scheduleAtFixedRate(new Runnable() {
-    
-                        @Override
-                        public void run() {
-                            if (sheetUpdater.isRunning()) {
-                                sheetUpdater.run();
-                            } else {
-                                if (future.get() != null) {
-                                    future.get().cancel(false);
-                                    runningLabel.setText("Stopped!");
-                                }
-                            }
-    
-                        }
-                    }, 3, 120, TimeUnit.SECONDS));
-                    
-                    JOptionPane.showMessageDialog(null, runningLabel, "Spreadsheets", JOptionPane.PLAIN_MESSAGE);
-                    sheetUpdater.cancel();
-                    future.get().cancel(false);
+                } catch (IOException | GeneralSecurityException e1) {
+                    JOptionPane.showMessageDialog(null, "An unknown error occurred.", "Spreadsheets",
+                            JOptionPane.ERROR_MESSAGE);
+                    return;
                 }
+
+                final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+
+                // Hack box so that we can refer to the future (no pun intented)
+                final class Box<T> {
+                    private T obj;
+
+                    void set(T obj) {
+                        this.obj = obj;
+                    }
+
+                    T get() {
+                        return this.obj;
+                    }
+
+                    Box() {
+                        this(null);
+                    }
+
+                    Box(T obj) {
+                        set(obj);
+                    }
+                }
+
+                Box<ScheduledFuture<?>> future = new Box<>();
+                JLabel runningLabel = new JLabel("Running... click OK to cancel!");
+                future.set(scheduler.scheduleAtFixedRate(new Runnable() {
+
+                    @Override
+                    public void run() {
+                        if (sheetUpdater.isRunning()) {
+                            sheetUpdater.run();
+                        } else {
+                            if (future.get() != null) {
+                                future.get().cancel(false);
+                                runningLabel.setText("Stopped!");
+                            }
+                        }
+                    }
+                }, 3, 120, TimeUnit.SECONDS));
+
+                JOptionPane.showConfirmDialog(null,
+                        runningLabel,
+                        "Spreadsheets",
+                        JOptionPane.DEFAULT_OPTION,
+                        JOptionPane.PLAIN_MESSAGE);
+                sheetUpdater.cancel();
+                future.get().cancel(false);
             }
         });
         mnTools.add(mntmSpreadsheets);
@@ -488,7 +532,8 @@ public class MainWindow {
         tabbedPane.setIconAt(tabbedPane.indexOfComponent(t), iconFor(f));
         t.area.getHighlighter().removeAllHighlights();
         if (!f.canSave()) {
-            Highlighter.HighlightPainter redPainter = new DefaultHighlighter.DefaultHighlightPainter(new Color(255, 127, 127));
+            Highlighter.HighlightPainter redPainter = new DefaultHighlighter.DefaultHighlightPainter(
+                    new Color(255, 127, 127));
             int[] errorLine = f.getErrorLine();
             try {
                 t.area.getHighlighter().addHighlight(errorLine[0], errorLine[1], redPainter);

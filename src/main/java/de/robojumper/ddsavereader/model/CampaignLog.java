@@ -27,8 +27,7 @@ public class CampaignLog extends AbstractFile {
 
         @Override
         public void write(JsonWriter out, Chapter value) throws IOException {
-            // TODO Auto-generated method stub
-
+            throw new IOException("Saving chapters not supported");
         }
 
         @Override

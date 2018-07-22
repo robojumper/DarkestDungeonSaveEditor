@@ -91,7 +91,6 @@ public class Roster extends AbstractFile {
     }
 
     private RosterData rosterData = new RosterData();
-    //private final Map<String, Integer> heroNameToIDMap = new HashMap<>();
     
     @Override
     public void update(String json) {

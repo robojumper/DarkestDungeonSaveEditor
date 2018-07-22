@@ -70,7 +70,7 @@ public class SpreadsheetsService {
      * @return An authorized Credential object.
      * @throws IOException If there is no client_secret.
      */
-    private static Credential getCredentials(final NetHttpTransport HTTP_TRANSPORT) throws IOException {
+    public static Credential getCredentials(final NetHttpTransport HTTP_TRANSPORT) throws IOException {
         // Load client secrets.
         GoogleClientSecrets clientSecrets = null;
         try (InputStream in = new FileInputStream("." + CLIENT_SECRET_DIR)) {
@@ -81,7 +81,7 @@ public class SpreadsheetsService {
                 clientSecrets = GoogleClientSecrets.load(JSON_FACTORY, new InputStreamReader(in));
             } else {
                 System.out.println("Client ID + Secrets File couldn't be found");
-                System.exit(1);
+                return null;
             }
         }
 
@@ -110,7 +110,7 @@ public class SpreadsheetsService {
 
             if (arg.equals("-s") || arg.equals("--sheet")) {
                 if (i < args.length) {
-                    namefile = args[i++];
+                    spreadsheetID = args[i++];
                 } else {
                     System.err.println("--sheet requires a spreadsheet ID");
                 }
@@ -152,17 +152,36 @@ public class SpreadsheetsService {
     public static void run(String spreadsheetId, String saveDir, int interval, TimeUnit timeUnit)
             throws IOException, GeneralSecurityException {
         final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-        SheetUpdater sheetUpdater = makeUpdaterRunnable(spreadsheetId, saveDir);
+        // Build a new authorized API client service.
+        final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
+
+        Credential cred = getCredentials(HTTP_TRANSPORT);
+        if (cred == null) {
+            return;
+        }
+        SheetUpdater sheetUpdater = makeUpdaterRunnable(spreadsheetId, saveDir, cred, HTTP_TRANSPORT);
 
         // Hack box so that we can refer to the future (no pun intented)
         final class Box<T> {
             private T obj;
-            void set(T obj) { this.obj = obj; }
-            T get() { return this.obj; }
-            Box() { this(null); }
-            Box(T obj) { set(obj); }
+
+            void set(T obj) {
+                this.obj = obj;
+            }
+
+            T get() {
+                return this.obj;
+            }
+
+            Box() {
+                this(null);
+            }
+
+            Box(T obj) {
+                set(obj);
+            }
         }
-        
+
         Box<ScheduledFuture<?>> future = new Box<>();
         future.set(scheduler.scheduleAtFixedRate(new Runnable() {
 
@@ -189,13 +208,11 @@ public class SpreadsheetsService {
      * @throws IOException
      * @throws GeneralSecurityException
      */
-    public static SheetUpdater makeUpdaterRunnable(String spreadsheetId, String saveDir)
-            throws IOException, GeneralSecurityException {
-        // Build a new authorized API client service.
-        final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
+    public static SheetUpdater makeUpdaterRunnable(String spreadsheetId, String saveDir, Credential cred, NetHttpTransport HTTP_TRANSPORT)
+            throws IOException {
 
-        Sheets service = new Sheets.Builder(HTTP_TRANSPORT, JSON_FACTORY, getCredentials(HTTP_TRANSPORT))
-                .setApplicationName(APPLICATION_NAME).build();
+        Sheets service = new Sheets.Builder(HTTP_TRANSPORT, JSON_FACTORY, cred).setApplicationName(APPLICATION_NAME)
+                .build();
 
         final SaveState state = new SaveState();
         final DarkestSaveFileWatcher watcher = new DarkestSaveFileWatcher(

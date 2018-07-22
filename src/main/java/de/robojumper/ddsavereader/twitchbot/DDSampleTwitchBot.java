@@ -17,7 +17,7 @@ public class DDSampleTwitchBot {
         DarkestSaveFileWatcher watcher;
         SaveState saveState = new SaveState();
         try {
-            // TODO: Load Name File!!!
+            // Load Name File!!!
             watcher = new DarkestSaveFileWatcher(saveState, System.getenv("DDSAVEDIR"));
             twitchClient = TwitchClientBuilder.init()
                     .withClientId(System.getenv("DDCLIENTID"))
@@ -40,7 +40,6 @@ public class DDSampleTwitchBot {
                 }
             });
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }*/
     }

@@ -119,7 +119,6 @@ public class DarkestSaveFileWatcher implements Runnable {
         try (Stream<Path> paths = Files.walk(saveDir)) {
             paths.forEach(p -> tryHandleFile(p, callback, saveDir));
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
         while (!wantsStop) {
@@ -168,7 +167,6 @@ public class DarkestSaveFileWatcher implements Runnable {
             k.cancel();
             watcher.close();
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }

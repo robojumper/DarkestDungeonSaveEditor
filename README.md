@@ -40,49 +40,49 @@ A list can be compiled by running
     java -jar DDSaveReader.jar names [dir1] [dir2] [dir3] [...]
 
 `dir1`, ... are directories that contain Darkest Dungeon game data. These are usually the game root directory, but can also be mods.  
-There is no output file parameter, just pipe it to a file (append ` > names.txt`).
+There is no output file parameter, just pipe it to a file (append `> names.txt`).
 
 ## Saving
 
 There also is a save writer:
 
     java -jar DDSaveReader.jar encode [--output, -o outfile] filename
-    
+
 The input file must be a save file decoded **without a name file** and **without the debug parameter**. Providing a name file changes the JSON structure and replaces some integers with strings, which breaks the game compatibility.
 
-While the JSON exported by the decoder is valid JSON without any nonstandard extensions, the application still only de-/serializes Darkest Dungeon save files correctly. There are no guarantees that any additions that don't resemble the Darkest Dungeon data will serialize correctly.   
+While the JSON exported by the decoder is valid JSON without any nonstandard extensions, the application still only de-/serializes Darkest Dungeon save files correctly. There are no guarantees that any additions that don't resemble the Darkest Dungeon data will serialize correctly.
 
-## Save File Model & Spreadsheets
+## Spreadsheets
 
-The Application includes a save file watcher that automatically watches for changes to the save file and updates its internal save file model. This can be used to (for example) add a Twitch bot that can respond to queries by viewers, or upload data to spreadsheets.
+This application includes a service that uploads some save file data live to a Google Spreadsheet. In order to use this, you need to create a new Application using the [Google API Developer Console](https://console.developers.google.com/), enable the Google Sheets API and create an OAuth client ID and secret.
 
-This application includes a service that uploads some save file data to a Google Spreadsheet. If you have created a custom app at the Google Developer console and enabled the Spreadsheets API with an OAuth 2.0 Key, you can launch it by creating a file `client_secret.json` with the following content in the same directory as the jar file:
+If you have done that, create a file `client_secret.json` with the following content in the same directory as the jar file:
 
     {
-    	"installed": {
-    		"client_id": "clientid",
-    		"client_secret": "clientsecret"
-    	}
+        "installed": {
+            "client_id": "clientid",
+            "client_secret": "clientsecret"
+        }
     }
 
 And launch it via
 
     java -jar DDSaveReader.jar sheets [--names, -n <namefile>] [--sheet, -s <sheetid>] saveDir
-	
 
+or the GUI (`Tools->Spreadsheets`).
+
+You will be asked whether to grant your application access to the spreadsheets. Confirm your choice and the data should start uploading.
 
 ## Building
 
 The application uses Gradle to build. You can build a complete jar file using `gradlew fatJar`. The jar file can be found as `build/libs/DDSaveReader.jar`.
-
 
 If you are using the spreadsheets service, you can add the `client_secret.json` to `src/main/resources` and build with `gradlew fatJar -PincludeSecret`. This will include the id and secret in the jar file so you don't need to add a separate `client_secret.json` to the file system, just make sure you don't accidentally give this jar to anyone else as this would incur the risk of API Key abuse.
 
 ### Tests
 
 In `src/tests`, there are a number of save files, some are mine, some are picked from other places on the internet. By running `gradlew test`, the tests check if all of them can be loaded, and produce somewhat correct save files again.  
-If the game updates, we'll probably need to update those save files too (I don't expect major changes to the format, but there might be the occasional new field that needs to be identified).   
-
+If the game updates, we'll probably need to update those save files too (I don't expect major changes to the format, but there might be the occasional new field that needs to be identified).
 
 ## Contributing
 

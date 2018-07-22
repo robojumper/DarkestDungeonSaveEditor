@@ -355,7 +355,6 @@ public class DsonFile {
         return getJSonString(0, false);
     }
 
-    // TODO: Properly handle Types
     private void writeField(StringBuilder sb, DsonField field, int indent, boolean debug) {
 
         if (debug) {

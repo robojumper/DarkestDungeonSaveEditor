@@ -83,7 +83,7 @@ public class ReadNames {
 			}
 		}));
 
-		// Dungeon types
+		// Quest types
 		putParser(".types.json", (new Parser() {
 			@Override
 			public void parseFile(Path filePath, byte[] file, Set<String> names) {
@@ -249,8 +249,8 @@ public class ReadNames {
 										for (Parser parser : entry.getValue()) {
 										    parser.parseFile(file, names);
 										}
-									} catch (IOException e) {
-									    System.out.println("Error opening/parsing " + filename.toString());
+									} catch (Exception e) {
+									    System.err.println("Error opening/parsing " + filename.toString());
 										e.printStackTrace();
 									}
 								}
@@ -259,7 +259,7 @@ public class ReadNames {
 						}
 					});
 				} catch (IOException e) {
-					System.out.println("Error scanning " + rootDir.toString());
+					System.err.println("Error scanning " + rootDir.toString());
 					e.printStackTrace();
 				}
 			}
