@@ -35,6 +35,7 @@ public class DsonTypes {
                         { "result_event_history" }, // town_event.json
                         { "additional_mash_disabled_infestation_monster_class_ids" }, // campaign_mash.json
                         { "party", "heroes" }, // raid.json
+                        { "skill_cooldown_keys" }, // raid.json
                         { "narration_audio_event_queue_tags" }, // loading_screen.json
                         { "dispatched_events" }, // tutorial.json
                 }),

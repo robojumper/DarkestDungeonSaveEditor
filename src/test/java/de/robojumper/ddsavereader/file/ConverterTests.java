@@ -95,8 +95,8 @@ public class ConverterTests {
     }
     
     @Test
-    public void testONightmareFile() throws ParseException, IOException {
-        testCorrectConversion("oNightmareFile");
+    public void testOtherFiles() throws ParseException, IOException {
+        testCorrectConversion("otherFiles");
     }
 
     private List<String> getResourceFiles(String path) throws IOException {
