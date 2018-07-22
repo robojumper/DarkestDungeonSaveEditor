@@ -32,7 +32,7 @@ buildConfig {
     
     buildConfigField 'String', 'DISPLAY_NAME', "$displayname"
     buildConfigField 'String', 'GITHUB_URL', "$githuburl"
-    
+    buildConfigField 'String', 'UPDATE_URL', "$releasesurl"
     
     clsName = 'BuildConfig'
     packageName = project.group

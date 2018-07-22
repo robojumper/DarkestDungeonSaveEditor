@@ -56,6 +56,9 @@ import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService;
 import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService.SheetUpdater;
 import de.robojumper.ddsavereader.ui.State.SaveFile;
 import de.robojumper.ddsavereader.ui.State.Status;
+import de.robojumper.ddsavereader.updatechecker.UpdateChecker;
+import de.robojumper.ddsavereader.updatechecker.UpdateChecker.Release;
+import de.robojumper.ddsavereader.updatechecker.Version;
 
 public class MainWindow {
 
@@ -102,6 +105,7 @@ public class MainWindow {
         updateModsDir();
         updateFiles();
         updateSaveStatus();
+        checkForUpdates();
     }
 
     /**
@@ -583,6 +587,32 @@ public class MainWindow {
             }
         }
         return true;
+    }
+    
+    private void checkForUpdates() {
+        try {
+            Release r = UpdateChecker.getLatestRelease();
+            Version curr = new Version(BuildConfig.VERSION);
+            if (r.version.compareTo(curr) > 0) {
+                Object[] options = { "OK", "Go to Releases Page" };
+                int openInstructions = JOptionPane.showOptionDialog(frame,
+                        "There are updates available!\nCurrent version: " + curr.toString() + ", new version: " + r.version.toString(),
+                        "Update available", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, null, options,
+                        options[1]);
+                switch (openInstructions) {
+                case 0:
+                    break;
+                case 1:
+                    try {
+                        Desktop.getDesktop().browse(new URI(r.htmlUrl));
+                    } catch (IOException | URISyntaxException e1) {
+                        e1.printStackTrace();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("Update check failed.");
+        }
     }
 
     private class Tab extends JPanel {

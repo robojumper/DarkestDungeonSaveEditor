@@ -1,5 +1,6 @@
 package de.robojumper.ddsavereader;
 
+import de.fuerstenau.buildconfig.BuildConfig;
 import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService;
 import de.robojumper.ddsavereader.ui.MainWindow;
 import de.robojumper.ddsavereader.util.ReadNames;
@@ -21,17 +22,17 @@ public class Main {
             case "json2dson":
                 Json2Dson.main(restArgs);
                 break;
-            case "gui":
-                MainWindow.main(restArgs);
-                break;
             case "sheets":
             case "spreadsheets":
+                System.out.println(BuildConfig.DISPLAY_NAME + "/" + BuildConfig.VERSION + ", " + BuildConfig.GITHUB_URL);
                 SpreadsheetsService.main(restArgs);
                 break;
             case "names":
                 ReadNames.main(restArgs);
+                break;
             default:
                 System.err.println("Error: Unknown command " + args[0]);
+                System.err.println("Commands: decode, encode, sheets, names");
             }
         }
     }

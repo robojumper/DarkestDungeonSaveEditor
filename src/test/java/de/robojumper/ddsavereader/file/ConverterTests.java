@@ -1,12 +1,5 @@
 package de.robojumper.ddsavereader.file;
 
-import org.testng.annotations.*;
-
-import com.google.common.io.ByteStreams;
-
-import de.robojumper.ddsavereader.file.DsonFile;
-import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
-
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.fail;
 
@@ -18,6 +11,13 @@ import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.testng.annotations.BeforeClass;
+import org.testng.annotations.Test;
+
+import com.google.common.io.ByteStreams;
+
+import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
 
 public class ConverterTests {
 
