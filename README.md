@@ -1,6 +1,6 @@
 # Darkest Dungeon Save Reader
 
-A Darkest Dungeon Save Game Reader, Editor and Writer.
+A Darkest Dungeon Save Game Reader, Editor and Writer. Requires Java 8+.
 
 ## Download
 
