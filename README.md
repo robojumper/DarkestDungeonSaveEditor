@@ -95,9 +95,11 @@ Contributions via Pull Requests or Issue reports welcome! For Pull Requests, ple
 
 ## Attribution
 
-This application uses the [Google GSON Library](https://github.com/google/gson) 2.8.5, licensed under the [Apache License 2.0](Licenses/Apachev2.0.txt).
-
-This application uses the [Google API Client Libraries](https://github.com/google/google-api-java-client) 1.23.0, licensed under the [Apache License 2.0](Licenses/Apachev2.0.txt).
+* [Google GSON Library](https://github.com/google/gson) 2.8.5, licensed under the [Apache License 2.0](Licenses/Apachev2.0.txt).
+* [Google API Client Libraries](https://github.com/google/google-api-java-client) 1.23.0, licensed under the [Apache License 2.0](Licenses/Apachev2.0.txt).
+* [Jackson Core](https://github.com/FasterXML/jackson-core) 2.9.6, licensed under the [Apache License 2.0](Licenses/Apachev2.0.txt).
+* [BuildConfig](https://github.com/mfuerstenau/gradle-buildconfig-plugin) 1.1.8, licensed under the [MIT License](Licenses/buildconfig_MIT.txt).
+* [RSyntaxTextArea](https://github.com/bobbylight/RSyntaxTextArea) 2.6.1, licensed under their [modified BSD License](Licenses/RSyntaxTextArea.License.txt).
 
 ## License
 

@@ -25,7 +25,7 @@ public static int stringHash(String str) {
 
 ## Header
 
-Total size: 40 bytes.
+Total size: 64 bytes.
 
 **Size (bytes)**|**Type**|**Name**|**Description**|**Value**
 -------|-------|-------|-------|-------
@@ -39,7 +39,8 @@ Total size: 40 bytes.
 8|long|zeroes2|Unknown|0
 8|long|zeroes3|Unknown|0
 4|int|numMeta2Entries|Number of entries in Meta2 = number of fields in file| 
-4|int|meta2Offset|Total offset of Meta2 Block| 
+4|int|meta2Offset|Total offset of Meta2 Block|
+4|int|zeroes4|Unknown|0 
 4|int|dataLength|Length of the data block| 
 4|int|dataOffset|Total offset of the data block| 
 
@@ -78,7 +79,7 @@ numMeta2Entries|12|meta2BlockEntry|entries|numMeta2Entries entries
 
 FieldInfo contains several types of information:
 
-`(fieldInfo & 0b1)` is a single bit. If set, this is an object, if not set, this is a "primitive" field.  
+`(fieldInfo & 0b1)` as a boolean. If set, this is an object, if not set, this is a "primitive" field.  
 `(fieldInfo & 0b11111111100) >> 2` as an integer is the length of the field name including the `\0` character.  
 `(fieldInfo & 0b1111111111111111111100000000000) >> 11` as an integer is the index into the Meta1Block entries if this is an object.
 
@@ -88,7 +89,7 @@ FieldInfo contains several types of information:
 -----|-----|-----|-----|-----
 numMeta2Entries|??|Field|fields|fields in canonical order 
 
-Note: The size of a field is not sepcified. A heurstic that worked for this application was to find the next biggest offset in Meta2.  
+Note: The size of a field is not sepcified. A heuristic that worked for this application was to find the next biggest offset in Meta2.  
 The next biggest offset is not necessarily the offset of the next Meta2 Entry. I assume that the data size isn't needed when the runtime already knows the data size of each field.
 
 ### Field
@@ -101,7 +102,7 @@ The next biggest offset is not necessarily the offset of the next Meta2 Entry. I
 
 Field data may be 4-byte aligned, depending on the type.
 
-### Field Data
+### Field Data Types
 
 **Type**|**Aligned**|**Size (bytes)**|**Description**
 -----|-----|-----|-----

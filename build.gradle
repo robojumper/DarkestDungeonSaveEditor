@@ -78,6 +78,10 @@ task dist(type: Zip, dependsOn: fatJar) {
         include "**/*"
         into "Licenses"
     }
+    from ("${projectDir}/docs") {
+        include "**/*"
+        into "docs"
+    }
     destinationDir = file("${buildDir}/dist")
     baseName = 'DDSaveReader'
 }
