@@ -1,5 +1,5 @@
 plugins {
-	id 'de.fuerstenau.buildconfig' version '1.1.8'
+    id 'de.fuerstenau.buildconfig' version '1.1.8'
 }
 
 
@@ -8,8 +8,8 @@ apply plugin: 'application'
 apply plugin: 'eclipse'
 
 repositories {
- 	mavenCentral()
-	jcenter()
+    mavenCentral()
+    jcenter()
 }
 
 sourceCompatibility = 1.8
@@ -43,10 +43,10 @@ test {
 }
 
 jar {
-	if (!project.hasProperty("includeSecret")) {
-		exclude 'client_secret.json'
-	}
-	baseName = 'DDSaveReader'
+    if (!project.hasProperty("includeSecret")) {
+        exclude 'client_secret.json'
+    }
+    baseName = 'DDSaveReader'
 }
 
 mainClassName = "de.robojumper.ddsavereader.Main"
@@ -59,7 +59,24 @@ task fatJar(type: Jar) {
                 'Main-Class': mainClassName
     }
     baseName = 'DDSaveReader'
-    archiveName = "$baseName" + ".jar"
+    archiveName = "${baseName}.jar"
     from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
     with jar
+}
+
+
+task dist(type: Zip, dependsOn: fatJar) {
+    from("${buildDir}/libs") {
+        include 'DDSaveReader.jar'
+    }
+    from("${projectDir}") {
+        include 'LICENSE'
+        include 'README.md'
+    }
+    from ("${projectDir}/Licenses") {
+        include "**/*"
+        into "Licenses"
+    }
+    destinationDir = file("${buildDir}/dist")
+    baseName = 'DDSaveReader'
 }
