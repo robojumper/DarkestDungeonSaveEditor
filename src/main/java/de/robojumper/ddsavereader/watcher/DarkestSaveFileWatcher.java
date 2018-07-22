@@ -90,7 +90,7 @@ public class DarkestSaveFileWatcher implements Runnable {
                     try {
                         // Don't unhash names as the Save State will do that
                         DsonFile f = new DsonFile(byteArray, UnhashBehavior.NONE);
-                        String jsonString = f.toString();
+                        String jsonString = f.toString() + "\n";
                         result = new DsonParseResult(jsonString, false);
                     } catch (ParseException e) {
                         result = new DsonParseResult(file.getFileName().toString() + ":" + e.getErrorOffset() + " - " + e.getMessage(), true);

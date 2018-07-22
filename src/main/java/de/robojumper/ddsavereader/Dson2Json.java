@@ -82,6 +82,7 @@ public class Dson2Json {
 		if (!outfile.equals("")) {
 			try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(outfile), StandardCharsets.UTF_8)) {
 				writer.write(OutResult, 0, OutResult.length());
+				writer.write("\n");
 			} catch (IOException e) {
 				System.err.println("Could not read " + outfile);
 				System.err.println(e.getMessage());

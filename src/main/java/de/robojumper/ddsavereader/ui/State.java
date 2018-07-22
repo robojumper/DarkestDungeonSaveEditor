@@ -166,7 +166,7 @@ public class State {
             if (Helpers.isSaveFileName(f.getName())) {
                 String content;
                 try {
-                    content = new DsonFile(Files.readAllBytes(f.toPath()), UnhashBehavior.POUNDUNHASH).toString();
+                    content = new DsonFile(Files.readAllBytes(f.toPath()), UnhashBehavior.POUNDUNHASH).toString() + "\n";
                 } catch (Exception e) {
                     content = "Error reading: " + e.getMessage();
                 }

@@ -335,7 +335,7 @@ public class DsonFile {
         if (debug) {
             // sb.append("// HEADER: ");
         }
-        sb.append(indt(indent) + "{\n");
+        sb.append("{\n");
         indent++;
 
         for (int i = 0; i < rootFields.size(); i++) {
@@ -346,7 +346,7 @@ public class DsonFile {
             sb.append("\n");
         }
         indent--;
-        sb.append(indt(indent) + "}\n");
+        sb.append(indt(indent) + "}");
         return sb.toString();
     }
 
