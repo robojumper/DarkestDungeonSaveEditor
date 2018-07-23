@@ -1,14 +1,14 @@
-# Darkest Dungeon Save Reader
+# Darkest Dungeon Save Editor
 
 A Darkest Dungeon Save Game Reader, Editor and Writer. Requires Java 8+.
 
 ## Download
 
-[Releases Page](https://github.com/robojumper/DarkestDungeonSaveReader/releases/)
+[Releases Page](https://github.com/robojumper/DarkestDungeonSaveEditor/releases/)
 
 ## Help Me
 
-Test your save files and report any errors! [Open an issue](https://github.com/robojumper/DarkestDungeonSaveReader/issues/) or [send me a reddit PM](https://www.reddit.com/message/compose/?to=robojumper).  
+Test your save files and report any errors! [Open an issue](https://github.com/robojumper/DarkestDungeonSaveEditor/issues/) or [send me a reddit PM](https://www.reddit.com/message/compose/?to=robojumper).  
 
 ## Motivation & Fundamentals
 
@@ -24,7 +24,7 @@ A full documentation of the format can be found in [docs/dson.md](docs/dson.md).
 
 ## Decoding
 
-    java -jar DDSaveReader.jar decode [--debug, -d] [--names, -n <namefile>] [--output, -o <outfile>] filename
+    java -jar DDSaveEditor.jar decode [--debug, -d] [--names, -n <namefile>] [--output, -o <outfile>] filename
 
 `-d` dumps all metadata without known purpose as comments into the JSON file at the appropriate place.
 This might come in handy when trying to find a pattern in them. With `-d`, the file is not valid JSON, but should be after removing all comments. Files translated without the `-d` flag should be valid JSON.
@@ -37,7 +37,7 @@ When combined with the `-d` flag, the hashed integers are added as comments.
 
 A list can be compiled by running
 
-    java -jar DDSaveReader.jar names [dir1] [dir2] [dir3] [...]
+    java -jar DDSaveEditor.jar names [dir1] [dir2] [dir3] [...]
 
 `dir1`, ... are directories that contain Darkest Dungeon game data. These are usually the game root directory, but can also be mods.  
 There is no output file parameter, just pipe it to a file (append `> names.txt`).
@@ -46,7 +46,7 @@ There is no output file parameter, just pipe it to a file (append `> names.txt`)
 
 There also is a save writer:
 
-    java -jar DDSaveReader.jar encode [--output, -o outfile] filename
+    java -jar DDSaveEditor.jar encode [--output, -o outfile] filename
 
 The input file must be a save file decoded **without a name file** and **without the debug parameter**. Providing a name file changes the JSON structure and replaces some integers with strings, which breaks the game compatibility.
 
@@ -67,7 +67,7 @@ If you have done that, create a file `client_secret.json` with the following con
 
 And launch it via
 
-    java -jar DDSaveReader.jar sheets [--names, -n <namefile>] [--sheet, -s <sheetid>] saveDir
+    java -jar DDSaveEditor.jar sheets [--names, -n <namefile>] [--sheet, -s <sheetid>] saveDir
 
 or the GUI (`Tools->Spreadsheets`).
 
@@ -75,7 +75,7 @@ You will be asked whether to grant your application access to the spreadsheets. 
 
 ## Building
 
-The application uses Gradle to build. You can build a complete jar file using `gradlew fatJar`. The jar file can be found as `build/libs/DDSaveReader.jar`.
+The application uses Gradle to build. You can build a complete jar file using `gradlew fatJar`. The jar file can be found as `build/libs/DDSaveEditor.jar`.
 
 If you are using the spreadsheets service, you can add the `client_secret.json` to `src/main/resources` and build with `gradlew fatJar -PincludeSecret`. This will include the id and secret in the jar file so you don't need to add a separate `client_secret.json` to the file system, just make sure you don't accidentally give this jar to anyone else as this would incur the risk of API Key abuse.
 

@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.text.ParseException;
 
+import de.fuerstenau.buildconfig.BuildConfig;
 import de.robojumper.ddsavereader.file.DsonWriter;
 
 public class Json2Dson {
@@ -29,7 +30,7 @@ public class Json2Dson {
         if (i == args.length - 1) {
             infile = args[i++];
         } else {
-            System.err.println("Usage: java -jar DDSaveReader.jar encode [--output, -o outfile] filename");
+            System.err.println("Usage: java -jar " + BuildConfig.JAR_NAME + " encode [--output, -o outfile] filename");
             System.exit(1);
         }
 

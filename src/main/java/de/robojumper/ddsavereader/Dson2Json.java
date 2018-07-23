@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
+import de.fuerstenau.buildconfig.BuildConfig;
 import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.file.DsonTypes;
 import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
@@ -47,7 +48,7 @@ public class Dson2Json {
 		if (i == args.length - 1) {
 			infile = args[i++];
 		} else {
-			System.err.println("Usage: java -jar DDSaveReader.jar decode [--debug, -d] [--names, -n <namefile>] [--output, -o <outfile>] filename");
+			System.err.println("Usage: java -jar " + BuildConfig.JAR_NAME + " decode [--debug, -d] [--names, -n <namefile>] [--output, -o <outfile>] filename");
 			System.exit(1);
 		}
 		

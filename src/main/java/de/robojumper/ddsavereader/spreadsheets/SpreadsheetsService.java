@@ -121,7 +121,7 @@ public class SpreadsheetsService {
             inDir = args[i++];
         } else {
             System.err.println(
-                    "Usage: java -jar DDSaveReader.jar sheets [--names, -n <namefile>] [--sheet, -s <sheetid>] saveDir");
+                    "Usage: java -jar " + BuildConfig.JAR_NAME + " sheets [--names, -n <namefile>] [--sheet, -s <sheetid>] saveDir");
             System.exit(1);
         }
 

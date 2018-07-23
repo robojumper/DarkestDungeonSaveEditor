@@ -33,6 +33,7 @@ buildConfig {
     buildConfigField 'String', 'DISPLAY_NAME', "$displayname"
     buildConfigField 'String', 'GITHUB_URL', "$githuburl"
     buildConfigField 'String', 'UPDATE_URL', "$releasesurl"
+    buildConfigField 'String', 'JAR_NAME', "${jarname}.jar"
     
     clsName = 'BuildConfig'
     packageName = project.group
@@ -47,7 +48,7 @@ jar {
     if (!project.hasProperty("includeSecret")) {
         exclude 'client_secret.json'
     }
-    baseName = 'DDSaveReader'
+    baseName = "$jarname"
 }
 
 mainClassName = "de.robojumper.ddsavereader.Main"
@@ -59,8 +60,8 @@ task fatJar(type: Jar) {
                 'Implementation-Version': project.version,
                 'Main-Class': mainClassName
     }
-    baseName = 'DDSaveReader'
-    archiveName = "${baseName}.jar"
+    baseName = "$jarname"
+    archiveName = "${jarname}.jar"
     from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
     with jar
 }
@@ -68,7 +69,7 @@ task fatJar(type: Jar) {
 
 task dist(type: Zip, dependsOn: fatJar) {
     from("${buildDir}/libs") {
-        include 'DDSaveReader.jar'
+        include "${jarname}.jar"
     }
     from("${projectDir}") {
         include 'LICENSE'
@@ -83,5 +84,5 @@ task dist(type: Zip, dependsOn: fatJar) {
         into "docs"
     }
     destinationDir = file("${buildDir}/dist")
-    baseName = 'DDSaveReader'
+    baseName = "${jarname}"
 }
