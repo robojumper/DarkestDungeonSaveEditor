@@ -30,7 +30,7 @@ Total size: 64 bytes.
 **Size (bytes)**|**Type**|**Name**|**Description**|**Value**
 -------|-------|-------|-------|-------
 4|Raw|magicNr|Magic Nr|01 B1 00 00 
-4|Raw|epsilon|Unknown|either 00 00 00 00 or  00 00 85 5D
+4|Raw|revision|Game Build|00 00 {uint16 LE bytes}
 4|int|headerLength|Length of the Header block|64
 4|int|zeroes|Unknown|0
 4|int|meta1Size|Size of the Meta1 Block|numMeta1Entries << 4
@@ -43,6 +43,8 @@ Total size: 64 bytes.
 4|int|zeroes4|Unknown|0 
 4|int|dataLength|Length of the data block| 
 4|int|dataOffset|Total offset of the data block| 
+
+Note: The revision field contains two zero bytes and the least significant two bytes of the build found in svn_revision.txt, i.e. build `24149` is `00 00 55 5E`, and build `100000` would be `00 00 A0 86`.
 
 ## Meta1 Block
 
