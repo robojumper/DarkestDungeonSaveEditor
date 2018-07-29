@@ -11,9 +11,9 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Stack;
-import java.util.function.Function;
+import java.util.Deque;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParseException;
@@ -25,9 +25,8 @@ public class DsonWriter {
     HeaderBlock header;
     ByteArrayOutputStream data;
     ArrayList<Meta1BlockEntry> meta1Entries;
-    // Stack over Deque for random access .get
-    Stack<Integer> hierarchyHintStack;
-    Stack<String> nameStack;
+    Deque<Integer> hierarchyHintStack;
+    Deque<String> nameStack;
     ArrayList<Meta2BlockEntry> meta2Entries;
 
     public DsonWriter(String jsonData) throws IOException, ParseException {
@@ -47,8 +46,8 @@ public class DsonWriter {
 
         meta1Entries = new ArrayList<>();
         meta2Entries = new ArrayList<>();
-        hierarchyHintStack = new Stack<>();
-        nameStack = new Stack<>();
+        hierarchyHintStack = new ArrayDeque<>();
+        nameStack = new ArrayDeque<>();
         hierarchyHintStack.push(-1);
 
         try {
@@ -92,9 +91,7 @@ public class DsonWriter {
         e2.offset = data.size();
         data.write(name.getBytes(StandardCharsets.UTF_8));
         data.write(0);
-
-        Function<Integer, String> nameMapper = (i) -> i == 0 ? name
-                : (i <= nameStack.size() ? nameStack.get(nameStack.size() - i) : null);
+ 
         try {
             reader.nextToken();
             if (reader.getCurrentToken() == JsonToken.START_OBJECT) {
@@ -137,7 +134,9 @@ public class DsonWriter {
             } else {
                 // Now for the tricky part: Not an object, now we need to determine the type
                 // Same as in DsonField, we first check the hardcoded types
-                if (DsonTypes.isA(FieldType.TYPE_FLOATARRAY, nameMapper)) {
+                // In order to easily use the nameStack's iterator, we temporarily push the field name
+                nameStack.push(name);
+                if (DsonTypes.isA(FieldType.TYPE_FLOATARRAY, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
                         throw new ParseException("Expected START_ARRAY",
@@ -150,7 +149,7 @@ public class DsonWriter {
                         throw new ParseException("Expected VALUE_NUMBER_FLOAT or END_ARRAY",
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
-                } else if (DsonTypes.isA(FieldType.TYPE_INTVECTOR, nameMapper)) {
+                } else if (DsonTypes.isA(FieldType.TYPE_INTVECTOR, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
                         throw new ParseException("Expected START_ARRAY",
@@ -177,7 +176,7 @@ public class DsonWriter {
                     }
                     data.write(intBytes(numElem));
                     data.write(vecData.toByteArray());
-                } else if (DsonTypes.isA(FieldType.TYPE_STRINGVECTOR, nameMapper)) {
+                } else if (DsonTypes.isA(FieldType.TYPE_STRINGVECTOR, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
                         throw new ParseException("Expected START_ARRAY",
@@ -187,6 +186,7 @@ public class DsonWriter {
                     int numElem = 0;
                     while (reader.nextToken() == JsonToken.VALUE_STRING) {
                         numElem += 1;
+                        vecData.write(new byte[(4 - (vecData.size() % 4)) % 4]);
                         vecData.write(stringBytes(reader.getValueAsString()));
                     }
                     if (reader.getCurrentToken() != JsonToken.END_ARRAY) {
@@ -195,14 +195,14 @@ public class DsonWriter {
                     }
                     data.write(intBytes(numElem));
                     data.write(vecData.toByteArray());
-                } else if (DsonTypes.isA(FieldType.TYPE_FLOAT, nameMapper)) {
+                } else if (DsonTypes.isA(FieldType.TYPE_FLOAT, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.VALUE_NUMBER_FLOAT) {
                         throw new ParseException("Expected VALUE_NUMBER_FLOAT",
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
                     data.write(floatBytes(reader.getFloatValue()));
-                } else if (DsonTypes.isA(FieldType.TYPE_CHAR, nameMapper)) {
+                } else if (DsonTypes.isA(FieldType.TYPE_CHAR, nameStack::iterator)) {
                     if (reader.getCurrentToken() != JsonToken.VALUE_STRING) {
                         throw new ParseException(
                                 name + ": Expected VALUE_STRING, got " + reader.getCurrentToken().asString(),
@@ -238,6 +238,7 @@ public class DsonWriter {
                     throw new ParseException("Field " + name + " not identified",
                             (int) reader.getCurrentLocation().getCharOffset());
                 }
+                nameStack.pop();
             }
         } catch (ClassCastException | IllegalStateException e) {
             throw new ParseException("Error writing " + name, (int) reader.getCurrentLocation().getCharOffset());

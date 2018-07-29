@@ -53,6 +53,7 @@ bin/
 .settings/
 .project
 .classpath
+test-output/
 
 # Gradle Build
 bin/

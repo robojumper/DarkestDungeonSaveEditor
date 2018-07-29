@@ -5,7 +5,7 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.Arrays;
-import java.util.function.Function;
+import java.util.Iterator;
 
 import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
 import de.robojumper.ddsavereader.file.DsonTypes.FieldType;
@@ -20,23 +20,6 @@ public class DsonField {
     private DsonField parent;
 
     public String name;
-
-    private Function<Integer, String> nameMapper = new Function<Integer, String>() {
-
-        @Override
-        public String apply(Integer i) {
-            if (i == 0) {
-                return name;
-            } else {
-                DsonField field = parent;
-                for (int p = 1; p < i && field != null; p++) {
-                    field = field.parent;
-                }
-                return field != null ? field.name : null;
-            }
-        }
-
-    };
 
     public String dataString = "\"UNKNOWN. PLEASE PARSE TYPE\"";
 
@@ -113,7 +96,7 @@ public class DsonField {
     }
 
     private boolean parseFloat() {
-        if (DsonTypes.isA(FieldType.TYPE_FLOAT, nameMapper)) {
+        if (DsonTypes.isA(FieldType.TYPE_FLOAT, this::nameIterator)) {
             if (alignedSize() == 4) {
                 type = FieldType.TYPE_FLOAT;
                 byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
@@ -126,23 +109,24 @@ public class DsonField {
     }
 
     private boolean parseStringVector() {
-        if (DsonTypes.isA(FieldType.TYPE_STRINGVECTOR, nameMapper)) {
+        if (DsonTypes.isA(FieldType.TYPE_STRINGVECTOR, this::nameIterator)) {
             type = FieldType.TYPE_STRINGVECTOR;
             byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
-            @SuppressWarnings("unused")
             int arrLen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
             // read the rest
             byte[] strings = Arrays.copyOfRange(rawData, alignmentSkip() + 4, alignmentSkip() + alignedSize());
             ByteBuffer bf = ByteBuffer.wrap(strings).order(ByteOrder.LITTLE_ENDIAN);
             StringBuilder sb = new StringBuilder();
             sb.append("[");
-            while (bf.remaining() > 0) {
+            for (int i = 0; i < arrLen; i++) {
                 int strlen = bf.getInt();
                 byte[] tempArr2 = Arrays.copyOfRange(rawData, alignmentSkip() + 4 + bf.position(),
                         alignmentSkip() + 4 + bf.position() + strlen - 1);
                 sb.append("\"" + new String(tempArr2, StandardCharsets.UTF_8).replaceAll("\n", "\\\\n") + "\"");
                 bf.position(bf.position() + strlen);
-                if (bf.remaining() > 0) {
+                if (i < arrLen - 1) {
+                    // Skip for alignment, but only if we have things following
+                    bf.position(bf.position() + ((4 - (bf.position()  % 4)) % 4));
                     sb.append(", ");
                 }
             }
@@ -154,7 +138,7 @@ public class DsonField {
     }
 
     private boolean parseIntVector(UnhashBehavior behavior) {
-        if (DsonTypes.isA(FieldType.TYPE_INTVECTOR, nameMapper)) {
+        if (DsonTypes.isA(FieldType.TYPE_INTVECTOR, this::nameIterator)) {
             byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 4);
             int arrLen = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN).getInt();
             if (alignedSize() == (arrLen + 1) * 4) {
@@ -204,7 +188,7 @@ public class DsonField {
     }
 
     private boolean parseFloatArray() {
-        if (DsonTypes.isA(FieldType.TYPE_FLOATARRAY, nameMapper)) {
+        if (DsonTypes.isA(FieldType.TYPE_FLOATARRAY, this::nameIterator)) {
             type = FieldType.TYPE_FLOATARRAY;
             byte[] floats = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + alignedSize());
             ByteBuffer bf = ByteBuffer.wrap(floats).order(ByteOrder.LITTLE_ENDIAN);
@@ -297,5 +281,21 @@ public class DsonField {
             sb.append(DsonFile.LEBytesToHexStr(rawData));
         }
         return sb.toString();
+    }
+    
+    private Iterator<String> nameIterator() {
+        return new Iterator<String>() {
+            private DsonField field = DsonField.this;
+            @Override
+            public boolean hasNext() {
+                return field != null;
+            }
+
+            @Override
+            public String next() {
+                String f = field.name;
+                field = field.parent;
+                return f;
+            }};
     }
 }

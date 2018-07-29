@@ -2,7 +2,8 @@ package de.robojumper.ddsavereader.file;
 
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.function.Function;
+import java.util.Iterator;
+import java.util.function.Supplier;
 
 public class DsonTypes {
 
@@ -31,7 +32,7 @@ public class DsonTypes {
                 new String[][] { { "read_page_indexes" }, { "raid_read_page_indexes" }, { "raid_unread_page_indexes" }, // journal.json
                         { "dungeons_unlocked" }, { "played_video_list" }, // game_knowledge.json
                         { "trinket_retention_ids" }, // quest.json
-                        { "last_party_guids" }, { "dungeon_history" }, { "buff_group_guids" },  // roster.json
+                        { "last_party_guids" }, { "dungeon_history" }, { "buff_group_guids" }, // roster.json
                         { "result_event_history" }, // town_event.json
                         { "additional_mash_disabled_infestation_monster_class_ids" }, // campaign_mash.json
                         { "party", "heroes" }, // raid.json
@@ -43,6 +44,7 @@ public class DsonTypes {
         // string
         TYPE_STRINGVECTOR(new String[][] { { "goal_ids" }, // quest.json
                 { "roaming_dungeon_2_ids", "*", "s" }, // campaign_mash.json
+                { "quirk_group" }, // campaign_log.json
         }),
         // aligned, arbitrary number of 4-byte floats. emitted as [1.0, 2.0, ...]
         TYPE_FLOATARRAY(new String[][] { { "map", "bounds" }, { "areas", "*", "bounds" },
@@ -88,15 +90,13 @@ public class DsonTypes {
     /**
      * Determines whether a field is hardcoded as specific type.
      * 
-     * @param type       One of TYPE_CHAR, TYPE_FLOAT, TYPE_INTVECTOR,
-     *                   TYPE_STRINGVECTOR, TYPE_FLOATARRAY
-     * @param nameMapper Function that returns field and parent field names.
-     *                   nameMapper.apply(0) is the field's name,
-     *                   nameMapper.apply(1) is the parent field's name, ... If
-     *                   there are "not enough" parents, returns null
+     * @param type  One of TYPE_CHAR, TYPE_FLOAT, TYPE_INTVECTOR, TYPE_STRINGVECTOR,
+     *              TYPE_FLOATARRAY
+     * @param names Supplied that gives an Iterator that yields field names, first
+     *              the current field name, then the parent, ...
      * @return True if a matching field is found.
      */
-    static boolean isA(FieldType type, Function<Integer, String> nameMapper) {
+    static boolean isA(FieldType type, Supplier<Iterator<String>> names) {
 
         String[][] arr = type.names;
 
@@ -108,13 +108,14 @@ public class DsonTypes {
         boolean match;
         for (int i = 0; i < arr.length; i++) {
             match = true;
-            checkString = nameMapper.apply(0);
+            Iterator<String> nameIter = names.get();
+            checkString = nameIter.next();
             for (int j = arr[i].length - 1; j >= 0; j--) {
                 if (checkString == null || !(arr[i][j].equals("*") || arr[i][j].equals(checkString))) {
                     match = false;
                     break;
                 }
-                checkString = nameMapper.apply(arr[i].length - j);
+                checkString = nameIter.hasNext() ? nameIter.next() : null;
             }
             if (match) {
                 return true;
