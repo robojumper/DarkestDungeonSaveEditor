@@ -30,7 +30,7 @@ public class Json2Dson {
         if (i == args.length - 1) {
             infile = args[i++];
         } else {
-            System.err.println("Usage: java -jar " + BuildConfig.JAR_NAME + " encode [--output, -o outfile] filename");
+            System.err.println("Usage: java -jar " + BuildConfig.JAR_NAME + ".jar encode [--output, -o outfile] filename");
             System.exit(1);
         }
 

@@ -41,9 +41,8 @@ import de.robojumper.ddsavereader.util.ReadNames;
 
 public class State {
 
-    private static final File SETTINGS_FILE = new File(System.getProperty("user.home"),
-            ".store/ddsavereader/uisettings.properties");
-    private static final File BACKUP_DIR = new File(System.getProperty("user.home"), ".store/ddsavereader/backups");
+    private static final File SETTINGS_FILE = new File(Helpers.DATA_DIR, "uisettings.properties");
+    private static final File BACKUP_DIR = new File(Helpers.DATA_DIR, "/backups");
 
     public enum Status {
         OK(Resources.OK_ICON), WARNING(Resources.WARNING_ICON), ERROR(Resources.ERROR_ICON);
@@ -124,6 +123,7 @@ public class State {
                 SETTINGS_FILE.getParentFile().mkdirs();
                 SETTINGS_FILE.createNewFile();
             }
+            Helpers.hideDataDir();
             prop.setProperty("saveDir", saveDir);
             prop.setProperty("gameDir", gameDir);
             prop.setProperty("modsDir", modsDir);
@@ -166,7 +166,8 @@ public class State {
             if (Helpers.isSaveFileName(f.getName())) {
                 String content;
                 try {
-                    content = new DsonFile(Files.readAllBytes(f.toPath()), UnhashBehavior.POUNDUNHASH).toString() + "\n";
+                    content = new DsonFile(Files.readAllBytes(f.toPath()), UnhashBehavior.POUNDUNHASH).toString()
+                            + "\n";
                 } catch (Exception e) {
                     content = "Error reading: " + e.getMessage();
                 }

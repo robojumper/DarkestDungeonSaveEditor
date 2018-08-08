@@ -34,7 +34,8 @@ buildConfig {
     buildConfigField 'String', 'GITHUB_URL', "$githuburl"
     buildConfigField 'String', 'UPDATE_URL', "$releasesurl"
     buildConfigField 'String', 'JAR_NAME', "${jarname}.jar"
-    
+    buildConfigField 'String', 'DATA_DIR', "$datadir"
+
     clsName = 'BuildConfig'
     packageName = project.group
     charset = 'UTF-8'

@@ -1,7 +1,6 @@
 package de.robojumper.ddsavereader.spreadsheets;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -39,6 +38,7 @@ import com.google.api.services.sheets.v4.model.*;
 
 import de.robojumper.ddsavereader.model.CampaignLog.BaseRTTI;
 import de.robojumper.ddsavereader.model.CampaignLog.Chapter;
+import de.robojumper.ddsavereader.util.Helpers;
 import de.fuerstenau.buildconfig.BuildConfig;
 import de.robojumper.ddsavereader.file.DsonTypes;
 import de.robojumper.ddsavereader.model.Hero;
@@ -49,8 +49,6 @@ import de.robojumper.ddsavereader.watcher.DarkestSaveFileWatcher.DsonParseResult
 public class SpreadsheetsService {
     private static final String APPLICATION_NAME = "robojumper-" + BuildConfig.NAME + "/" + BuildConfig.VERSION;
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
-    // Directory to store user credentials.
-    private static final File CREDENTIALS_FOLDER = new File(System.getProperty("user.home"), ".store/ddsavereader");
 
     private static final List<String> SCOPES = Collections.singletonList(SheetsScopes.SPREADSHEETS);
     private static final String CLIENT_SECRET_DIR = "/client_secret.json";
@@ -87,7 +85,7 @@ public class SpreadsheetsService {
 
         // Build flow and trigger user authorization request.
         GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(HTTP_TRANSPORT, JSON_FACTORY,
-                clientSecrets, SCOPES).setDataStoreFactory(new FileDataStoreFactory(CREDENTIALS_FOLDER))
+                clientSecrets, SCOPES).setDataStoreFactory(new FileDataStoreFactory(Helpers.DATA_DIR))
                         .setAccessType("offline").build();
         return new AuthorizationCodeInstalledApp(flow, new LocalServerReceiver()).authorize("user");
     }
@@ -121,7 +119,7 @@ public class SpreadsheetsService {
             inDir = args[i++];
         } else {
             System.err.println(
-                    "Usage: java -jar " + BuildConfig.JAR_NAME + " sheets [--names, -n <namefile>] [--sheet, -s <sheetid>] saveDir");
+                    "Usage: java -jar " + BuildConfig.JAR_NAME + ".jar sheets [--names, -n <namefile>] [--sheet, -s <sheetid>] saveDir");
             System.exit(1);
         }
 
@@ -159,6 +157,7 @@ public class SpreadsheetsService {
         if (cred == null) {
             return;
         }
+        Helpers.hideDataDir();
         SheetUpdater sheetUpdater = makeUpdaterRunnable(spreadsheetId, saveDir, cred, HTTP_TRANSPORT);
 
         // Hack box so that we can refer to the future (no pun intented)

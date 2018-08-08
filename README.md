@@ -1,22 +1,18 @@
 # Darkest Dungeon Save Editor
 
+[![Build Status](https://travis-ci.org/robojumper/DarkestDungeonSaveEditor.svg?branch=master)](https://travis-ci.org/robojumper/DarkestDungeonSaveEditor)
+[![GitHub license](https://img.shields.io/github/license/robojumper/DarkestDungeonSaveEditor.svg)](https://github.com/robojumper/DarkestDungeonSaveEditor/blob/master/LICENSE)
+[![GitHub release](https://img.shields.io/github/release/robojumper/DarkestDungeonSaveEditor.svg)](https://github.com/robojumper/DarkestDungeonSaveEditor/releases/latest)
+[![Github issues](https://img.shields.io/badge/save%20files-welcome-brightgreen.svg)](https://github.com/robojumper/DarkestDungeonSaveEditor/issues/)
+[![reddit contact](https://img.shields.io/badge/contact-reddit-%23FF5700.svg)](https://www.reddit.com/message/compose/?to=robojumper)
+
 A Darkest Dungeon Save Game Reader, Editor and Writer. Requires Java 8+.
-
-## Download
-
-[Releases Page](https://github.com/robojumper/DarkestDungeonSaveEditor/releases/)
-
-## Help Me
-
-Test your save files and report any errors! [Open an issue](https://github.com/robojumper/DarkestDungeonSaveEditor/issues/) or [send me a reddit PM](https://www.reddit.com/message/compose/?to=robojumper).  
 
 ## Motivation & Fundamentals
 
-Darkest Dungeon uses a proprietary save fomat. The files have a `.json` extension, but are actually binary files with four distinct blocks. The first block is a header with metainformation about the whole file. The second block contains information about all objects in the file. The third block contains information about all fields in the file, and the fourth block is the actual data with field names and field data.
+Darkest Dungeon uses a proprietary save fomat. The files have a `.json` extension, but are actually binary files.
 
-While the general structure of the format resembles JSON, there are subtle differences. For one, there are types in the binary data that don't exist in JSON in the same way. A very simple example is `int` vs. `float`: The game doesn't include any information to distinguish between the two, both are 4-byte sized data. There are also some more exotic types. Hence, the application needs to include hardcoded information about some types (see `DsonTypes.java`).
-
-A full documentation of the format can be found in [docs/dson.md](docs/dson.md).
+While the general structure of the format resembles JSON, there are differences. A full documentation of the format can be found in [docs/dson.md](docs/dson.md).
 
 ## GUI
 
