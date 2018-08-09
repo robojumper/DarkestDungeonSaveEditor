@@ -458,6 +458,7 @@ public class MainWindow {
     private static final void directoryChooser(String def, Consumer<String> onSuccess) {
         JFileChooser chooser = new JFileChooser();
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.putClientProperty("JFileChooser.appBundleIsTraversable", "always");
         int result = chooser.showOpenDialog(null);
         if (result == JFileChooser.APPROVE_OPTION) {
             onSuccess.accept(chooser.getSelectedFile().getAbsolutePath());
