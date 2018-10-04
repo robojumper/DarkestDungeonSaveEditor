@@ -401,7 +401,7 @@ public class MainWindow {
         contentPanel.add(panel, BorderLayout.CENTER);
         panel.setLayout(new BoxLayout(panel, BoxLayout.LINE_AXIS));
 
-        tabbedPane = new JTabbedPane(JTabbedPane.TOP);
+        tabbedPane = new JTabbedPane(JTabbedPane.LEFT);
         tabbedPane.addChangeListener(e -> {
             updateSaveStatus();
         });
