@@ -250,7 +250,11 @@ public class State {
 
     public boolean canSave() {
         return files.values().stream().filter(s -> s.changed() && !s.canSave()).count() == 0
-                && files.values().stream().filter(s -> s.changed()).count() > 0;
+                && anyChanges();
+    }
+    
+    public boolean anyChanges() {
+        return files.values().stream().filter(s -> s.changed()).count() > 0; 
     }
 
     private void rescanNames() {

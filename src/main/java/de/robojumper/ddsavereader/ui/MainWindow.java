@@ -22,8 +22,8 @@ import java.util.function.Consumer;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.Icon;
 import javax.swing.JButton;
+import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -34,6 +34,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.border.TitledBorder;
@@ -71,6 +72,9 @@ public class MainWindow {
     private JButton makeBackupButton, restoreBackupButton;
     private JButton discardChangesButton, reloadButton;
     private JMenuItem mntmSpreadsheets;
+    private JButton btnNewUpdateAvailable;
+
+    private static volatile Release latestRelease;
 
     private State state = new State();
 
@@ -81,7 +85,46 @@ public class MainWindow {
         EventQueue.invokeLater(new Runnable() {
             public void run() {
                 try {
+                    // The vast majority of our time spent on loading will be loading
+                    // the state -- since it loads the entire game data for names etc.
+                    // This is ugly, but I don't care enough about UI to make it properly
+                    // multithreaded.
                     MainWindow window = new MainWindow();
+                    
+                    final JOptionPane optionPane = new JOptionPane("Loading game data, please stand by.", JOptionPane.INFORMATION_MESSAGE, JOptionPane.DEFAULT_OPTION, null, new Object[]{}, null);
+
+                    final JDialog dialog = new JDialog();
+                    dialog.setTitle("Loading...");
+                    dialog.setModal(true);
+                    dialog.setLocationRelativeTo(null);
+
+                    dialog.setContentPane(optionPane);
+
+                    dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+                    dialog.addWindowListener(new WindowAdapter() {
+                        @Override
+                        public void windowClosing(WindowEvent e) {
+                            System.exit(0);
+                        }
+                    });
+                    dialog.pack();
+                    
+                    new Thread(new Runnable() {
+                        
+                        @Override
+                        public void run() {
+                            window.state.init();
+                            // Hack -- doing it not from the UI Thread. We should be safe
+                            // though, since we should we be blocked on setVisible...
+                            // (Yes, I know, multithreading and "should be" is a terrible combination)
+                            dialog.dispose();
+                        }
+                    }).start();
+                    
+                    dialog.setAlwaysOnTop(true); 
+                    dialog.setVisible(true);
+
+                    window.initSettings();
                     window.frame.setVisible(true);
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -95,11 +138,9 @@ public class MainWindow {
      */
     public MainWindow() {
         initialize();
-        initSettings();
     }
 
     private void initSettings() {
-        state.init();
         updateSaveDir();
         updateGameDir();
         updateModsDir();
@@ -174,20 +215,19 @@ public class MainWindow {
                             break;
                         case 1:
                             try {
-                                Desktop.getDesktop().browse(new URI(BuildConfig.GITHUB_URL
-                                        + "/blob/master/README.md#spreadsheets"));
+                                Desktop.getDesktop().browse(
+                                        new URI(BuildConfig.GITHUB_URL + "/blob/master/README.md#spreadsheets"));
                             } catch (IOException | URISyntaxException e1) {
                                 e1.printStackTrace();
                             }
                         }
                         return;
                     }
-                    String sheetID = JOptionPane.showInputDialog(frame, "Set Spreadsheet ID",
-                            state.getLastSheetID());
+                    String sheetID = JOptionPane.showInputDialog(frame, "Set Spreadsheet ID", state.getLastSheetID());
                     if (sheetID != null) {
                         state.setLastSheetID(sheetID);
                         sheetUpdater = SpreadsheetsService.makeUpdaterRunnable(sheetID, state.getSaveDir(), cred,
-                            HTTP_TRANSPORT);
+                                HTTP_TRANSPORT);
                     } else {
                         return;
                     }
@@ -237,10 +277,7 @@ public class MainWindow {
                     }
                 }, 3, 120, TimeUnit.SECONDS));
 
-                JOptionPane.showConfirmDialog(null,
-                        runningLabel,
-                        "Spreadsheets",
-                        JOptionPane.DEFAULT_OPTION,
+                JOptionPane.showConfirmDialog(null, runningLabel, "Spreadsheets", JOptionPane.DEFAULT_OPTION,
                         JOptionPane.PLAIN_MESSAGE);
                 sheetUpdater.cancel();
                 future.get().cancel(false);
@@ -270,6 +307,35 @@ public class MainWindow {
             }
         });
         mnHelp.add(mntmAbout);
+
+        Component horizontalGlue_1 = Box.createHorizontalGlue();
+        menuBar.add(horizontalGlue_1);
+
+        btnNewUpdateAvailable = new JButton("New Update Available...");
+        btnNewUpdateAvailable.setVisible(false);
+        btnNewUpdateAvailable.setEnabled(false);
+        btnNewUpdateAvailable.addActionListener(e -> {
+            if (latestRelease != null) {
+                Version curr = new Version(BuildConfig.VERSION);
+                Object[] options = { "OK", "Go to Releases Page" };
+                int openInstructions = JOptionPane.showOptionDialog(frame,
+                        "There are updates available!\nCurrent version: " + curr.toString() + ", new version: "
+                                + latestRelease.version.toString(),
+                        "Update available", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, null, options,
+                        options[1]);
+                switch (openInstructions) {
+                case 0:
+                    break;
+                case 1:
+                    try {
+                        Desktop.getDesktop().browse(new URI(latestRelease.htmlUrl));
+                    } catch (IOException | URISyntaxException e1) {
+                        e1.printStackTrace();
+                    }
+                }
+            }
+        });
+        menuBar.add(btnNewUpdateAvailable);
 
         JPanel contentPanel = new JPanel();
         frame.getContentPane().add(contentPanel, BorderLayout.CENTER);
@@ -527,14 +593,16 @@ public class MainWindow {
             });
             RTextScrollPane sp = new RTextScrollPane(a);
             compPanel.add(sp);
-            tabbedPane.addTab((f.changed() ? "*" : "") + f.name, iconFor(f), compPanel);
+            tabbedPane.addTab((f.changed() ? "*" : "") + f.name, compPanel);
+            tabbedPane.setForegroundAt(tabbedPane.indexOfComponent(compPanel), colorFor(f));
         }
     }
 
     private void updateFile(Tab t) {
         SaveFile f = state.getSaveFile(t.fileName);
         tabbedPane.setTitleAt(tabbedPane.indexOfComponent(t), (f.changed() ? "*" : "") + f.name);
-        tabbedPane.setIconAt(tabbedPane.indexOfComponent(t), iconFor(f));
+        // tabbedPane.setIconAt(tabbedPane.indexOfComponent(t), iconFor(f));
+        tabbedPane.setForegroundAt(tabbedPane.indexOfComponent(t), colorFor(f));
         t.area.getHighlighter().removeAllHighlights();
         if (!f.canSave()) {
             Highlighter.HighlightPainter redPainter = new DefaultHighlighter.DefaultHighlightPainter(
@@ -548,16 +616,16 @@ public class MainWindow {
         discardChangesButton.setEnabled(f.changed());
     }
 
-    private static Icon iconFor(SaveFile f) {
+    private static Color colorFor(SaveFile f) {
         if (f.changed()) {
-            return f.canSave() ? Resources.OK_ICON : Resources.ERROR_ICON;
+            return f.canSave() ? new Color(50, 131, 50) : Color.RED;
         } else {
-            return f.canSave() ? null : Resources.WARNING_ICON;
+            return f.canSave() ? Color.BLACK : Color.ORANGE;
         }
     }
 
     private void updateSaveStatus() {
-        saveStatus.setIcon(state.canSave() ? Status.OK.icon : Status.ERROR.icon);
+        saveStatus.setIcon(state.anyChanges() ? (state.canSave() ? Status.OK.icon : Status.ERROR.icon) : null);
         saveButton.setEnabled(state.canSave());
         Component tab = tabbedPane.getSelectedComponent();
         if (tab != null) {
@@ -589,31 +657,33 @@ public class MainWindow {
         }
         return true;
     }
-    
+
     private void checkForUpdates() {
-        try {
-            Release r = UpdateChecker.getLatestRelease();
-            Version curr = new Version(BuildConfig.VERSION);
-            if (r.version.compareTo(curr) > 0) {
-                Object[] options = { "OK", "Go to Releases Page" };
-                int openInstructions = JOptionPane.showOptionDialog(frame,
-                        "There are updates available!\nCurrent version: " + curr.toString() + ", new version: " + r.version.toString(),
-                        "Update available", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, null, options,
-                        options[1]);
-                switch (openInstructions) {
-                case 0:
-                    break;
-                case 1:
-                    try {
-                        Desktop.getDesktop().browse(new URI(r.htmlUrl));
-                    } catch (IOException | URISyntaxException e1) {
-                        e1.printStackTrace();
+        new Thread(new Runnable() {
+
+            @Override
+            public void run() {
+                try {
+                    Release r = UpdateChecker.getLatestRelease();
+                    Version curr = new Version(BuildConfig.VERSION);
+
+                    if (r.version.compareTo(curr) > 0) {
+                        SwingUtilities.invokeLater(new Runnable() {
+
+                            @Override
+                            public void run() {
+                                latestRelease = r;
+                                btnNewUpdateAvailable.setVisible(true);
+                                btnNewUpdateAvailable.setEnabled(true);
+                            }
+                        });
                     }
+                } catch (Exception e) {
+                    System.out.println("Update check failed.");
                 }
             }
-        } catch (Exception e) {
-            System.out.println("Update check failed.");
-        }
+
+        }).start();
     }
 
     private class Tab extends JPanel {

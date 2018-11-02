@@ -55,7 +55,7 @@ public class DsonWriter {
             // getCurrentToken() returns null if we start fresh, so we enter the right
             // condition
             if (reader.getCurrentToken() != JsonToken.START_OBJECT && reader.nextToken() != JsonToken.START_OBJECT) {
-                throw new ParseException("Expected START_OBJECT", (int) reader.getCurrentLocation().getCharOffset());
+                throw new ParseException("Expected {", (int) reader.getCurrentLocation().getCharOffset());
             }
 
             while (true) {
@@ -67,7 +67,7 @@ public class DsonWriter {
             }
 
             if (reader.getCurrentToken() != JsonToken.END_OBJECT) {
-                throw new ParseException("Expected END_OBJECT", (int) reader.getCurrentLocation().getCharOffset());
+                throw new ParseException("Expected }", (int) reader.getCurrentLocation().getCharOffset());
             }
         } catch (JsonParseException e) {
             throw new ParseException(e.getMessage(), (int) reader.getCurrentLocation().getCharOffset());
@@ -115,7 +115,7 @@ public class DsonWriter {
                     }
 
                     if (reader.getCurrentToken() != JsonToken.END_OBJECT) {
-                        throw new ParseException("Expected END_OBJECT",
+                        throw new ParseException("Expected }",
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
                     e1.numDirectChildren = numDirectChildren;
@@ -139,20 +139,20 @@ public class DsonWriter {
                 if (DsonTypes.isA(FieldType.TYPE_FLOATARRAY, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
-                        throw new ParseException("Expected START_ARRAY",
+                        throw new ParseException("Expected [",
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
                     while (reader.nextToken() == JsonToken.VALUE_NUMBER_FLOAT) {
                         data.write(floatBytes(reader.getFloatValue()));
                     }
                     if (reader.getCurrentToken() != JsonToken.END_ARRAY) {
-                        throw new ParseException("Expected VALUE_NUMBER_FLOAT or END_ARRAY",
+                        throw new ParseException("Expected number or ]",
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
                 } else if (DsonTypes.isA(FieldType.TYPE_INTVECTOR, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
-                        throw new ParseException("Expected START_ARRAY",
+                        throw new ParseException("Expected [",
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
                     ByteArrayOutputStream vecData = new ByteArrayOutputStream();
@@ -161,7 +161,7 @@ public class DsonWriter {
                             || reader.getCurrentToken() == JsonToken.VALUE_STRING) {
                         if (reader.getCurrentToken() == JsonToken.VALUE_STRING) {
                             if (!reader.getValueAsString().startsWith("###")) {
-                                throw new ParseException("Must be hashed string",
+                                throw new ParseException("Expected hashed string (###)",
                                         (int) reader.getCurrentLocation().getCharOffset());
                             }
                             vecData.write(stringBytes(reader.getValueAsString()));
@@ -171,7 +171,7 @@ public class DsonWriter {
                         numElem += 1;
                     }
                     if (reader.getCurrentToken() != JsonToken.END_ARRAY) {
-                        throw new ParseException("Expected VALUE_NUMBER_INT, VALUE_STRING or END_ARRAY",
+                        throw new ParseException("Expected integer, hashed string or ]",
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
                     data.write(intBytes(numElem));
@@ -179,7 +179,7 @@ public class DsonWriter {
                 } else if (DsonTypes.isA(FieldType.TYPE_STRINGVECTOR, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
-                        throw new ParseException("Expected START_ARRAY",
+                        throw new ParseException("Expected [",
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
                     ByteArrayOutputStream vecData = new ByteArrayOutputStream();
@@ -190,7 +190,7 @@ public class DsonWriter {
                         vecData.write(stringBytes(reader.getValueAsString()));
                     }
                     if (reader.getCurrentToken() != JsonToken.END_ARRAY) {
-                        throw new ParseException("Expected VALUE_NUMBER_INT, VALUE_STRING or END_ARRAY",
+                        throw new ParseException("Expected string or ]",
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
                     data.write(intBytes(numElem));
@@ -198,14 +198,14 @@ public class DsonWriter {
                 } else if (DsonTypes.isA(FieldType.TYPE_FLOAT, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.VALUE_NUMBER_FLOAT) {
-                        throw new ParseException("Expected VALUE_NUMBER_FLOAT",
+                        throw new ParseException("Expected number",
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
                     data.write(floatBytes(reader.getFloatValue()));
                 } else if (DsonTypes.isA(FieldType.TYPE_CHAR, nameStack::iterator)) {
                     if (reader.getCurrentToken() != JsonToken.VALUE_STRING) {
                         throw new ParseException(
-                                name + ": Expected VALUE_STRING, got " + reader.getCurrentToken().asString(),
+                                name + ": Expected character, got " + reader.getCurrentToken().asString(),
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
                     data.write(reader.getValueAsString().getBytes(StandardCharsets.UTF_8)[0]);
@@ -223,12 +223,12 @@ public class DsonWriter {
                             data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
                                     .putInt(reader.getBooleanValue() ? 1 : 0).array());
                         } else {
-                            throw new ParseException("Expected VALUE_TRUE or VALUE_FALSE",
+                            throw new ParseException("Field type not identified, only expecting\"true\" or \"false\" in arrays",
                                     (int) reader.getCurrentLocation().getCharOffset());
                         }
                     }
                     if (reader.nextToken() != JsonToken.END_ARRAY) {
-                        throw new ParseException("Expected END_ARRAY",
+                        throw new ParseException("Expected ]",
                                 (int) reader.getCurrentLocation().getCharOffset());
                     }
                 } else if (reader.getCurrentToken() == JsonToken.VALUE_TRUE
