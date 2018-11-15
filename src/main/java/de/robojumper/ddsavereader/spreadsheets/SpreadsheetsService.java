@@ -119,8 +119,8 @@ public class SpreadsheetsService {
         if (i == args.length - 1) {
             inDir = args[i++];
         } else {
-            System.err.println(
-                    "Usage: java -jar " + BuildConfig.JAR_NAME + ".jar sheets [--names, -n <namefile>] [--sheet, -s <sheetid>] saveDir");
+            System.err.println("Usage: java -jar " + BuildConfig.JAR_NAME
+                    + ".jar sheets [--names, -n <namefile>] [--sheet, -s <sheetid>] saveDir");
             System.exit(1);
         }
 
@@ -162,7 +162,7 @@ public class SpreadsheetsService {
         SheetUpdater sheetUpdater = makeUpdaterRunnable(spreadsheetId, saveDir, cred, HTTP_TRANSPORT);
 
         CountDownLatch latch = new CountDownLatch(1);
-        
+
         ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -175,7 +175,7 @@ public class SpreadsheetsService {
 
             }
         }, 3, interval, timeUnit);
-        
+
         try {
             latch.await();
         } catch (InterruptedException e) {
@@ -193,8 +193,8 @@ public class SpreadsheetsService {
      * @throws IOException
      * @throws GeneralSecurityException
      */
-    public static SheetUpdater makeUpdaterRunnable(String spreadsheetId, String saveDir, Credential cred, NetHttpTransport HTTP_TRANSPORT)
-            throws IOException {
+    public static SheetUpdater makeUpdaterRunnable(String spreadsheetId, String saveDir, Credential cred,
+            NetHttpTransport HTTP_TRANSPORT) throws IOException {
 
         Sheets service = new Sheets.Builder(HTTP_TRANSPORT, JSON_FACTORY, cred).setApplicationName(APPLICATION_NAME)
                 .build();

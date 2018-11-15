@@ -90,8 +90,9 @@ public class MainWindow {
                     // This is ugly, but I don't care enough about UI to make it properly
                     // multithreaded.
                     MainWindow window = new MainWindow();
-                    
-                    final JOptionPane optionPane = new JOptionPane("Loading game data, please wait...", JOptionPane.INFORMATION_MESSAGE, JOptionPane.DEFAULT_OPTION, null, new Object[]{}, null);
+
+                    final JOptionPane optionPane = new JOptionPane("Loading game data, please wait...",
+                            JOptionPane.INFORMATION_MESSAGE, JOptionPane.DEFAULT_OPTION, null, new Object[] {}, null);
 
                     final JDialog dialog = new JDialog();
                     dialog.setTitle("Loading...");
@@ -108,9 +109,9 @@ public class MainWindow {
                         }
                     });
                     dialog.pack();
-                    
+
                     new Thread(new Runnable() {
-                        
+
                         @Override
                         public void run() {
                             window.state.init();
@@ -120,8 +121,8 @@ public class MainWindow {
                             dialog.dispose();
                         }
                     }).start();
-                    
-                    dialog.setAlwaysOnTop(true); 
+
+                    dialog.setAlwaysOnTop(true);
                     dialog.setVisible(true);
 
                     window.initSettings();
@@ -254,7 +255,7 @@ public class MainWindow {
 
                 JOptionPane.showConfirmDialog(null, runningLabel, "Spreadsheets", JOptionPane.DEFAULT_OPTION,
                         JOptionPane.PLAIN_MESSAGE);
-                
+
                 if (sheetUpdater.isRunning()) {
                     sheetUpdater.cancel();
                 }
