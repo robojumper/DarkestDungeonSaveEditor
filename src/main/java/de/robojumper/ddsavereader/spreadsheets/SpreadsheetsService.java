@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -160,42 +161,27 @@ public class SpreadsheetsService {
         Helpers.hideDataDir();
         SheetUpdater sheetUpdater = makeUpdaterRunnable(spreadsheetId, saveDir, cred, HTTP_TRANSPORT);
 
-        // Hack box so that we can refer to the future (no pun intented)
-        final class Box<T> {
-            private T obj;
-
-            void set(T obj) {
-                this.obj = obj;
-            }
-
-            T get() {
-                return this.obj;
-            }
-
-            Box() {
-                this(null);
-            }
-
-            Box(T obj) {
-                set(obj);
-            }
-        }
-
-        Box<ScheduledFuture<?>> future = new Box<>();
-        future.set(scheduler.scheduleAtFixedRate(new Runnable() {
+        CountDownLatch latch = new CountDownLatch(1);
+        
+        ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(new Runnable() {
 
             @Override
             public void run() {
                 if (sheetUpdater.isRunning()) {
                     sheetUpdater.run();
                 } else {
-                    if (future.get() != null) {
-                        future.get().cancel(false);
-                    }
+                    latch.countDown();
                 }
 
             }
-        }, 3, interval, timeUnit));
+        }, 3, interval, timeUnit);
+        
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        future.cancel(false);
     }
 
     /**
