@@ -91,7 +91,7 @@ public class MainWindow {
                     // multithreaded.
                     MainWindow window = new MainWindow();
                     
-                    final JOptionPane optionPane = new JOptionPane("Loading game data, please stand by.", JOptionPane.INFORMATION_MESSAGE, JOptionPane.DEFAULT_OPTION, null, new Object[]{}, null);
+                    final JOptionPane optionPane = new JOptionPane("Loading game data, please wait...", JOptionPane.INFORMATION_MESSAGE, JOptionPane.DEFAULT_OPTION, null, new Object[]{}, null);
 
                     final JDialog dialog = new JDialog();
                     dialog.setTitle("Loading...");
@@ -239,48 +239,26 @@ public class MainWindow {
 
                 final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
-                // Hack box so that we can refer to the future (no pun intented)
-                final class Box<T> {
-                    private T obj;
-
-                    void set(T obj) {
-                        this.obj = obj;
-                    }
-
-                    T get() {
-                        return this.obj;
-                    }
-
-                    Box() {
-                        this(null);
-                    }
-
-                    Box(T obj) {
-                        set(obj);
-                    }
-                }
-
-                Box<ScheduledFuture<?>> future = new Box<>();
                 JLabel runningLabel = new JLabel("Running... click OK to cancel!");
-                future.set(scheduler.scheduleAtFixedRate(new Runnable() {
+                ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(new Runnable() {
 
                     @Override
                     public void run() {
                         if (sheetUpdater.isRunning()) {
                             sheetUpdater.run();
                         } else {
-                            if (future.get() != null) {
-                                future.get().cancel(false);
-                                runningLabel.setText("Stopped!");
-                            }
+                            runningLabel.setText("Stopped!");
                         }
                     }
-                }, 3, 120, TimeUnit.SECONDS));
+                }, 3, 120, TimeUnit.SECONDS);
 
                 JOptionPane.showConfirmDialog(null, runningLabel, "Spreadsheets", JOptionPane.DEFAULT_OPTION,
                         JOptionPane.PLAIN_MESSAGE);
-                sheetUpdater.cancel();
-                future.get().cancel(false);
+                
+                if (sheetUpdater.isRunning()) {
+                    sheetUpdater.cancel();
+                }
+                future.cancel(false);
             }
         });
         mnTools.add(mntmSpreadsheets);
@@ -467,7 +445,7 @@ public class MainWindow {
         contentPanel.add(panel, BorderLayout.CENTER);
         panel.setLayout(new BoxLayout(panel, BoxLayout.LINE_AXIS));
 
-        tabbedPane = new JTabbedPane(JTabbedPane.LEFT);
+        tabbedPane = new JTabbedPane(JTabbedPane.TOP);
         tabbedPane.addChangeListener(e -> {
             updateSaveStatus();
         });
