@@ -71,18 +71,18 @@ You will be asked whether to grant your application access to the spreadsheets. 
 
 ## Building
 
-The application uses Gradle to build. You can build a complete jar file using `gradlew fatJar`. The jar file can be found as `build/libs/DDSaveEditor.jar`.
+The application uses Gradle to build. You can build a complete jar file using `./gradlew fatJar`. The jar file can be found as `build/libs/DDSaveEditor.jar`.
 
-If you are using the spreadsheets service, you can add the `client_secret.json` to `src/main/resources` and build with `gradlew fatJar -PincludeSecret`. This will include the id and secret in the jar file so you don't need to add a separate `client_secret.json` to the file system, just make sure you don't accidentally give this jar to anyone else as this would incur the risk of API Key abuse.
+If you are using the spreadsheets service, you can add the `client_secret.json` to `src/main/resources` and build with `./gradlew fatJar -PincludeSecret`. This will include the id and secret in the jar file so you don't need to add a separate `client_secret.json` to the file system, just make sure you don't accidentally give this jar to anyone else as this would incur the risk of API Key abuse.
 
 ### Tests
 
-In `src/tests`, there are a number of save files, some are mine, some are picked from other places on the internet. By running `gradlew test`, the tests check if all of them can be loaded, and produce somewhat correct save files again.  
+In `src/tests`, there are a number of save files, some are mine, some are picked from other places on the internet. By running `./gradlew test`, a round trip-test is performed: the tests check if all of them can be loaded, and produce somewhat correct save files again.  
 If the game updates, we'll probably need to update those save files too (I don't expect major changes to the format, but there might be the occasional new field that needs to be identified).
 
 ## Contributing
 
-Contributions via Pull Requests or Issue reports welcome! For Pull Requests, please make sure that the unit tests pass and include your own save files as tests.
+Contributions via Pull Requests or Issue reports welcome! For Pull Requests, please make sure that the round-trip tests pass and include your own save files as tests.
 
 ## Plans
 

@@ -19,6 +19,15 @@ import com.google.common.io.ByteStreams;
 
 import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
 
+/**
+ * Class that performs round-trip tests on provided save files. Decodes,
+ * encodes, decodes again. A file must encode to the same size that it decoded
+ * from (save for `persist.progression.json`, which has a duplicate key), and
+ * that file must decode to the exact same text that the original file decoded
+ * to. We can't check for binary equality for encoded files, as the game has a
+ * tendency to write garbage bits / bits I don't know the purpose for to the
+ * save file.
+ */
 public class ConverterTests {
 
     @BeforeClass
@@ -93,7 +102,7 @@ public class ConverterTests {
     public void testRedditProfile() throws ParseException, IOException {
         testCorrectConversion("profileReddit");
     }
-    
+
     @Test
     public void testOtherFiles() throws ParseException, IOException {
         testCorrectConversion("otherFiles");
