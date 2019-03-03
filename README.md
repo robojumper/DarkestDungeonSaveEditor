@@ -6,7 +6,7 @@
 [![Github issues](https://img.shields.io/badge/save%20files-welcome-brightgreen.svg)](https://github.com/robojumper/DarkestDungeonSaveEditor/issues/)
 [![reddit contact](https://img.shields.io/badge/contact-reddit-%23FF5700.svg)](https://www.reddit.com/message/compose/?to=robojumper)
 
-A Darkest Dungeon Save Game Reader, Editor and Writer. Requires Java 8+.
+A Darkest Dungeon Save Game Reader, Editor and Writer. Requires Java 8+ Runtime Environment.
 
 ## Motivation & Fundamentals
 
