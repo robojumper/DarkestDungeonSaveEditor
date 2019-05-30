@@ -14,11 +14,12 @@ import de.robojumper.ddsavereader.file.DsonTypes.FieldType;
 import de.robojumper.ddsavereader.file.DsonFile.Meta2Block.Meta2BlockEntry;
 
 public class DsonFile {
-    
+
     public enum UnhashBehavior {
         NONE, // Don't unhash, works in all cases
         UNHASH, // Simple unhash, useful for simply looking at the files
-        POUNDUNHASH, // Unhash as ###string, useful combination: Reasonable safety against accidental collisions, still somewhat readable
+        POUNDUNHASH, // Unhash as ###string, useful combination: Reasonable safety against accidental
+                        // collisions, still somewhat readable
     };
 
     private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
@@ -355,6 +356,39 @@ public class DsonFile {
         return getJSonString(0, false);
     }
 
+    // Whether this File has duplicate fields that will get lost when converting to
+    // string
+    // This doesn't seem to be causing any issues, but is important for test
+    // coverage because
+    // files with duplicate fields will re-encode to a different size.
+    public boolean hasDuplicateFields() {
+        Set<String> fields = new HashSet<>();
+        for (int i = 0; i < rootFields.size(); i++) {
+            if (!fields.add(rootFields.get(i).name)) {
+                return true;
+            }
+            if (hasDuplicateFields(rootFields.get(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasDuplicateFields(DsonField field) {
+        Set<String> fields = new HashSet<>();
+        if (field.type == FieldType.TYPE_OBJECT) {
+            for (int i = 0; i < field.children.length; i++) {
+                if (!fields.add(field.children[i].name)) {
+                    return true;
+                }
+                if (hasDuplicateFields(field.children[i])) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private void writeField(StringBuilder sb, DsonField field, int indent, boolean debug) {
 
         if (debug) {
@@ -383,8 +417,9 @@ public class DsonFile {
             indent++;
             Set<String> emittedFields = new HashSet<>();
             for (int i = 0; i < field.children.length; i++) {
-                // DD has a quirk in one file where one object pops up twice (serialized twice?)
-                // This is not valid JSON and removing it doesn't cause any issues, so let's just remove it here
+                // DD has a quirk in a few files where fields wind up twice (serialized twice?)
+                // This is not valid JSON and removing it doesn't cause any issues, so let's
+                // just remove it here
                 if (!emittedFields.contains(field.children[i].name)) {
                     writeField(sb, field.children[i], indent, debug);
                     emittedFields.add(field.children[i].name);

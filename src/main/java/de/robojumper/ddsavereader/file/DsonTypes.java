@@ -16,7 +16,7 @@ public class DsonTypes {
         TYPE_TWOBOOL, // aligned, 8 bytes (only used in gameplay options??). emitted as [true, true]
         TYPE_STRING, // aligned, int size + null-terminated string of size (including \0)
         TYPE_FILE, // Actually an object, but encoded as a string (embedded DsonFile). used in
-                   // roster.json and map.json
+                    // roster.json and map.json
         TYPE_INT, // aligned, 4 byte integer
         // Begin hardcoded types: these types do not have enough characteristics to make
         // the heuristic work
@@ -37,6 +37,9 @@ public class DsonTypes {
                         { "additional_mash_disabled_infestation_monster_class_ids" }, // campaign_mash.json
                         { "party", "heroes" }, // raid.json
                         { "skill_cooldown_keys" }, // raid.json
+                        { "bufferedSpawningSlotsAvailable" }, // raid.json
+                        { "curioGroups", "*", "curios" }, // raid.json
+                        { "curioGroups", "*", "curio_table_entries" }, // raid.json
                         { "narration_audio_event_queue_tags" }, // loading_screen.json
                         { "dispatched_events" }, // tutorial.json
                 }),
@@ -45,11 +48,15 @@ public class DsonTypes {
         TYPE_STRINGVECTOR(new String[][] { { "goal_ids" }, // quest.json
                 { "roaming_dungeon_2_ids", "*", "s" }, // campaign_mash.json
                 { "quirk_group" }, // campaign_log.json
+                { "backgroundNames" }, // raid.json
+                { "backgroundGroups", "*", "backgrounds" }, // raid.json
+                { "backgroundGroups", "*", "background_table_entries" }, // raid.json
         }),
         // aligned, arbitrary number of 4-byte floats. emitted as [1.0, 2.0, ...]
         TYPE_FLOATARRAY(new String[][] { { "map", "bounds" }, { "areas", "*", "bounds" },
                 { "areas", "*", "tiles", "*", "mappos" }, { "areas", "*", "tiles", "*", "sidepos" }, // map.json
         }),
+        TYPE_TWOINT(new String[][] { { "killRange" } }), // raid.json
         // Unknown Type
         TYPE_UNKNOWN;
 

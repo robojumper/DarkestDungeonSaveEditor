@@ -92,7 +92,20 @@ public class DsonField {
     }
 
     private boolean parseHardcodedType(UnhashBehavior behavior) {
-        return parseFloatArray() || parseIntVector(behavior) || parseStringVector() || parseFloat();
+        return parseFloatArray() || parseIntVector(behavior) || parseStringVector() || parseFloat() || parseTwoInt();
+    }
+
+    private boolean parseTwoInt() {
+        if (DsonTypes.isA(FieldType.TYPE_TWOINT, this::nameIterator)) {
+            if (alignedSize() == 8) {
+                type = FieldType.TYPE_TWOINT;
+                byte[] tempArr = Arrays.copyOfRange(rawData, alignmentSkip(), alignmentSkip() + 8);
+                ByteBuffer buf = ByteBuffer.wrap(tempArr).order(ByteOrder.LITTLE_ENDIAN);
+                dataString = "[" + Integer.toString(buf.getInt()) + ", " + Integer.toString(buf.getInt()) + "]";
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean parseFloat() {
@@ -126,7 +139,7 @@ public class DsonField {
                 bf.position(bf.position() + strlen);
                 if (i < arrLen - 1) {
                     // Skip for alignment, but only if we have things following
-                    bf.position(bf.position() + ((4 - (bf.position()  % 4)) % 4));
+                    bf.position(bf.position() + ((4 - (bf.position() % 4)) % 4));
                     sb.append(", ");
                 }
             }
@@ -282,10 +295,11 @@ public class DsonField {
         }
         return sb.toString();
     }
-    
+
     private Iterator<String> nameIterator() {
         return new Iterator<String>() {
             private DsonField field = DsonField.this;
+
             @Override
             public boolean hasNext() {
                 return field != null;
@@ -296,6 +310,7 @@ public class DsonField {
                 String f = field.name;
                 field = field.parent;
                 return f;
-            }};
+            }
+        };
     }
 }
