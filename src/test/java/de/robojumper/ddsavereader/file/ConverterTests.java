@@ -10,7 +10,9 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
@@ -44,6 +46,7 @@ public class ConverterTests {
 
     public void testCorrectConversion(String folderName) throws ParseException, IOException {
         List<byte[]> files = new ArrayList<>();
+        Set<Integer> dupeFieldFiles = new HashSet<>();
         List<byte[]> decodedFiles = new ArrayList<>();
         List<byte[]> reEncodedFiles = new ArrayList<>();
 
@@ -59,8 +62,11 @@ public class ConverterTests {
         // Every file must decode without throwing exceptions
         for (int i = 0; i < files.size(); i++) {
             try {
-                String file = new DsonFile(files.get(i), UnhashBehavior.POUNDUNHASH).getJSonString(0, false);
-                decodedFiles.add(file.getBytes(StandardCharsets.UTF_8));
+                DsonFile file = new DsonFile(files.get(i), UnhashBehavior.POUNDUNHASH);
+                if (file.hasDuplicateFields()) {
+                    dupeFieldFiles.add(i);
+                }
+                decodedFiles.add(file.getJSonString(0, false).getBytes(StandardCharsets.UTF_8));
             } catch (Exception e) {
                 fail(fileList.get(i) + " doesn't decode", e);
             }
@@ -73,8 +79,9 @@ public class ConverterTests {
             } catch (Exception e) {
                 fail(fileList.get(i) + " doesn't re-endode", e);
             }
-            // Weird quirk
-            if (!fileList.get(i).equals("persist.progression.json")) {
+            // Files with duplicate fields will not have the same size anyway.
+            // Filter them out here
+            if (!dupeFieldFiles.contains(i)) {
                 assertEquals(reEncodedFiles.get(i).length, files.get(i).length,
                         fileList.get(i) + " encodes to different number of bytes");
             }
@@ -106,6 +113,7 @@ public class ConverterTests {
     @Test
     public void testOtherFiles() throws ParseException, IOException {
         testCorrectConversion("otherFiles");
+        testCorrectConversion("backgroundNames");
     }
 
     private List<String> getResourceFiles(String path) throws IOException {

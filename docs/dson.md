@@ -91,7 +91,7 @@ FieldInfo contains several types of information:
 -----|-----|-----|-----|-----
 numMeta2Entries|??|Field|fields|fields in canonical order 
 
-Note: The size of a field is not sepcified. A heuristic that worked for this application was to find the next biggest offset in Meta2.  
+Note: The size of a field is not specified. A heuristic that worked for this application was to find the next biggest offset in Meta2.  
 The next biggest offset is not necessarily the offset of the next Meta2 Entry. I assume that the data size isn't needed when the runtime already knows the data size of each field.
 
 ### Field
@@ -99,7 +99,7 @@ The next biggest offset is not necessarily the offset of the next Meta2 Entry. I
 **Size (bytes)**|**Type**|**Name**|**Description**
 -----|-----|-----|-----
 ??|String|name|field name including `\0` character.
-0-3|Raw|alignment|Optional empty bits for aligment depending on type
+0-3|Raw|alignment|Optional empty bits for alignment depending on type
 ??|Raw|data|field data
 
 Field data may be 4-byte aligned, depending on the type.
@@ -118,11 +118,14 @@ Int|Yes|4|4-byte Integer
 Float|Yes|4|4-byte Float
 IntVector|Yes|4+(4*n)|4-byte integer count, then [count] 4-byte integers
 StringVector|Yes|4+((?\_n)*n)|4-byte count, then [count] string length + null-terminated string
-FloatArray|Yes|4*n|arbitary number of 4-byte floats
+FloatArray|Yes|4*n|Arbitrary number of 4-byte floats
+TwoInt|Yes|8|Two 4-byte integers
 
 Notes:
 
 * Files are Strings that can be deserialized as another Dson File. They can be identified with their Magic Number (see Header).
-* Types can generally not be inferred. DsonField.java and DsonTypes.java contain an approach to efficiently identify the field type nonetheless. This approach hardcodes `FloatArray`, `StringVector`, `IntVector` and `Float` field names, and identifies the other types using a heuristic involving the data size.
+* Types can generally not be inferred. DsonField.java and DsonTypes.java contain an approach to efficiently identify the field type nonetheless. This approach hard-codes `FloatArray`, `StringVector`, `IntVector` and `Float` field names, and identifies the other types using a heuristic involving the data size.
+* Some files contain duplicate fields within the same object. This implementation ignores them, resulting in a different file size
+  when re-encoded.
 
 The object structure is defined by the order of the fields in data. Beginning with a root object, fields are read in. When an object is encountered, this object is pushed onto the stack. Parsed fields are added to the object on top of the object stack until the object on top of the stack has all its child fields, then, the elements which have all of their child fields are popped from the stack. This is similar to most other structured data formats with the exception that there is no "end object" token.

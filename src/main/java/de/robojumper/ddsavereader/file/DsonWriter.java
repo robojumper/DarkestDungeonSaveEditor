@@ -91,7 +91,7 @@ public class DsonWriter {
         e2.offset = data.size();
         data.write(name.getBytes(StandardCharsets.UTF_8));
         data.write(0);
- 
+
         try {
             reader.nextToken();
             if (reader.getCurrentToken() == JsonToken.START_OBJECT) {
@@ -115,8 +115,7 @@ public class DsonWriter {
                     }
 
                     if (reader.getCurrentToken() != JsonToken.END_OBJECT) {
-                        throw new ParseException("Expected }",
-                                (int) reader.getCurrentLocation().getCharOffset());
+                        throw new ParseException("Expected }", (int) reader.getCurrentLocation().getCharOffset());
                     }
                     e1.numDirectChildren = numDirectChildren;
 
@@ -134,13 +133,13 @@ public class DsonWriter {
             } else {
                 // Now for the tricky part: Not an object, now we need to determine the type
                 // Same as in DsonField, we first check the hardcoded types
-                // In order to easily use the nameStack's iterator, we temporarily push the field name
+                // In order to easily use the nameStack's iterator, we temporarily push the
+                // field name
                 nameStack.push(name);
                 if (DsonTypes.isA(FieldType.TYPE_FLOATARRAY, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
-                        throw new ParseException("Expected [",
-                                (int) reader.getCurrentLocation().getCharOffset());
+                        throw new ParseException("Expected [", (int) reader.getCurrentLocation().getCharOffset());
                     }
                     while (reader.nextToken() == JsonToken.VALUE_NUMBER_FLOAT) {
                         data.write(floatBytes(reader.getFloatValue()));
@@ -152,8 +151,7 @@ public class DsonWriter {
                 } else if (DsonTypes.isA(FieldType.TYPE_INTVECTOR, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
-                        throw new ParseException("Expected [",
-                                (int) reader.getCurrentLocation().getCharOffset());
+                        throw new ParseException("Expected [", (int) reader.getCurrentLocation().getCharOffset());
                     }
                     ByteArrayOutputStream vecData = new ByteArrayOutputStream();
                     int numElem = 0;
@@ -179,8 +177,7 @@ public class DsonWriter {
                 } else if (DsonTypes.isA(FieldType.TYPE_STRINGVECTOR, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
-                        throw new ParseException("Expected [",
-                                (int) reader.getCurrentLocation().getCharOffset());
+                        throw new ParseException("Expected [", (int) reader.getCurrentLocation().getCharOffset());
                     }
                     ByteArrayOutputStream vecData = new ByteArrayOutputStream();
                     int numElem = 0;
@@ -198,10 +195,23 @@ public class DsonWriter {
                 } else if (DsonTypes.isA(FieldType.TYPE_FLOAT, nameStack::iterator)) {
                     align();
                     if (reader.getCurrentToken() != JsonToken.VALUE_NUMBER_FLOAT) {
-                        throw new ParseException("Expected number",
-                                (int) reader.getCurrentLocation().getCharOffset());
+                        throw new ParseException("Expected number", (int) reader.getCurrentLocation().getCharOffset());
                     }
                     data.write(floatBytes(reader.getFloatValue()));
+                } else if (DsonTypes.isA(FieldType.TYPE_TWOINT, nameStack::iterator)) {
+                    align();
+                    if (reader.getCurrentToken() != JsonToken.START_ARRAY) {
+                        throw new ParseException("Expected [", (int) reader.getCurrentLocation().getCharOffset());
+                    }
+                    for (int i = 0; i < 2; i++) {
+                        if (reader.nextToken() != JsonToken.VALUE_NUMBER_INT) {
+                            throw new ParseException("Expected int", (int) reader.getCurrentLocation().getCharOffset());
+                        }
+                        data.write(intBytes(reader.getIntValue()));
+                    }
+                    if (reader.nextToken() != JsonToken.END_ARRAY) {
+                        throw new ParseException("Expected ]", (int) reader.getCurrentLocation().getCharOffset());
+                    }
                 } else if (DsonTypes.isA(FieldType.TYPE_CHAR, nameStack::iterator)) {
                     if (reader.getCurrentToken() != JsonToken.VALUE_STRING) {
                         throw new ParseException(
@@ -223,13 +233,13 @@ public class DsonWriter {
                             data.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
                                     .putInt(reader.getBooleanValue() ? 1 : 0).array());
                         } else {
-                            throw new ParseException("Field type not identified, only expecting\"true\" or \"false\" in arrays",
+                            throw new ParseException(
+                                    "Field type not identified, only expecting\"true\" or \"false\" in arrays",
                                     (int) reader.getCurrentLocation().getCharOffset());
                         }
                     }
                     if (reader.nextToken() != JsonToken.END_ARRAY) {
-                        throw new ParseException("Expected ]",
-                                (int) reader.getCurrentLocation().getCharOffset());
+                        throw new ParseException("Expected ]", (int) reader.getCurrentLocation().getCharOffset());
                     }
                 } else if (reader.getCurrentToken() == JsonToken.VALUE_TRUE
                         || reader.getCurrentToken() == JsonToken.VALUE_FALSE) {
