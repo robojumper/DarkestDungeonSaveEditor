@@ -2,6 +2,7 @@ package de.robojumper.ddsavereader.file;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -109,19 +110,17 @@ public class DsonFile {
                 Meta2BlockEntry meta2Entry = meta2.entries[i];
                 DsonField field = new DsonField();
                 int off = meta2Entry.offset;
-                field.name = readNullTermString(Data, off);
-                if (field.name.length() != meta2Entry.getNameStringLength() - 1) {
-                    throw new ParseException("Wrong name length", off);
-                }
+                field.name = readName(Data, off, meta2Entry.getNameStringLength() - 1);
                 if (DsonTypes.stringHash(field.name) != meta2Entry.nameHash) {
-                    throw new ParseException("Wrong string hash", off);
+                    throw new ParseException(String.format("%d: Wrong name hash: Name %s, expected %d, is %d", off,
+                            field.name, meta2Entry.nameHash, DsonTypes.stringHash(field.name)), off);
                 }
                 if (meta2Entry.isObject()) {
                     field.meta1EntryIdx = meta2Entry.getMeta1BlockEntryIdx();
                 }
                 field.meta2EntryIdx = i;
-                // In the data, strings are null-term'd!
-                off += field.name.length() + 1;
+                // Must rely on header due to encoding
+                off += meta2Entry.getNameStringLength();
                 field.dataStartInFile = off;
 
                 int dataLen;
@@ -166,8 +165,16 @@ public class DsonFile {
                 }
                 // now guess the type that it knows about its parents
                 if (field.type != FieldType.TYPE_OBJECT) {
-                    if (!field.guessType(behavior)) {
-                        throw new ParseException("Couldn't parse field " + field.name, off);
+                    try {
+                        if (!field.guessType(behavior)) {
+                            throw new ParseException(String.format("%d: Couldn't parse field %s", off, field.name),
+                                    off);
+                        }
+                    } catch (Exception e) {
+                        ParseException ex = new ParseException(
+                                String.format("%d: Couldn't parse field %s", off, field.name), off);
+                        ex.initCause(e);
+                        throw ex;
                     }
                 }
 
@@ -196,15 +203,17 @@ public class DsonFile {
         }
     }
 
-    static String readNullTermString(byte[] data, int start) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = start; i < data.length; i++) {
-            char c = (char) data[i];
-            if (c == '\0')
-                break;
-            sb.append(c);
+    static String readName(byte[] data, int start, int len) throws ParseException {
+        // Field names can be UTF-8
+        byte[] str = Arrays.copyOfRange(data, start, start + len);
+        String name = new String(str, StandardCharsets.UTF_8);
+        if (!Arrays.equals(name.getBytes(StandardCharsets.UTF_8), str) || data[start + len] != 0) {
+            throw new ParseException(
+                    String.format("%d: Wrong name length: Name %s, expected %d but has null bytes in wrong place",
+                            start, name, len),
+                    start);
         }
-        return sb.toString();
+        return name;
     }
 
     static class HeaderBlock {

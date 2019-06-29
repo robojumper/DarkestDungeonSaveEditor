@@ -22,7 +22,7 @@ dependencies {
     compile 'com.google.api-client:google-api-client:1.23.0'
     compile 'com.google.oauth-client:google-oauth-client-jetty:1.23.0'
     compile 'com.google.apis:google-api-services-sheets:v4-rev516-1.23.0'
-    compile 'com.fifesoft:rsyntaxtextarea:2.6.1'
+    compile 'com.fifesoft:rsyntaxtextarea:3.0.3'
     compile group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.9.6'
 }
 

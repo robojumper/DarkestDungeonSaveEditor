@@ -85,11 +85,12 @@ public class DsonWriter {
     private void writeField(String name, JsonParser reader) throws IOException, ParseException {
         Meta2BlockEntry e2 = new Meta2BlockEntry();
         e2.nameHash = DsonTypes.stringHash(name);
-        e2.fieldInfo = ((name.length() + 1) & 0b111111111) << 2;
+        byte[] nameb = name.getBytes(StandardCharsets.UTF_8); 
+        e2.fieldInfo = ((nameb.length + 1) & 0b111111111) << 2;
         meta2Entries.add(e2);
 
         e2.offset = data.size();
-        data.write(name.getBytes(StandardCharsets.UTF_8));
+        data.write(nameb);
         data.write(0);
 
         try {

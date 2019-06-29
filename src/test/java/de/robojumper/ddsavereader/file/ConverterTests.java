@@ -115,6 +115,7 @@ public class ConverterTests {
         testCorrectConversion("otherFiles");
         testCorrectConversion("backgroundNames");
         testCorrectConversion("skillCooldownValues");
+        testCorrectConversion("nonAsciiField");
     }
 
     private List<String> getResourceFiles(String path) throws IOException {
