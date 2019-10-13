@@ -114,6 +114,7 @@ public class ConverterTests {
     public void testOtherFiles() throws ParseException, IOException {
         testCorrectConversion("otherFiles");
         testCorrectConversion("backgroundNames");
+        testCorrectConversion("skillCooldownValues");
     }
 
     private List<String> getResourceFiles(String path) throws IOException {
