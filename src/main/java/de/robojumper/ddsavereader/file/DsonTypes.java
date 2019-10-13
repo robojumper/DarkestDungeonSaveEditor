@@ -37,6 +37,7 @@ public class DsonTypes {
                         { "additional_mash_disabled_infestation_monster_class_ids" }, // campaign_mash.json
                         { "party", "heroes" }, // raid.json
                         { "skill_cooldown_keys" }, // raid.json
+                        { "skill_cooldown_values" },
                         { "bufferedSpawningSlotsAvailable" }, // raid.json
                         { "curioGroups", "*", "curios" }, // raid.json
                         { "curioGroups", "*", "curio_table_entries" }, // raid.json
