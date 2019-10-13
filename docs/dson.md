@@ -16,8 +16,9 @@ A java implementation of the string hash function follows:
 ```java
 public static int stringHash(String str) {
     int hash = 0;
-    for (int i = 0; i < str.length(); i++) {
-        hash = hash * 53 + str.charAt(i);
+    byte[] arr = str.getBytes(StandardCharsets.UTF_8);
+    for (int i = 0; i < arr.length; i++) {
+        hash = hash * 53 + Byte.toUnsignedInt(arr[i]);
     }
     return hash;
 }

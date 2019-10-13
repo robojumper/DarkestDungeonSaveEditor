@@ -1,5 +1,6 @@
 package de.robojumper.ddsavereader.file;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -89,8 +90,9 @@ public class DsonTypes {
 
     public static int stringHash(String str) {
         int hash = 0;
-        for (int i = 0; i < str.length(); i++) {
-            hash = hash * 53 + str.charAt(i);
+        byte[] arr = str.getBytes(StandardCharsets.UTF_8);
+        for (int i = 0; i < arr.length; i++) {
+            hash = hash * 53 + Byte.toUnsignedInt(arr[i]);
         }
         return hash;
     }
