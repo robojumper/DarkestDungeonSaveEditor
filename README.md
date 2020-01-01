@@ -8,6 +8,10 @@
 
 A Darkest Dungeon Save Game Reader, Editor and Writer. Requires Java Runtime Environment 8+.
 
+## [Download](https://github.com/robojumper/DarkestDungeonSaveEditor/releases/latest)
+
+The link takes you to the latest release on the [Releases page](https://github.com/robojumper/DarkestDungeonSaveEditor/releases). You may also wish to build it yourself, see [Building](#building) for that.
+
 ## Motivation & Fundamentals
 
 Darkest Dungeon uses a proprietary save fomat. The files have a `.json` extension, but are actually binary files.
