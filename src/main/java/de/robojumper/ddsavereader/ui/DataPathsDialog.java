@@ -3,7 +3,9 @@ package de.robojumper.ddsavereader.ui;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -35,7 +37,7 @@ import de.robojumper.ddsavereader.util.ReadNames;
 
 public class DataPathsDialog {
 
-    private static final File CACHED_NAME_FILE = new File(Helpers.DATA_DIR, "names_cache.txt");
+    public static final File CACHED_NAME_FILE = new File(Helpers.DATA_DIR, "names_cache.txt");
 
     private JDialog dialog, idial;
     private JFrame frame;
@@ -236,6 +238,7 @@ public class DataPathsDialog {
                 int numRead = result.size();
                 Files.write(CACHED_NAME_FILE.toPath(), result, StandardCharsets.UTF_8);
                 idial.dispose();
+                dialog.setAlwaysOnTop(false);
                 JOptionPane.showMessageDialog(frame, "Successfully read " + numRead + " names.", "Ok",
                         JOptionPane.INFORMATION_MESSAGE);
                 state.setGameDir(gamePath);
@@ -244,11 +247,23 @@ public class DataPathsDialog {
             } catch (ExecutionException | InterruptedException | IOException ex) {
                 // display error
                 idial.dispose();
+                dialog.setAlwaysOnTop(false);
                 JOptionPane.showMessageDialog(DataPathsDialog.this.frame, ex.getMessage(), "Error opening file",
                         JOptionPane.ERROR_MESSAGE);
             } finally {
                 frame.setCursor(Cursor.getDefaultCursor());
             }
+        }
+    }
+
+    static void updateFromDataFile() {
+        try (BufferedReader br = new BufferedReader(new FileReader(CACHED_NAME_FILE))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                DsonTypes.offerName(line);
+            }
+        } catch (IOException e) {
+            // Ignore
         }
     }
 }

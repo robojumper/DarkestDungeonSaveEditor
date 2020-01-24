@@ -108,6 +108,7 @@ public class MainWindow {
             new DataPathsDialog(frame, state.getGameDir(), state.getModsDir(), state, true);
             state.setSawGameDataPopup(true);
         }
+        DataPathsDialog.updateFromDataFile();
         updateSaveDir();
         updateFiles();
         updateSaveStatus();
@@ -165,6 +166,9 @@ public class MainWindow {
         mntmNames.addActionListener(e -> {
             if (confirmLoseChanges()) {
                 new DataPathsDialog(frame, state.getGameDir(), state.getModsDir(), state, false);
+                DataPathsDialog.updateFromDataFile();
+                state.loadFiles();
+                updateFiles();
             }
         });
         mnTools.add(mntmNames);
