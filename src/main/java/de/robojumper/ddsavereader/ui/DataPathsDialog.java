@@ -70,6 +70,10 @@ public class DataPathsDialog {
         content.add(explanation);
 
         explanation = new JLabel();
+        explanation.setText("The data is cached, consider re-running this after game updates or new mod installation.");
+        content.add(explanation);
+
+        explanation = new JLabel();
         explanation.setText("Reach this dialogue any time via Tools -> Generate Name Files");
         content.add(explanation);
 
