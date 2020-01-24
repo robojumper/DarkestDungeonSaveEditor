@@ -169,7 +169,6 @@ public class MainWindow {
         });
         mnTools.add(mntmNames);
 
-
         mntmSpreadsheets = new JMenuItem("Spreadsheets");
         mntmSpreadsheets.setEnabled(false);
         mntmSpreadsheets.addActionListener(e -> {

@@ -123,7 +123,7 @@ public class State {
             prop.setProperty("gameDir", gameDir);
             prop.setProperty("modsDir", modsDir);
             prop.setProperty("sheetId", lastSheetID);
-            prop.setProperty("sawGameDataPopup", ((Boolean)sawGameDataPopup).toString());
+            prop.setProperty("sawGameDataPopup", ((Boolean) sawGameDataPopup).toString());
             prop.store(new FileOutputStream(SETTINGS_FILE), BuildConfig.DISPLAY_NAME + "/" + BuildConfig.VERSION);
         } catch (IOException e) {
             return;
@@ -231,12 +231,11 @@ public class State {
     }
 
     public boolean canSave() {
-        return files.values().stream().filter(s -> s.changed() && !s.canSave()).count() == 0
-                && anyChanges();
+        return files.values().stream().filter(s -> s.changed() && !s.canSave()).count() == 0 && anyChanges();
     }
-    
+
     public boolean anyChanges() {
-        return files.values().stream().filter(s -> s.changed()).count() > 0; 
+        return files.values().stream().filter(s -> s.changed()).count() > 0;
     }
 
     public int getNumUnsavedChanges() {

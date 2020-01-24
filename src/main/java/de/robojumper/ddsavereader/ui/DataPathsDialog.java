@@ -54,25 +54,24 @@ public class DataPathsDialog {
         this.frame = frame;
 
         JPanel content = new JPanel();
-        content.setBorder(new TitledBorder(UIManager.getBorder("TitledBorder.border"),
-                "", TitledBorder.LEADING, TitledBorder.TOP,
-                null, new Color(0, 0, 0)));
+        content.setBorder(new TitledBorder(UIManager.getBorder("TitledBorder.border"), "", TitledBorder.LEADING,
+                TitledBorder.TOP, null, new Color(0, 0, 0)));
         content.setLayout(new BoxLayout(content, BoxLayout.PAGE_AXIS));
-        
+
         JLabel explanation = new JLabel();
-        explanation.setText("You can point the save editor towards the game installation and your mods folder");
+        explanation.setText("You can point the save editor towards the game installation and your mods folder.");
         content.add(explanation);
-        
+
         explanation = new JLabel();
-        explanation.setText("This allows the editor to reverse some numbers into strings, i.e. \"jester\" instead of " + DsonTypes.stringHash("jester") + ".");
+        explanation.setText("This allows the editor to reverse some numbers into strings, i.e. \"jester\" instead of "
+                + DsonTypes.stringHash("jester") + ".");
         content.add(explanation);
-        
+
         explanation = new JLabel();
         explanation.setText("Reach this dialogue any time via Tools -> Generate Name Files");
         content.add(explanation);
-        
+
         content.add(new JSeparator(SwingConstants.HORIZONTAL));
-        
 
         JPanel gameDataPathPanel = new JPanel();
         gameDataPathPanel.setBorder(new TitledBorder(UIManager.getBorder("TitledBorder.border"),
@@ -85,25 +84,25 @@ public class DataPathsDialog {
         gameDataPathPanel.add(gameDataPathBox);
         gameDataPathBox.setColumns(30);
         gameDataPathBox.setText(gameDir);
-        
+
         DocumentListener listener = new DocumentListener() {
-            
+
             @Override
             public void removeUpdate(DocumentEvent e) {
                 onChange();
             }
-            
+
             @Override
             public void insertUpdate(DocumentEvent e) {
                 onChange();
             }
-            
+
             @Override
             public void changedUpdate(DocumentEvent e) {
                 onChange();
             }
         };
-        
+
         gameDataPathBox.getDocument().addDocumentListener(listener);
 
         JButton chooseGamePathButton = new JButton("Browse...");
@@ -143,9 +142,6 @@ public class DataPathsDialog {
         Component horizontalGlue = Box.createHorizontalGlue();
         buttonPanel.add(horizontalGlue);
 
-        /*Component horizontalStrut = Box.createHorizontalStrut(20);
-        buttonPanel.add(horizontalStrut);*/
-
         okButton = new JButton("Scan Names");
         okButton.addActionListener(e -> {
             final JOptionPane optionPane = new JOptionPane("Loading names, please wait...",
@@ -162,11 +158,10 @@ public class DataPathsDialog {
 
             idial.pack();
             idial.setAlwaysOnTop(true);
-            
-            
+
             FileLoader loader = new FileLoader(gameDir, modsDir);
             loader.execute();
-            
+
             idial.setVisible(true);
             if (loader.success) {
                 dialog.dispose();
@@ -188,7 +183,7 @@ public class DataPathsDialog {
         dialog.pack();
         dialog.setVisible(true);
     }
-    
+
     void onChange() {
         this.gameDir = gameDataPathBox.getText();
         this.modsDir = workshopPathBox.getText();
