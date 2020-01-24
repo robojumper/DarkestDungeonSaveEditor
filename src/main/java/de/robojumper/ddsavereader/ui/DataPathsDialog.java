@@ -60,22 +60,11 @@ public class DataPathsDialog {
                 TitledBorder.TOP, null, new Color(0, 0, 0)));
         content.setLayout(new BoxLayout(content, BoxLayout.PAGE_AXIS));
 
-        JLabel explanation = new JLabel();
-        explanation.setText("You can point the save editor towards the game installation and your mods folder.");
-        content.add(explanation);
-
-        explanation = new JLabel();
-        explanation.setText("This allows the editor to reverse some numbers into strings, i.e. \"jester\" instead of "
-                + DsonTypes.stringHash("jester") + ".");
-        content.add(explanation);
-
-        explanation = new JLabel();
-        explanation.setText("The data is cached, consider re-running this after game updates or new mod installation.");
-        content.add(explanation);
-
-        explanation = new JLabel();
-        explanation.setText("Reach this dialogue any time via Tools -> Generate Name Files");
-        content.add(explanation);
+        content.add(new JLabel("You can point the save editor towards the game installation and your mods folder."));
+        content.add(new JLabel("This allows the editor to reverse some numbers into strings, i.e. \"jester\" instead of "
+                                + DsonTypes.stringHash("jester") + "."));
+        content.add(new JLabel("The data is cached, consider re-running this after game updates or new mod installation."));
+        content.add(new JLabel("Reach this dialogue any time via Tools -> Generate Name Files"));
 
         content.add(new JSeparator(SwingConstants.HORIZONTAL));
 
