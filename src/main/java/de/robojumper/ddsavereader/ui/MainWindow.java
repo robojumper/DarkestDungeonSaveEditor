@@ -23,7 +23,6 @@ import java.util.function.Consumer;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
-import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -64,14 +63,14 @@ import de.robojumper.ddsavereader.updatechecker.Version;
 public class MainWindow {
 
     private JFrame frame;
-    private JTextField gameDataPathBox, savePathBox, workshopPathBox;
-    private JLabel saveFileStatus, gameDataStatus, workshopStatus;
+    private JTextField savePathBox;
+    private JLabel saveFileStatus;
     private JTabbedPane tabbedPane;
     private JLabel saveStatus, errorLabel;
     private JButton saveButton;
     private JButton makeBackupButton, restoreBackupButton;
     private JButton discardChangesButton, reloadButton;
-    private JMenuItem mntmSpreadsheets;
+    private JMenuItem mntmSpreadsheets, mntmNames;
     private JButton btnNewUpdateAvailable;
 
     private static volatile Release latestRelease;
@@ -85,46 +84,9 @@ public class MainWindow {
         EventQueue.invokeLater(new Runnable() {
             public void run() {
                 try {
-                    // The vast majority of our time spent on loading will be loading
-                    // the state -- since it loads the entire game data for names etc.
-                    // This is ugly, but I don't care enough about UI to make it properly
-                    // multithreaded.
                     MainWindow window = new MainWindow();
 
-                    final JOptionPane optionPane = new JOptionPane("Loading game data, please wait...",
-                            JOptionPane.INFORMATION_MESSAGE, JOptionPane.DEFAULT_OPTION, null, new Object[] {}, null);
-
-                    final JDialog dialog = new JDialog();
-                    dialog.setTitle("Loading...");
-                    dialog.setModal(true);
-                    dialog.setLocationRelativeTo(null);
-
-                    dialog.setContentPane(optionPane);
-
-                    dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
-                    dialog.addWindowListener(new WindowAdapter() {
-                        @Override
-                        public void windowClosing(WindowEvent e) {
-                            System.exit(0);
-                        }
-                    });
-                    dialog.pack();
-
-                    new Thread(new Runnable() {
-
-                        @Override
-                        public void run() {
-                            window.state.init();
-                            // Hack -- doing it not from the UI Thread. We should be safe
-                            // though, since we should we be blocked on setVisible...
-                            // (Yes, I know, multithreading and "should be" is a terrible combination)
-                            dialog.dispose();
-                        }
-                    }).start();
-
-                    dialog.setAlwaysOnTop(true);
-                    dialog.setVisible(true);
-
+                    window.state.init();
                     window.initSettings();
                     window.frame.setVisible(true);
                 } catch (Exception e) {
@@ -142,9 +104,11 @@ public class MainWindow {
     }
 
     private void initSettings() {
+        if (!state.sawGameDataPopup()) {
+            new DataPathsDialog(frame, state.getGameDir(), state.getModsDir(), state, true);
+            state.setSawGameDataPopup(true);
+        }
         updateSaveDir();
-        updateGameDir();
-        updateModsDir();
         updateFiles();
         updateSaveStatus();
         checkForUpdates();
@@ -196,6 +160,15 @@ public class MainWindow {
 
         JMenu mnTools = new JMenu("Tools");
         menuBar.add(mnTools);
+
+        mntmNames = new JMenuItem("Generate Name File...");
+        mntmNames.addActionListener(e -> {
+            if (confirmLoseChanges()) {
+                new DataPathsDialog(frame, state.getGameDir(), state.getModsDir(), state, false);
+            }
+        });
+        mnTools.add(mntmNames);
+
 
         mntmSpreadsheets = new JMenuItem("Spreadsheets");
         mntmSpreadsheets.setEnabled(false);
@@ -393,53 +366,6 @@ public class MainWindow {
         savePathPanel.add(restoreBackupButton);
         savePathPanel.add(chooseSavePathButton);
 
-        JPanel gameDataPathPanel = new JPanel();
-        gameDataPathPanel.setBorder(
-                new TitledBorder(null, "Game Data Directory", TitledBorder.LEADING, TitledBorder.TOP, null, null));
-        inputPanel.add(gameDataPathPanel);
-        gameDataPathPanel.setLayout(new BoxLayout(gameDataPathPanel, BoxLayout.LINE_AXIS));
-
-        gameDataStatus = new JLabel("");
-        gameDataStatus.setIcon(Resources.OK_ICON);
-        gameDataPathPanel.add(gameDataStatus);
-
-        gameDataPathBox = new JTextField();
-        gameDataPathBox.setEditable(false);
-        gameDataPathPanel.add(gameDataPathBox);
-        gameDataPathBox.setColumns(10);
-
-        JButton chooseGamePathButton = new JButton("Browse...");
-        chooseGamePathButton.addActionListener(e -> {
-            if (confirmLoseChanges()) {
-                directoryChooser("", s -> state.setGameDir(s));
-                updateGameDir();
-            }
-        });
-        gameDataPathPanel.add(chooseGamePathButton);
-
-        JPanel workshopPathPanel = new JPanel();
-        workshopPathPanel.setBorder(
-                new TitledBorder(null, "Workshop Directory", TitledBorder.LEADING, TitledBorder.TOP, null, null));
-        inputPanel.add(workshopPathPanel);
-        workshopPathPanel.setLayout(new BoxLayout(workshopPathPanel, BoxLayout.LINE_AXIS));
-
-        workshopStatus = new JLabel("");
-        workshopStatus.setIcon(Resources.OK_ICON);
-        workshopPathPanel.add(workshopStatus);
-
-        workshopPathBox = new JTextField();
-        workshopPathBox.setEditable(false);
-        workshopPathPanel.add(workshopPathBox);
-        workshopPathBox.setColumns(10);
-
-        JButton chooseWorkshopPathButton = new JButton("Browse...");
-        chooseWorkshopPathButton.addActionListener(e -> {
-            if (confirmLoseChanges()) {
-                directoryChooser("", s -> state.setModsDir(s));
-                updateModsDir();
-            }
-        });
-        workshopPathPanel.add(chooseWorkshopPathButton);
         contentPanel.add(inputPanel, BorderLayout.NORTH);
 
         JPanel panel = new JPanel();
@@ -500,7 +426,7 @@ public class MainWindow {
         buttonPanel.add(reloadButton);
     }
 
-    private static final void directoryChooser(String def, Consumer<String> onSuccess) {
+    protected static final void directoryChooser(String def, Consumer<String> onSuccess) {
         JFileChooser chooser = new JFileChooser();
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         chooser.putClientProperty("JFileChooser.appBundleIsTraversable", "always");
@@ -521,16 +447,6 @@ public class MainWindow {
     private void updateBackupButtons() {
         makeBackupButton.setEnabled(state.getSaveStatus() == Status.OK);
         restoreBackupButton.setEnabled(state.hasAnyBackups());
-    }
-
-    private void updateGameDir() {
-        gameDataPathBox.setText(state.getGameDir());
-        gameDataStatus.setIcon(state.getGameStatus().icon);
-    }
-
-    private void updateModsDir() {
-        workshopPathBox.setText(state.getModsDir());
-        workshopStatus.setIcon(state.getModsStatus().icon);
     }
 
     private void updateFiles() {
