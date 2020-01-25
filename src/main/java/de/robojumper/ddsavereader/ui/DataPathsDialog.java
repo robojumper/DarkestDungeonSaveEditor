@@ -37,7 +37,7 @@ import de.robojumper.ddsavereader.util.ReadNames;
 
 public class DataPathsDialog {
 
-    public static final File CACHED_NAME_FILE = new File(Helpers.DATA_DIR, "names_cache.txt");
+    private static final File CACHED_NAME_FILE = new File(Helpers.DATA_DIR, "names_cache.txt");
 
     private JDialog dialog, idial;
     private JFrame frame;

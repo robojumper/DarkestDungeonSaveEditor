@@ -577,7 +577,8 @@ public class MainWindow {
                         });
                     }
                 } catch (Exception e) {
-                    System.out.println("Update check failed.");
+                    e.printStackTrace();
+                    System.err.println("Update check failed.");
                 }
             }
 

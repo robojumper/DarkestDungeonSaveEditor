@@ -157,7 +157,7 @@ public class State {
         File dir = new File(saveDir);
         files.clear();
         SimpleDateFormat fmt = new SimpleDateFormat("HH:mm:ss");
-        System.out.println(fmt.format(new Date()) + " Start Loading Files");
+        System.err.println(fmt.format(new Date()) + " Start Loading Files");
         Arrays.stream(dir.listFiles()).parallel().forEach(f -> {
             if (Helpers.isSaveFileName(f.getName())) {
                 String content;
@@ -176,12 +176,12 @@ public class State {
                 }
             }
         });
-        System.out.println(fmt.format(new Date()) + " End Loading Files");
+        System.err.println(fmt.format(new Date()) + " End Loading Files");
     }
 
     public void saveChanges() {
         SimpleDateFormat fmt = new SimpleDateFormat("HH:mm:ss");
-        System.out.println(fmt.format(new Date()) + " Start Saving Files");
+        System.err.println(fmt.format(new Date()) + " Start Saving Files");
         files.entrySet().parallelStream().filter(f -> f.getValue().changed() && f.getValue().canSave()).forEach(f -> {
             try {
                 Files.write(Paths.get(saveDir, f.getKey()), new DsonWriter(f.getValue().contents).bytes(),
@@ -193,7 +193,7 @@ public class State {
                 e.printStackTrace();
             }
         });
-        System.out.println(fmt.format(new Date()) + " End Saving Files");
+        System.err.println(fmt.format(new Date()) + " End Saving Files");
     }
 
     public void setGameDir(String dir) {
@@ -332,7 +332,7 @@ public class State {
 
     public void restoreBackup(String result) {
         File f = Paths.get(BACKUP_DIR.getAbsolutePath(), profileString, result + ".zip").toFile();
-        System.out.println(f);
+        System.err.println(f);
         try (ZipFile zipFile = new ZipFile(f)) {
 
             clear(new File(saveDir), false);
@@ -354,7 +354,7 @@ public class State {
             }
         } catch (IOException e) {
             e.printStackTrace();
-            System.out.println(e.getMessage());
+            System.err.println(e.getMessage());
         }
     }
 
