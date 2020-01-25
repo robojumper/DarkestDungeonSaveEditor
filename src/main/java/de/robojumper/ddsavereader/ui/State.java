@@ -12,16 +12,13 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Enumeration;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -34,10 +31,8 @@ import javax.swing.Icon;
 import de.fuerstenau.buildconfig.BuildConfig;
 import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
-import de.robojumper.ddsavereader.file.DsonTypes;
 import de.robojumper.ddsavereader.file.DsonWriter;
 import de.robojumper.ddsavereader.util.Helpers;
-import de.robojumper.ddsavereader.util.ReadNames;
 
 public class State {
 
@@ -92,10 +87,9 @@ public class State {
     private String saveDir = "", gameDir = "", modsDir = "";
     private String profileString;
     private Status saveStatus = Status.ERROR, gameStatus = Status.WARNING, modsStatus = Status.WARNING;
+    private boolean sawGameDataPopup;
 
     private Map<String, SaveFile> files = new TreeMap<>();
-
-    private Set<String> names = new HashSet<>();
 
     private String lastSheetID = "";
 
@@ -107,10 +101,11 @@ public class State {
                 SETTINGS_FILE.createNewFile();
             }
             prop.load(new FileInputStream(SETTINGS_FILE));
-            setGameDir((String) prop.getOrDefault("gameDir", ""), false);
-            setModsDir((String) prop.getOrDefault("modsDir", ""), true);
+            setGameDir((String) prop.getOrDefault("gameDir", ""));
+            setModsDir((String) prop.getOrDefault("modsDir", ""));
             setSaveDir((String) prop.getOrDefault("saveDir", ""));
             lastSheetID = (String) prop.getOrDefault("sheetId", "");
+            sawGameDataPopup = Boolean.parseBoolean((String) prop.getOrDefault("sawGameDataPopup", ""));
         } catch (IOException | ClassCastException e) {
             return;
         }
@@ -128,6 +123,7 @@ public class State {
             prop.setProperty("gameDir", gameDir);
             prop.setProperty("modsDir", modsDir);
             prop.setProperty("sheetId", lastSheetID);
+            prop.setProperty("sawGameDataPopup", ((Boolean) sawGameDataPopup).toString());
             prop.store(new FileOutputStream(SETTINGS_FILE), BuildConfig.DISPLAY_NAME + "/" + BuildConfig.VERSION);
         } catch (IOException e) {
             return;
@@ -161,7 +157,7 @@ public class State {
         File dir = new File(saveDir);
         files.clear();
         SimpleDateFormat fmt = new SimpleDateFormat("HH:mm:ss");
-        System.out.println(fmt.format(new Date()) + " Start Loading Files");
+        System.err.println(fmt.format(new Date()) + " Start Loading Files");
         Arrays.stream(dir.listFiles()).parallel().forEach(f -> {
             if (Helpers.isSaveFileName(f.getName())) {
                 String content;
@@ -180,12 +176,12 @@ public class State {
                 }
             }
         });
-        System.out.println(fmt.format(new Date()) + " End Loading Files");
+        System.err.println(fmt.format(new Date()) + " End Loading Files");
     }
 
     public void saveChanges() {
         SimpleDateFormat fmt = new SimpleDateFormat("HH:mm:ss");
-        System.out.println(fmt.format(new Date()) + " Start Saving Files");
+        System.err.println(fmt.format(new Date()) + " Start Saving Files");
         files.entrySet().parallelStream().filter(f -> f.getValue().changed() && f.getValue().canSave()).forEach(f -> {
             try {
                 Files.write(Paths.get(saveDir, f.getKey()), new DsonWriter(f.getValue().contents).bytes(),
@@ -197,32 +193,18 @@ public class State {
                 e.printStackTrace();
             }
         });
-        System.out.println(fmt.format(new Date()) + " End Saving Files");
+        System.err.println(fmt.format(new Date()) + " End Saving Files");
     }
 
     public void setGameDir(String dir) {
-        setGameDir(dir, true);
-    }
-
-    protected void setGameDir(String dir, boolean rescan) {
         if (!Objects.equals(dir, gameDir)) {
             this.gameDir = dir;
-            if (rescan) {
-                rescanNames();
-            }
         }
     }
 
     public void setModsDir(String dir) {
-        setModsDir(dir, true);
-    }
-
-    protected void setModsDir(String dir, boolean rescan) {
         if (!Objects.equals(dir, modsDir)) {
             this.modsDir = dir;
-            if (rescan) {
-                rescanNames();
-            }
         }
     }
 
@@ -249,34 +231,11 @@ public class State {
     }
 
     public boolean canSave() {
-        return files.values().stream().filter(s -> s.changed() && !s.canSave()).count() == 0
-                && anyChanges();
+        return files.values().stream().filter(s -> s.changed() && !s.canSave()).count() == 0 && anyChanges();
     }
-    
+
     public boolean anyChanges() {
-        return files.values().stream().filter(s -> s.changed()).count() > 0; 
-    }
-
-    private void rescanNames() {
-        ArrayList<String> paths = new ArrayList<>();
-        if (!gameDir.equals("")) {
-            if (new File(gameDir, "svn_revision.txt").exists()) {
-                gameStatus = Status.OK;
-                paths.add(gameDir);
-            }
-        }
-
-        if (!modsDir.equals("")) {
-            if (Paths.get(modsDir).endsWith("262060")) {
-                modsStatus = Status.OK;
-                paths.add(modsDir);
-            }
-        }
-        System.out.println("Reading Names...");
-        this.names = ReadNames.collectNames(paths);
-        DsonTypes.NAME_TABLE.clear();
-        DsonTypes.offerNames(names);
-        System.out.println("Done");
+        return files.values().stream().filter(s -> s.changed()).count() > 0;
     }
 
     public int getNumUnsavedChanges() {
@@ -316,6 +275,14 @@ public class State {
             throw new RuntimeException();
         }
         return files.get(fileName);
+    }
+
+    public boolean sawGameDataPopup() {
+        return sawGameDataPopup;
+    }
+
+    public void setSawGameDataPopup(boolean sawGameDataPopup) {
+        this.sawGameDataPopup = sawGameDataPopup;
     }
 
     public boolean hasBackup(String name) {
@@ -365,7 +332,7 @@ public class State {
 
     public void restoreBackup(String result) {
         File f = Paths.get(BACKUP_DIR.getAbsolutePath(), profileString, result + ".zip").toFile();
-        System.out.println(f);
+        System.err.println(f);
         try (ZipFile zipFile = new ZipFile(f)) {
 
             clear(new File(saveDir), false);
@@ -387,7 +354,7 @@ public class State {
             }
         } catch (IOException e) {
             e.printStackTrace();
-            System.out.println(e.getMessage());
+            System.err.println(e.getMessage());
         }
     }
 
