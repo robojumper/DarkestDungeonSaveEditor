@@ -423,8 +423,10 @@ public class MainWindow {
 
         reloadButton = new JButton("Reload All");
         reloadButton.addActionListener(e -> {
-            state.loadFiles();
-            updateFiles();
+            if (confirmLoseChanges()) {
+                state.loadFiles();
+                updateFiles();
+            }
         });
         buttonPanel.add(reloadButton);
     }
@@ -549,7 +551,7 @@ public class MainWindow {
                     "You have " + state.getNumUnsavedChanges()
                             + " unsaved changes! Are you sure you want to discard them?",
                     "Discard Changes", JOptionPane.YES_NO_OPTION);
-            if (result == JOptionPane.NO_OPTION) {
+            if (result == JOptionPane.NO_OPTION || result == JOptionPane.CLOSED_OPTION) {
                 return false;
             }
         }
