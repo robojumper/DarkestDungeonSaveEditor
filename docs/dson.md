@@ -59,7 +59,7 @@ numMeta1Entries|16|meta1BlockEntry|entries|numMeta1Entries entries
 
 **Size (bytes)**|**Type**|**Name**|**Description**
 -----|-----|-----|-----
-4|int|hierarchyHint|Weird field. Index of this object - 1, but all sibling objects inherit from the first sibling object| 
+4|int|parentIndex|Parent object index into Meta1; `-1` for root object| 
 4|int|meta2EntryIdx|Index into Meta2Block entries| 
 4|int|numDirectChildren|Number of direct children fields of this object| 
 4|int|numAllChildren|Number of all (direct and indirect) children fields| 

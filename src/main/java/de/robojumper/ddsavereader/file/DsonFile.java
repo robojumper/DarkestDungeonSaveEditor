@@ -95,17 +95,16 @@ public class DsonFile {
             }
             // parse the objects
             Stack<DsonField> fieldStack = new Stack<DsonField>();
-            // For HierarchyHint
-            Stack<Integer> hierarchyStack = new Stack<Integer>();
+            // For parentIndex
+            Stack<Integer> parentIdxStack = new Stack<Integer>();
             // base_root starts at -1
             int runningObjIdx = -1;
-            hierarchyStack.push(new Integer(runningObjIdx));
+            parentIdxStack.push(new Integer(runningObjIdx));
             rootFields = new ArrayList<DsonField>();
             // Is this the correct way to do it?
             // WARNING: Apparently, META2 is not necessarily ordered the same way as DATA
             // This may have serious implications on Field Hierarchy.
             // It seems to work, in case it breaks, this is what you're looking for
-            // This should also be revisited when trying to get saving implemented
             for (int i = 0; i < meta2.entries.length; i++) {
                 Meta2BlockEntry meta2Entry = meta2.entries[i];
                 DsonField field = new DsonField();
@@ -142,9 +141,9 @@ public class DsonFile {
                     // we are an object type
                     field.type = FieldType.TYPE_OBJECT;
                     field.setNumChildren(meta1.entries[meta2Entry.getMeta1BlockEntryIdx()].numDirectChildren);
-                    if (meta1.entries[meta2Entry.getMeta1BlockEntryIdx()].hierarchyHint != hierarchyStack.peek()
+                    if (meta1.entries[meta2Entry.getMeta1BlockEntryIdx()].parentIndex != parentIdxStack.peek()
                             .intValue()) {
-                        throw new ParseException("Wrong hierarchy hint", off);
+                        throw new ParseException("Parent object not most recently parsed object", off);
                     }
                     runningObjIdx++;
                 }
@@ -181,7 +180,7 @@ public class DsonFile {
                 // If we have an object, push it to the stack
                 if (field.type == FieldType.TYPE_OBJECT) {
                     fieldStack.push(field);
-                    hierarchyStack.push(new Integer(runningObjIdx));
+                    parentIdxStack.push(new Integer(runningObjIdx));
                 }
 
                 // Then check if the object on top of the stack has all its children. If so, pop
@@ -190,7 +189,7 @@ public class DsonFile {
                 while (!fieldStack.isEmpty() && fieldStack.peek().type == FieldType.TYPE_OBJECT
                         && fieldStack.peek().hasAllChilds()) {
                     fieldStack.pop();
-                    hierarchyStack.pop();
+                    parentIdxStack.pop();
                 }
             }
             // we really should not have any pending fields at this point
@@ -251,7 +250,7 @@ public class DsonFile {
             entries = new Meta1BlockEntry[data.length / 0x10];
             for (int i = 0; buffer.remaining() != 0; i++) {
                 entries[i] = new Meta1BlockEntry();
-                entries[i].hierarchyHint = buffer.getInt();
+                entries[i].parentIndex = buffer.getInt();
                 entries[i].meta2EntryIdx = buffer.getInt();
                 entries[i].numDirectChildren = buffer.getInt();
                 entries[i].numAllChildren = buffer.getInt();
@@ -260,9 +259,8 @@ public class DsonFile {
 
         // data structure encapsulating a single entry in the Meta1Block
         static class Meta1BlockEntry {
-            // index of this object in the data - 1, and all sibling objects have the same
-            // (i.e. inherit from the first)
-            int hierarchyHint;
+            // Index of the parent object into Meta1 entries array
+            int parentIndex;
             // index into Meta2Block.Entries
             int meta2EntryIdx;
             // number of direct children fields of this property

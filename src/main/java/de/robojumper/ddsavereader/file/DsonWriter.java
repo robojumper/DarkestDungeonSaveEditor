@@ -25,7 +25,7 @@ public class DsonWriter {
     HeaderBlock header;
     ByteArrayOutputStream data;
     ArrayList<Meta1BlockEntry> meta1Entries;
-    Deque<Integer> hierarchyHintStack;
+    Deque<Integer> parentIdxStack;
     Deque<String> nameStack;
     ArrayList<Meta2BlockEntry> meta2Entries;
 
@@ -46,9 +46,9 @@ public class DsonWriter {
 
         meta1Entries = new ArrayList<>();
         meta2Entries = new ArrayList<>();
-        hierarchyHintStack = new ArrayDeque<>();
+        parentIdxStack = new ArrayDeque<>();
         nameStack = new ArrayDeque<>();
-        hierarchyHintStack.push(-1);
+        parentIdxStack.push(-1);
 
         try {
             // If we already have a token, we were invoked for an inner object.
@@ -79,7 +79,7 @@ public class DsonWriter {
         header.meta2Offset = 0x40 + meta1Entries.size() * 0x10;
         header.dataOffset = 0x40 + meta1Entries.size() * 0x10 + meta2Entries.size() * 0x0C;
         header.dataLength = data.size();
-        hierarchyHintStack.pop();
+        parentIdxStack.pop();
     }
 
     private void writeField(String name, JsonParser reader) throws IOException, ParseException {
@@ -100,10 +100,10 @@ public class DsonWriter {
                     Meta1BlockEntry e1 = new Meta1BlockEntry();
                     e1.meta2EntryIdx = meta2Entries.size() - 1;
                     e2.fieldInfo |= 0b1 | ((meta1Entries.size() & 0b11111111111111111111) << 11);
-                    e1.hierarchyHint = hierarchyHintStack.peek();
+                    e1.parentIndex = parentIdxStack.peek();
                     meta1Entries.add(e1);
                     int prevNumChilds = meta2Entries.size();
-                    hierarchyHintStack.push(meta1Entries.size() - 1);
+                    parentIdxStack.push(meta1Entries.size() - 1);
                     nameStack.push(name);
                     int numDirectChildren = 0;
                     while (true) {
@@ -121,7 +121,7 @@ public class DsonWriter {
                     e1.numDirectChildren = numDirectChildren;
 
                     nameStack.pop();
-                    hierarchyHintStack.pop();
+                    parentIdxStack.pop();
                     e1.numAllChildren = meta2Entries.size() - prevNumChilds;
                 } else {
                     // Write an actual embedded file as a string
@@ -296,7 +296,7 @@ public class DsonWriter {
 
         for (int i = 0; i < meta1Entries.size(); i++) {
             Meta1BlockEntry e1 = meta1Entries.get(i);
-            buffer.putInt(e1.hierarchyHint);
+            buffer.putInt(e1.parentIndex);
             buffer.putInt(e1.meta2EntryIdx);
             buffer.putInt(e1.numDirectChildren);
             buffer.putInt(e1.numAllChildren);
