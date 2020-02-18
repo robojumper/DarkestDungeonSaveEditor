@@ -20,7 +20,7 @@ macro_rules! check_offset {
     ($rd:expr, $exp:expr) => {{
         let pos = $rd.stream_position()?;
         if pos != $exp as u64 {
-            return Err(DecoderError::OffsetMismatch {
+            return Err(FromBinError::OffsetMismatch {
                 exp: $exp as u64,
                 is: pos,
             });
@@ -69,13 +69,13 @@ macro_rules! something_comma_separated {
     ($lex:ident, $op:ident, $tok:ident, $d:stmt, $err:literal, $cls:ident) => {
         let mut exp = Exp::FieldOrClose;
         loop {
-            let tok = $lex.peek().ok_or(EncoderError::UnexpEOF)?;
+            let tok = $lex.peek().ok_or(FromJsonError::UnexpEOF)?;
             match tok.kind {
                 TokenType::$tok if exp != Exp::Close => {$d},
                 TokenType::$cls if exp != Exp::Field => break,
                 _ => {
                     let span = span!(&tok.buf);
-                    return Err(EncoderError::Expected(
+                    return Err(FromJsonError::Expected(
                         $err.to_owned() + " got: " + &format!("{:?}", tok.kind),
                         span.first,
                         span.end,
@@ -83,7 +83,7 @@ macro_rules! something_comma_separated {
                 }
             }
 
-            exp = if $lex.peek().ok_or(EncoderError::UnexpEOF)?.kind == TokenType::Comma {
+            exp = if $lex.peek().ok_or(FromJsonError::UnexpEOF)?.kind == TokenType::Comma {
                 let _ = $lex.next();
                 Exp::Field
             } else {
@@ -96,7 +96,7 @@ macro_rules! something_comma_separated {
 }
 
 impl File {
-    pub fn try_from_reader<R: Read + Seek>(reader: &'_ mut R) -> Result<Self, DecoderError> {
+    pub fn try_from_reader<R: Read + Seek>(reader: &'_ mut R) -> Result<Self, FromBinError> {
         let h = Header::try_from_reader(reader)?;
         check_offset!(reader, h.objects_offset);
         let o: Objects = Objects::try_from_reader(reader, h.objects_num)?;
@@ -111,7 +111,7 @@ impl File {
 
     /// Decode a `File` from a `Read` representing a JSON stream.
     #[inline(never)]
-    pub fn try_from_json<R: Read>(reader: &'_ mut R) -> Result<Self, EncoderError> {
+    pub fn try_from_json<R: Read>(reader: &'_ mut R) -> Result<Self, FromJsonError> {
         let mut x = vec![];
         reader.read_to_end(&mut x).unwrap();
         let slic = FileStr(std::str::from_utf8(&x).unwrap());
@@ -126,14 +126,14 @@ impl File {
     fn try_from_lexer<T: Iterator<Item = Token>>(
         slic: FileStr,
         lex: &mut std::iter::Peekable<T>,
-    ) -> Result<Self, EncoderError> {
+    ) -> Result<Self, FromJsonError> {
         let mut s = Self {
             h: Default::default(),
             o: Default::default(),
             f: Default::default(),
             dat: vec![],
         };
-        
+
         Self::expect(lex, TokenType::CurlyOpen, true)?;
         let mut name_stack = vec![];
 
@@ -148,7 +148,7 @@ impl File {
         slic: FileStr,
         name_stack: &mut Vec<String>,
         lex: &mut std::iter::Peekable<T>,
-    ) -> Result<Vec<FieldIdx>, EncoderError> {
+    ) -> Result<Vec<FieldIdx>, FromJsonError> {
         let mut child_fields = vec![];
 
         something_comma_separated!(
@@ -158,7 +158,7 @@ impl File {
             {
                 let tok = lex.next().unwrap();
                 let span = span!(&tok.buf);
-                let name = &slic.0[span.first as usize+1..span.end as usize-1];
+                let name = &slic.0[span.first as usize + 1..span.end as usize - 1];
                 let idx = self.read_field(slic, name, None, name_stack, lex)?;
                 child_fields.push(idx);
             },
@@ -176,7 +176,7 @@ impl File {
         parent: Option<ObjIdx>,
         name_stack: &mut Vec<String>,
         lex: &mut std::iter::Peekable<T>,
-    ) -> Result<FieldIdx, EncoderError> {
+    ) -> Result<FieldIdx, FromJsonError> {
         let field_index = FieldIdx(self.f.fields.len());
         self.f.fields.push(FieldInfo {
             name_hash: name_hash(name),
@@ -186,7 +186,7 @@ impl File {
         // Identify type
         name_stack.push(name.to_owned());
         Self::expect(lex, TokenType::Colon, true)?;
-        let val = match lex.peek().ok_or(EncoderError::JsonErr)?.kind {
+        let val = match lex.peek().ok_or(FromJsonError::JsonErr)?.kind {
             TokenType::CurlyOpen => {
                 if name == "raw_data" || name == "static_save" {
                     let inner = File::try_from_lexer(slic, lex)?;
@@ -227,7 +227,7 @@ impl File {
                             let tok = Self::expect(lex, TokenType::Number, true)?;
                             let span = span!(&tok.buf);
                             *f = slic[span].parse::<f32>().map_err(|_| {
-                                EncoderError::LiteralFormat(
+                                FromJsonError::LiteralFormat(
                                     "expected float".to_owned(),
                                     span.first,
                                     span.end,
@@ -244,7 +244,7 @@ impl File {
                                     let tok = lex.next().unwrap();
                                     let span = span!(&tok.buf);
                                     v.push(slic[span].parse::<i32>().map_err(|_| {
-                                        EncoderError::LiteralFormat(
+                                        FromJsonError::LiteralFormat(
                                             "expected int".to_owned(),
                                             span.first,
                                             span.end,
@@ -281,7 +281,7 @@ impl File {
                                     let tok = lex.next().unwrap();
                                     let span = span!(&tok.buf);
                                     v.push(slic[span].parse::<f32>().map_err(|_| {
-                                        EncoderError::LiteralFormat(
+                                        FromJsonError::LiteralFormat(
                                             "expected int".to_owned(),
                                             span.first,
                                             span.end,
@@ -300,14 +300,14 @@ impl File {
                             Self::expect(lex, TokenType::BracketClose, true)?;
 
                             *i1 = slic[span1].parse::<i32>().map_err(|_| {
-                                EncoderError::LiteralFormat(
+                                FromJsonError::LiteralFormat(
                                     "expected int".to_owned(),
                                     span1.first,
                                     span1.end,
                                 )
                             })?;
                             *i2 = slic[span2].parse::<i32>().map_err(|_| {
-                                EncoderError::LiteralFormat(
+                                FromJsonError::LiteralFormat(
                                     "expected int".to_owned(),
                                     span1.first,
                                     span1.end,
@@ -318,7 +318,7 @@ impl File {
                             let tok = Self::expect(lex, TokenType::String, true)?;
                             let span = span!(&tok.buf);
                             if span.end - span.first != 3 {
-                                return Err(EncoderError::LiteralFormat(
+                                return Err(FromJsonError::LiteralFormat(
                                     "expect char with 1 character".to_owned(),
                                     span.first,
                                     span.end,
@@ -329,7 +329,7 @@ impl File {
                                 .get(span.first as usize + 1)
                                 .map(|&u| u as char)
                                 .filter(|c| c.is_ascii())
-                                .ok_or(EncoderError::LiteralFormat(
+                                .ok_or(FromJsonError::LiteralFormat(
                                     "expect char with 1 character".to_owned(),
                                     span.first,
                                     span.end,
@@ -340,12 +340,12 @@ impl File {
                     Some(val)
                 } else {
                     // Decode heuristic
-                    let tok = lex.next().ok_or(EncoderError::UnexpEOF)?;
+                    let tok = lex.next().ok_or(FromJsonError::UnexpEOF)?;
                     let span = span!(&tok.buf);
                     Some(match tok.kind {
                         TokenType::Number => {
                             FieldType::Int(slic[span].parse::<i32>().map_err(|_| {
-                                EncoderError::LiteralFormat(
+                                FromJsonError::LiteralFormat(
                                     "expected int".to_owned(),
                                     span.first,
                                     span.end,
@@ -357,13 +357,13 @@ impl File {
                             FieldType::String(string[1..string.len() - 1].to_owned())
                         }
                         TokenType::BracketOpen => {
-                            let tok = lex.next().ok_or(EncoderError::UnexpEOF)?;
+                            let tok = lex.next().ok_or(FromJsonError::UnexpEOF)?;
                             let span = span!(tok.buf);
                             let b1 = match tok.kind {
                                 TokenType::BooleanTrue => true,
                                 TokenType::BooleanFalse => false,
                                 _ => {
-                                    return Err(EncoderError::LiteralFormat(
+                                    return Err(FromJsonError::LiteralFormat(
                                         "expected bool".to_owned(),
                                         span.first,
                                         span.end,
@@ -371,13 +371,13 @@ impl File {
                                 }
                             };
                             Self::expect(lex, TokenType::Comma, true)?;
-                            let tok = lex.next().ok_or(EncoderError::UnexpEOF)?;
+                            let tok = lex.next().ok_or(FromJsonError::UnexpEOF)?;
                             let span = span!(tok.buf);
                             let b2 = match tok.kind {
                                 TokenType::BooleanTrue => true,
                                 TokenType::BooleanFalse => false,
                                 _ => {
-                                    return Err(EncoderError::LiteralFormat(
+                                    return Err(FromJsonError::LiteralFormat(
                                         "expected bool".to_owned(),
                                         span.first,
                                         span.end,
@@ -390,7 +390,7 @@ impl File {
                         TokenType::BooleanTrue => FieldType::Bool(true),
                         TokenType::BooleanFalse => FieldType::Bool(false),
                         _ => {
-                            return Err(EncoderError::LiteralFormat(
+                            return Err(FromJsonError::LiteralFormat(
                                 "unknown field".to_owned(),
                                 span.first,
                                 span.end,
@@ -415,15 +415,15 @@ impl File {
         lex: &mut std::iter::Peekable<T>,
         exp: TokenType,
         eat: bool,
-    ) -> Result<Token, EncoderError> {
+    ) -> Result<Token, FromJsonError> {
         let tok = if eat {
-            lex.next().ok_or(EncoderError::JsonErr)?
+            lex.next().ok_or(FromJsonError::JsonErr)?
         } else {
-            lex.peek().ok_or(EncoderError::JsonErr)?.clone()
+            lex.peek().ok_or(FromJsonError::JsonErr)?.clone()
         };
         if tok.kind != exp {
             let sp = span!(tok.buf);
-            return Err(EncoderError::Expected(
+            return Err(FromJsonError::Expected(
                 format!("{:?}", exp),
                 sp.first,
                 sp.end,
@@ -603,7 +603,7 @@ struct Header {
 }
 
 impl Header {
-    pub fn try_from_reader<R: Read>(reader: &'_ mut R) -> Result<Self, DecoderError> {
+    pub fn try_from_reader<R: Read>(reader: &'_ mut R) -> Result<Self, FromBinError> {
         // Reading all 64 header bytes upfront elides all the checks in later unwraps/?s.
         let buf = &mut [0u8; 64];
         reader.read_exact(buf)?;
@@ -664,9 +664,11 @@ struct Objects {
 }
 
 impl Objects {
-    fn try_from_reader<R: Read>(reader: &'_ mut R, num: u32) -> Result<Self, DecoderError> {
-        let mut o = Objects { objs: Vec::with_capacity(num as usize) };
-        let mut buf = vec![0u8; 4*4];
+    fn try_from_reader<R: Read>(reader: &'_ mut R, num: u32) -> Result<Self, FromBinError> {
+        let mut o = Objects {
+            objs: Vec::with_capacity(num as usize),
+        };
+        let mut buf = vec![0u8; 4 * 4];
         for _ in 0..num {
             reader.read_exact(&mut buf)?;
             let mut reader: &[u8] = &buf;
@@ -706,9 +708,9 @@ pub struct ObjIdx(usize);
 pub struct FieldIdx(usize);
 
 impl Fields {
-    fn try_from_reader<R: Read + Seek>(reader: &'_ mut R, num: u32) -> Result<Self, DecoderError> {
+    fn try_from_reader<R: Read + Seek>(reader: &'_ mut R, num: u32) -> Result<Self, FromBinError> {
         let mut f = Fields { fields: vec![] };
-        let mut buf = vec![0u8; 3*4];
+        let mut buf = vec![0u8; 3 * 4];
         for _ in 0..num {
             reader.read_exact(&mut buf)?;
             let mut reader: &[u8] = &buf;
@@ -779,8 +781,8 @@ impl Field {
                     tmp_size += s.len() + 1;
                 }
                 tmp_size
-            },
-            FloatArray(ref v) => align + 4* v.len(),
+            }
+            FloatArray(ref v) => align + 4 * v.len(),
             TwoInt(_, _) => align + 8,
             File(Some(ref f)) => align + 4 + f.calc_bin_size(),
             File(None) => unreachable!("file already en-/decoded"),
@@ -807,7 +809,7 @@ pub enum FieldType {
     Object(Vec<FieldIdx>),
 }
 #[derive(Debug)]
-pub enum DecoderError {
+pub enum FromBinError {
     UnknownField(String),
     SizeMismatch { at: usize, exp: usize },
     OffsetMismatch { exp: u64, is: u64 },
@@ -822,40 +824,40 @@ pub enum DecoderError {
     FormatErr,
 }
 
-impl From<std::str::Utf8Error> for DecoderError {
+impl From<std::str::Utf8Error> for FromBinError {
     fn from(err: std::str::Utf8Error) -> Self {
-        DecoderError::Utf8Error(err)
+        FromBinError::Utf8Error(err)
     }
 }
 
-impl From<std::ffi::FromBytesWithNulError> for DecoderError {
+impl From<std::ffi::FromBytesWithNulError> for FromBinError {
     fn from(err: std::ffi::FromBytesWithNulError) -> Self {
-        DecoderError::FromBytesWithNulError(err)
+        FromBinError::FromBytesWithNulError(err)
     }
 }
 
-impl From<std::io::Error> for DecoderError {
+impl From<std::io::Error> for FromBinError {
     fn from(err: std::io::Error) -> Self {
-        DecoderError::IoError(err)
+        FromBinError::IoError(err)
     }
 }
 
-impl From<std::collections::TryReserveError> for DecoderError {
+impl From<std::collections::TryReserveError> for FromBinError {
     fn from(err: std::collections::TryReserveError) -> Self {
-        DecoderError::TryReserveError(err)
+        FromBinError::TryReserveError(err)
     }
 }
 
-impl std::fmt::Display for DecoderError {
+impl std::fmt::Display for FromBinError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         std::fmt::Debug::fmt(self, fmt)
     }
 }
 
-impl std::error::Error for DecoderError {}
+impl std::error::Error for FromBinError {}
 
 #[derive(Debug)]
-pub enum EncoderError {
+pub enum FromJsonError {
     UnknownField(String),
     Expected(String, u64, u64),
     LiteralFormat(String, u64, u64),
@@ -863,24 +865,14 @@ pub enum EncoderError {
     UnexpEOF,
     JsonErr,
 }
-/*
-impl EncoderError {
-    fn line(&self)
-}*/
-/*
-impl From<serde_json::Error> for EncoderError {
-    fn from(err: serde_json::Error) -> Self {
-        EncoderError::JsonErr(err)
-    }
-}*/
 
-impl std::fmt::Display for EncoderError {
+impl std::fmt::Display for FromJsonError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         std::fmt::Debug::fmt(self, fmt)
     }
 }
 
-impl std::error::Error for EncoderError {}
+impl std::error::Error for FromJsonError {}
 
 macro_rules! types {
     ($([$e:ident, $($i:literal),+]), + $(,)*) => {
@@ -971,7 +963,7 @@ fn decode_fields<R: Read + Seek>(
     f: &'_ mut Fields,
     o: &'_ Objects,
     max_size: u32,
-) -> Result<Vec<Field>, DecoderError> {
+) -> Result<Vec<Field>, FromBinError> {
     let mut buf = vec![0; max_size as usize];
     reader.read_exact(&mut buf)?;
 
@@ -985,7 +977,7 @@ fn decode_fields<R: Read + Seek>(
     if let Some(&last) = offsets.last() {
         offset_sizes.insert(
             last,
-            max_size.checked_sub(last).ok_or(DecoderError::Arith)? as usize,
+            max_size.checked_sub(last).ok_or(FromBinError::Arith)? as usize,
         );
     }
     //println!("{:?}", offset_sizes);
@@ -998,13 +990,13 @@ fn decode_fields<R: Read + Seek>(
         let len = field.name_length() as usize;
         let field_name = buf
             .get(off..off + len)
-            .ok_or(DecoderError::SizeMismatch { at: off, exp: len })?;
+            .ok_or(FromBinError::SizeMismatch { at: off, exp: len })?;
         let name = CStr::from_bytes_with_nul(&field_name)?
             .to_str()?
             .to_string();
 
         if name_hash(&name) != field.name_hash {
-            return Err(DecoderError::HashMismatch);
+            return Err(FromBinError::HashMismatch);
         }
 
         let data_begin = off + len;
@@ -1014,16 +1006,16 @@ fn decode_fields<R: Read + Seek>(
             FieldType::Object(vec![])
         } else {
             if data_end <= data_begin {
-                return Err(DecoderError::FormatErr);
+                return Err(FromBinError::FormatErr);
             }
             let to_skip_if_aligned = ((data_begin + 3) & !0b11) - data_begin;
             let mut field_data =
                 buf.get(data_begin..data_end)
-                    .ok_or(DecoderError::SizeMismatch {
+                    .ok_or(FromBinError::SizeMismatch {
                         at: data_begin,
                         exp: data_end
                             .checked_sub(data_begin)
-                            .ok_or(DecoderError::FormatErr)?,
+                            .ok_or(FromBinError::FormatErr)?,
                     })?;
             FieldType::try_from_reader(
                 &mut field_data,
@@ -1041,20 +1033,20 @@ fn decode_fields<R: Read + Seek>(
 
         if obj_stack.is_empty() {
             if !field.is_object() {
-                return Err(DecoderError::MissingRoot);
+                return Err(FromBinError::MissingRoot);
             }
         } else {
             if let FieldType::Object(ref mut v) = data[o
                 .objs
                 .get(obj_stack.last().unwrap().0)
-                .ok_or(DecoderError::FormatErr)?
+                .ok_or(FromBinError::FormatErr)?
                 .field
                 .0]
                 .tipe
             {
                 v.push(FieldIdx(idx))
             } else {
-                return Err(DecoderError::FormatErr);
+                return Err(FromBinError::FormatErr);
             }
             *obj_nums.last_mut().unwrap() += 1;
         }
@@ -1068,7 +1060,7 @@ fn decode_fields<R: Read + Seek>(
             && *obj_nums.last().unwrap()
                 == o.objs
                     .get(obj_stack.last().unwrap().0)
-                    .ok_or(DecoderError::FormatErr)?
+                    .ok_or(FromBinError::FormatErr)?
                     .num_direct_childs
         {
             obj_stack.pop();
@@ -1084,13 +1076,13 @@ fn build_name_trace<'a>(
     objs: &'a [ObjectInfo],
     name: &'a str,
     obj_stack: &'a [ObjIdx],
-) -> Result<Vec<&'a str>, DecoderError> {
+) -> Result<Vec<&'a str>, FromBinError> {
     obj_stack
         .iter()
         .map(|i| {
             Ok(fields
                 .get(objs[i.0].field.0)
-                .ok_or(DecoderError::FormatErr)?
+                .ok_or(FromBinError::FormatErr)?
                 .name
                 .as_str())
         })
@@ -1104,7 +1096,7 @@ impl FieldType {
         to_skip_if_aligned: usize,
         max_len: usize,
         name_trace: &'_ [&'_ str],
-    ) -> Result<Self, DecoderError> {
+    ) -> Result<Self, FromBinError> {
         use FieldType::*;
 
         if let Some(mut val) = hardcoded_type(name_trace) {
@@ -1155,7 +1147,7 @@ impl FieldType {
                     if a.is_ascii() {
                         *c = a;
                     } else {
-                        return Err(DecoderError::CharError(b[0]));
+                        return Err(FromBinError::CharError(b[0]));
                     }
                 }
                 _ => unreachable!("unhandled hardcoded type when reading"),
@@ -1180,7 +1172,7 @@ impl FieldType {
                         ))
                     } else if (first_int as usize)
                         .checked_add(4)
-                        .ok_or(DecoderError::FormatErr)?
+                        .ok_or(FromBinError::FormatErr)?
                         == aligned_max_len
                     {
                         let len = first_int;
@@ -1195,7 +1187,7 @@ impl FieldType {
                             Ok(String(str.to_string()))
                         }
                     } else {
-                        Err(DecoderError::UnknownField(
+                        Err(FromBinError::UnknownField(
                             name_trace.last().unwrap().to_string(),
                         ))
                     }
