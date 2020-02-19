@@ -9,6 +9,8 @@ use std::{
     pin::Pin,
 };
 
+use super::util::unescape;
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum TokenType {
     BeginObject,
@@ -28,6 +30,7 @@ pub enum JsonError {
     EOF,
     ExpectedValue,
     Expected(String, u64, u64),
+    BareControl(u64, u64),
 }
 
 impl std::fmt::Display for JsonError {
@@ -38,13 +41,13 @@ impl std::fmt::Display for JsonError {
 
 impl std::error::Error for JsonError {}
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Location {
     pub first: u64,
     pub end: u64,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Token<'a> {
     pub kind: TokenType,
     pub dat: Cow<'a, str>,
@@ -63,9 +66,9 @@ macro_rules! span {
 
 macro_rules! ungen {
     ($f:ident, $data:expr, $l:ident) => {{
-        let mut gen = $f($data, $l);
+        let mut gen: Pin<Box<_>> = $f($data, $l).into();
         loop {
-            let res = Pin::new(&mut *gen).resume();
+            let res = gen.as_mut().resume(());
             match res {
                 GeneratorState::Yielded(tok) => yield tok,
                 GeneratorState::Complete(r) => match r {
@@ -80,35 +83,44 @@ macro_rules! ungen {
     }};
 }
 
-struct Parser<'a> {
-	gen: Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + Unpin + 'a>,
+pub struct Parser<'a> {
+    gen: Pin<Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + 'a>>,
 }
 
 impl<'a> Parser<'a> {
-	fn new(data: &'a str) -> Self {
-		Self {gen: parse(data) }
-	}
+    pub fn new(data: &'a str) -> Self {
+        Self {
+            gen: parse(data).into(),
+        }
+    }
+}
 
-	fn next(&mut self) -> Result<Token<'a>, JsonError> {
-		let res = Pin::new(&mut *self.gen).resume();
-		match res {
-			GeneratorState::Yielded(tok) => return Ok(tok),
-			GeneratorState::Complete(err) => {
-				match err {
-					Ok(_) => return Err(JsonError::EOF),
-					Err(e) => return Err(e),
-				}	
-			}
-		}
-	}
+impl<'a> Iterator for Parser<'a> {
+    type Item = Result<Token<'a>, JsonError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let res = self.gen.as_mut().resume(());
+        match res {
+            GeneratorState::Yielded(tok) => return Some(Ok(tok)),
+            GeneratorState::Complete(err) => match err {
+                Ok(_) => return None,
+                Err(e) => {
+                    return Some(Err(e));
+                }
+            },
+        }
+    }
 }
 
 pub fn parse<'a>(
     data: &'a str,
-) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + Unpin + 'a> {
+) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + 'a> {
     Box::new(move || {
         let mut lex = JsonLexer::new(data.bytes(), BufferType::Span).peekable();
-        while let Some(tok) = lex.peek() {
+        if let Some(_) = lex.peek() {
+            ungen!(parse_value, data, lex)
+        }
+        while let Some(_) = lex.peek() {
+            expect_control(JsonTokenType::Comma, &mut lex)?;
             ungen!(parse_value, data, lex)
         }
         Ok(())
@@ -150,6 +162,7 @@ fn lib_to_self(lib: JsonTokenType) -> Option<TokenType> {
     })
 }
 
+/*
 fn is_value(lib: &JsonTokenType) -> bool {
     match lib {
         JsonTokenType::Null
@@ -159,14 +172,14 @@ fn is_value(lib: &JsonTokenType) -> bool {
         | JsonTokenType::BooleanFalse => true,
         _ => false,
     }
-}
+}*/
 
 // E0626: This takes and returns ownership of the lexer as calling functions
 // can't hold onto `lex` while yielding our items
-fn parse_object<'b, 'a: 'b, T: Iterator<Item = JsonToken> + 'b>(
+fn parse_object<'b, 'a: 'b, T: Iterator<Item = JsonToken> + 'a>(
     data: &'a str,
     mut lex: Peekable<T>,
-) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<Peekable<T>, JsonError>> + Unpin + 'b> {
+) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<Peekable<T>, JsonError>> + Unpin + 'a> {
     Box::new(move || {
         #[derive(PartialEq, Eq)]
         enum Expecting {
@@ -189,11 +202,13 @@ fn parse_object<'b, 'a: 'b, T: Iterator<Item = JsonToken> + 'b>(
                 &JsonTokenType::Comma if state == Expecting::CommaOrClose => {
                     state = Expecting::Field;
                 }
-                &JsonTokenType::String if state == Expecting::Field => {
-                    yield json_to_token(data, tok)?;
-					expect_control(JsonTokenType::Colon, &mut lex)?;
-					ungen!(parse_value, data, lex);
-					state = Expecting::CommaOrClose;
+                &JsonTokenType::String if state != Expecting::CommaOrClose => {
+                    let mut rtok = json_to_token(data, tok)?;
+                    rtok.kind = TokenType::FieldName;
+                    yield rtok;
+                    expect_control(JsonTokenType::Colon, &mut lex)?;
+                    ungen!(parse_value, data, lex);
+                    state = Expecting::CommaOrClose;
                 }
                 _ => {
                     let span = span!(&tok.buf);
@@ -205,7 +220,10 @@ fn parse_object<'b, 'a: 'b, T: Iterator<Item = JsonToken> + 'b>(
                             Expecting::FieldOrClose => {
                                 "expected field name or } (closing brace)".to_owned()
                             }
-                            Expecting::Field => "expected field name".to_owned(),
+                            Expecting::Field => {
+                                println!("got {:?}", tok);
+                                "expected field name".to_owned()
+                            }
                         },
                         span.first,
                         span.end,
@@ -217,10 +235,10 @@ fn parse_object<'b, 'a: 'b, T: Iterator<Item = JsonToken> + 'b>(
     })
 }
 
-fn parse_array<'b, 'a: 'b, T: Iterator<Item = JsonToken> + 'b>(
+fn parse_array<'a, T: Iterator<Item = JsonToken> + 'a>(
     data: &'a str,
     mut lex: Peekable<T>,
-) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<Peekable<T>, JsonError>> + Unpin + 'b> {
+) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<Peekable<T>, JsonError>> + 'a> {
     Box::new(move || {
         #[derive(PartialEq, Eq)]
         enum Expecting {
@@ -234,19 +252,36 @@ fn parse_array<'b, 'a: 'b, T: Iterator<Item = JsonToken> + 'b>(
         let mut state = Expecting::ValueOrClose;
 
         loop {
-            let tok = lex.next().ok_or(JsonError::EOF)?;
+            let tok = lex.peek().ok_or(JsonError::EOF)?;
             match &tok.kind {
                 &JsonTokenType::BracketClose if state != Expecting::Value => {
-                    yield json_to_token(data, tok)?;
+                    yield json_to_token(data, lex.next().unwrap())?;
                     break;
                 }
                 &JsonTokenType::Comma if state == Expecting::CommaOrClose => {
+                    let _ = lex.next().unwrap();
                     state = Expecting::Value;
-				}
-				&_ => {
-					ungen!(parse_value, data, lex);
-					state = Expecting::CommaOrClose;
-				}
+                }
+                &_ if state != Expecting::CommaOrClose => {
+                    ungen!(parse_value, data, lex);
+                    state = Expecting::CommaOrClose;
+                }
+                &_ => {
+                    let span = span!(&tok.buf);
+                    return Err(JsonError::Expected(
+                        match state {
+                            Expecting::CommaOrClose => {
+                                "expected , (comma) or ] (closing bracket)".to_owned()
+                            }
+                            Expecting::ValueOrClose => {
+                                "expected value or } (closing bracket)".to_owned()
+                            }
+                            Expecting::Value => "expected value".to_owned(),
+                        },
+                        span.first,
+                        span.end,
+                    ));
+                }
             }
         }
 
@@ -254,24 +289,26 @@ fn parse_array<'b, 'a: 'b, T: Iterator<Item = JsonToken> + 'b>(
     })
 }
 
-fn parse_value<'b, 'a: 'b, T: Iterator<Item = JsonToken> + 'b>(
+fn parse_value<'a, T: Iterator<Item = JsonToken> + 'a>(
     data: &'a str,
     mut lex: Peekable<T>,
-) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<Peekable<T>, JsonError>> + Unpin + 'b> {
-	Box::new(move || {
-		let tok = lex.next().ok_or(JsonError::EOF)?;
-		match tok.kind {
-			JsonTokenType::CurlyOpen => ungen!(parse_object, data, lex),
-			JsonTokenType::BracketOpen => ungen!(parse_array, data, lex),
-			JsonTokenType::Number
-			| JsonTokenType::BooleanTrue
-			| JsonTokenType::BooleanFalse
-			| JsonTokenType::String
-			| JsonTokenType::Null => yield parse_single(data, &mut lex).unwrap(),
-			_ => return Err(JsonError::ExpectedValue),
-		}
-		Ok(lex)
-	})
+) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<Peekable<T>, JsonError>> + 'a> {
+    Box::new(move || {
+        let tok = lex.peek().ok_or(JsonError::EOF)?;
+        match tok.kind {
+            JsonTokenType::CurlyOpen => ungen!(parse_object, data, lex),
+            JsonTokenType::BracketOpen => ungen!(parse_array, data, lex),
+            JsonTokenType::Number
+            | JsonTokenType::BooleanTrue
+            | JsonTokenType::BooleanFalse
+            | JsonTokenType::String
+            | JsonTokenType::Null => yield parse_single(data, &mut lex).unwrap(),
+            _ => {
+                return Err(JsonError::ExpectedValue);
+            }
+        }
+        Ok(lex)
+    })
 }
 
 fn parse_single<'b, 'a: 'b, T: Iterator<Item = JsonToken>>(
@@ -301,8 +338,15 @@ fn expect_control<'a, T: Iterator<Item = JsonToken>>(
 
 pub fn json_to_token<'a>(data: &'a str, tok: JsonToken) -> Result<Token<'a>, JsonError> {
     let span = span!(tok.buf);
-    let str_data = Cow::from(&data[span.first as usize..span.end as usize]);
-    // TODO: Fix str
+
+    let str_data = if tok.kind == JsonTokenType::String {
+        let st = &data[span.first as usize + 1..span.end as usize - 1];
+        let c = unescape(&st).ok_or(JsonError::BareControl(span.first, span.end))?;
+        c
+    } else {
+        Cow::from(&data[span.first as usize..span.end as usize])
+    };
+
     let loc = Location {
         first: span.first,
         end: span.end,

@@ -28,7 +28,7 @@ fn test_loading() {
             data
         };
 
-        let fil = file::File::try_from_reader(&mut std::io::Cursor::new(&data)).unwrap();
+        let fil = file::File::try_from_bin(&mut std::io::Cursor::new(&data)).unwrap();
         let mut x = Vec::new();
         fil.write_to_json(&mut std::io::BufWriter::new(&mut x), 0, true)
             .unwrap();
@@ -42,5 +42,7 @@ fn test_loading() {
             std::str::from_utf8(&x).unwrap(),
             std::str::from_utf8(&y).unwrap()
         );
+        println!("{:?}", f.path());
+        assert_eq!(fil, fil2);
     });
 }

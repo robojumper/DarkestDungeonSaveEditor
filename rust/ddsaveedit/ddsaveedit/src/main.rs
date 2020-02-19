@@ -5,7 +5,7 @@ fn main() {
         let file = std::fs::File::open(arg).unwrap();
         let mut buf_reader = std::io::BufReader::new(file);
 
-        let fil = File::try_from_reader(&mut buf_reader).unwrap();
+        let fil = File::try_from_bin(&mut buf_reader).unwrap();
         let mut x = Vec::new();
         fil.write_to_json(&mut std::io::BufWriter::new(&mut x), 0, true)
             .unwrap();
