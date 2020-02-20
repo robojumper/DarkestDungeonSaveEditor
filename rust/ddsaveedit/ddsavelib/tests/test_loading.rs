@@ -19,7 +19,7 @@ fn test_loading() {
             }
         }
     }
-    file_paths.iter().for_each(|f| {
+    file_paths.par_iter().for_each(|f| {
         let data = {
             let file = std::fs::File::open(f.path()).unwrap();
             let mut buf_reader = std::io::BufReader::new(file);
@@ -34,6 +34,7 @@ fn test_loading() {
             .unwrap();
 
         let fil2 = file::File::try_from_json(&mut std::io::Cursor::new(&x)).unwrap();
+        assert_eq!(fil, fil2);
 
         let mut y = Vec::new();
         fil2.write_to_json(&mut std::io::BufWriter::new(&mut y), 0, true)
@@ -42,7 +43,7 @@ fn test_loading() {
             std::str::from_utf8(&x).unwrap(),
             std::str::from_utf8(&y).unwrap()
         );
-        println!("{:?}", f.path());
-        assert_eq!(fil, fil2);
+        let fil3 = file::File::try_from_json(&mut std::io::Cursor::new(&x)).unwrap();
+        assert_eq!(fil2, fil3);
     });
 }
