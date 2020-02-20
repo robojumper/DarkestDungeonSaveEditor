@@ -1,0 +1,36 @@
+name: wasm
+
+on:
+  push:	
+    branches:	
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly-2020-02-16
+        override: true
+    - name: Install Node
+      uses: actions/setup-node@v1
+      with:
+        node-version: '10.x'
+    - name: Build site
+      run: |
+        cd rust/ddsaveedit/wasm-ddsaveedit
+        npm install
+        npm run build
+        cd ../../../
+    - name: Deploy
+      uses: crazy-max/ghaction-github-pages@v1
+      with:
+        target_branch: gh-pages
+        build_dir: rust/ddsaveedit/wasm-ddsaveedit/dist # The folder the action should deploy.
+        committer_name: robojumper
+      env:
+        GITHUB_PAT: ${{ secrets.ACCESS_TOKEN }}

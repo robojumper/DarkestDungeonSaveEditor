@@ -80,7 +80,7 @@ rust.then(wasm => {
 			}]);
 			var download = document.getElementById('downloadlink');
 			download.className = "link-disabled";
-			download.setAttribute('href', "");
+			download.removeAttribute('href');
 		} else {
 			editor.session.clearAnnotations();
 			var download = document.getElementById('downloadlink');
