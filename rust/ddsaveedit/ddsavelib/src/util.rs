@@ -9,13 +9,11 @@ pub fn escape(arg: &str) -> Cow<str> {
     if arg
         .chars()
         .find(|&c| {
-            c == '\x08'
-                || c == '\x0C'
-                || c == '\n'
-                || c == '\r'
-                || c == '\t'
-                || c == '"'
-                || c == '\\'
+            if let '\x08' | '\x0C' | '\n' | '\r' | '\t' | '"' | '\\' = c {
+                true
+            } else {
+                false
+            }
         })
         .is_some()
     {
@@ -38,12 +36,23 @@ pub fn escape(arg: &str) -> Cow<str> {
 }
 
 pub fn unescape(arg: &str) -> Option<Cow<str>> {
+    if arg
+        .find(|c| {
+            if let '\x08' | '\x0C' | '\n' | '\r' | '\t' = c {
+                true
+            } else {
+                false
+            }
+        })
+        .is_some()
+    {
+        return None;
+    }
     if arg.find('\\').is_some() {
         let mut s = String::new();
         let mut it = arg.chars();
         while let Some(c) = it.next() {
             match c {
-                '\x08' | '\x0C' | '\n' | '\r' | '\t' | '\"' => return None,
                 '\\' => {}
                 c => {
                     s.push(c);

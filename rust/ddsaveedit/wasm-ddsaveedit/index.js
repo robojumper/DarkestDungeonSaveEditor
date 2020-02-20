@@ -2,8 +2,6 @@ const rust = import('./pkg');
 
 
 rust.then(wasm => {
-	wasm.greet();
-
 	function dragEnter(evt) {
 		const isFile = event.dataTransfer.types.includes("Files");
 		if (isFile) {
@@ -21,7 +19,7 @@ rust.then(wasm => {
 				// Use DataTransferItemList interface to access the file
 				file = ev.dataTransfer.items[0].getAsFile();
 			} else {
-				droperror("expected exactly one file");
+				dropstyle("expected exactly one file", "red");
 				return;
 			}
 		} else {
@@ -29,7 +27,7 @@ rust.then(wasm => {
 			if (ev.dataTransfer.files.length === 1) {
 				file = ev.dataTransfer.files[0];
 			} else {
-				droperror("expected exactly one file");
+				dropstyle("expected exactly one file", "red");
 				return;
 			}
 		}
@@ -39,28 +37,57 @@ rust.then(wasm => {
 		reader.onload = function () {
 
 			var arrayBuffer = this.result;
-			console.log(arrayBuffer);
 			var array = new Uint8Array(arrayBuffer);
-			console.log(array);
-
-			var result = wasm.decode(array);
+			var result = null;
+			try {
+				result = wasm.decode(array);
+				dropstyle(file.name, "green");
+			} catch (e) {
+				if (typeof e === 'string' || e instanceof String) {
+					var editor = ace.edit("editor");
+					editor.setValue(e);
+				}
+				console.log(e);
+				dropstyle("failed to decode", "red");
+			}
 			var editor = ace.edit("editor");
 			editor.setValue(result);
 		}
 		reader.readAsArrayBuffer(file);
 	}
 
-	function droperror(err) {
+	function dropstyle(err, col) {
 		var dragarea = document.getElementById('droparea');
-		dragarea.style.borderColor = "red";
+		dragarea.style.borderColor = col;
 		var errmsg = document.getElementById('errmsg');
 		errmsg.textContent = err;
 	}
 
-	console.log('ok');
+	function onChange(ev) {
+		var editor = ace.edit("editor");
+		var text = editor.getValue();
+		let annot = wasm.check(text);
+
+		if (typeof annot !== 'undefined') {
+			editor.session.setAnnotations([{
+				row: annot.line,
+				column: annot.line,
+				text: annot.err,
+				type: "error" // also warning and information
+			}]);
+		} else {
+			editor.session.clearAnnotations();
+		}
+	}
+
 	var area = document.getElementById('droparea');
 	area.addEventListener('drop', dropHandler);
 	area.addEventListener('dragenter', dragEnter);
 	area.addEventListener('dragover', dragEnter);
 
+	var editor = ace.edit("editor");
+	editor.setTheme("ace/theme/monokai");
+	editor.session.setMode("ace/mode/json");
+	editor.session.on('change', onChange);
+	editor.session.setOption("useWorker", false);
 });

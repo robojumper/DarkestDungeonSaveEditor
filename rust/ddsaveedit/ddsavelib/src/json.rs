@@ -1,5 +1,5 @@
 use json_tools::{
-    Buffer, BufferType, Lexer as JsonLexer, Span as JsonSpan, Token as JsonToken,
+    Buffer, BufferType, Lexer as JsonLexer, Token as JsonToken,
     TokenType as JsonTokenType,
 };
 use std::{
@@ -302,7 +302,7 @@ fn parse_value<'a, T: Iterator<Item = JsonToken> + 'a>(
             | JsonTokenType::BooleanTrue
             | JsonTokenType::BooleanFalse
             | JsonTokenType::String
-            | JsonTokenType::Null => yield parse_single(data, &mut lex).unwrap(),
+            | JsonTokenType::Null => yield parse_single(data, &mut lex)?,
             _ => {
                 let span = span!(&tok.buf);
                 return Err(JsonError::ExpectedValue(span.first, span.end));

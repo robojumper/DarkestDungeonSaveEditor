@@ -58,8 +58,8 @@ impl File {
     #[inline(never)]
     pub fn try_from_json<R: Read>(reader: &'_ mut R) -> Result<Self, FromJsonError> {
         let mut x = vec![];
-        reader.read_to_end(&mut x).unwrap();
-        let slic = std::str::from_utf8(&x).unwrap();
+        reader.read_to_end(&mut x)?;
+        let slic = std::str::from_utf8(&x)?;
 
         let lex = &mut Parser::new(slic).peekable();
         Self::try_from_json_parser(lex)
@@ -267,6 +267,34 @@ impl File {
                             *i2 = parse_prim!(t2, i32, "integer");
                             Self::expect(lex, TokenType::EndArray, true)?;
                         }
+                        FieldType::TwoBool(ref mut b1, ref mut b2) => {
+                            Self::expect(lex, TokenType::BeginArray, true)?;
+                            let tok1 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+                            *b1 = if tok1.kind == TokenType::BoolTrue {
+                                true
+                            } else if tok1.kind == TokenType::BoolFalse {
+                                false
+                            } else {
+                                return Err(FromJsonError::Expected(
+                                    "bool".to_owned(),
+                                    tok1.loc.first,
+                                    tok1.loc.end,
+                                ));
+                            };
+                            let tok2 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+                            *b2 = if tok2.kind == TokenType::BoolTrue {
+                                true
+                            } else if tok2.kind == TokenType::BoolFalse {
+                                false
+                            } else {
+                                return Err(FromJsonError::Expected(
+                                    "bool".to_owned(),
+                                    tok2.loc.first,
+                                    tok2.loc.end,
+                                ));
+                            };
+                            Self::expect(lex, TokenType::EndArray, true)?;
+                        }
                         FieldType::Char(ref mut c) => {
                             let tok = Self::expect(lex, TokenType::String, true)?;
                             if tok.dat.len() == 1 {
@@ -297,34 +325,6 @@ impl File {
                     Some(match tok.kind {
                         TokenType::Number => FieldType::Int(parse_prim!(tok, i32, "integer")),
                         TokenType::String => FieldType::String(parse_prim!(tok, String, "string")),
-                        TokenType::BeginArray => {
-                            let tok1 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
-                            let tok2 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
-                            Self::expect(lex, TokenType::EndArray, true)?;
-                            let b1 = match tok1.kind {
-                                TokenType::BoolTrue => true,
-                                TokenType::BoolFalse => false,
-                                _ => {
-                                    return Err(FromJsonError::Expected(
-                                        "boolean".to_owned(),
-                                        tok1.loc.first,
-                                        tok1.loc.end,
-                                    ))
-                                }
-                            };
-                            let b2 = match tok2.kind {
-                                TokenType::BoolTrue => true,
-                                TokenType::BoolFalse => false,
-                                _ => {
-                                    return Err(FromJsonError::Expected(
-                                        "boolean".to_owned(),
-                                        tok2.loc.first,
-                                        tok2.loc.end,
-                                    ))
-                                }
-                            };
-                            FieldType::TwoBool(b1, b2)
-                        }
                         TokenType::BoolTrue => FieldType::Bool(true),
                         TokenType::BoolFalse => FieldType::Bool(false),
                         _ => {
@@ -361,7 +361,7 @@ impl File {
         };
         if tok.kind != exp {
             return Err(FromJsonError::Expected(
-                format!("file.rs: {:?}", exp),
+                format!("{:?}", exp),
                 tok.loc.first,
                 tok.loc.end,
             ));
@@ -837,6 +837,8 @@ pub enum FromJsonError {
     LiteralFormat(String, u64, u64),
     JsonErr(u64, u64),
     UnexpEOF,
+    EncodingErr(String, u64, u64),
+    IoError(std::io::Error),
 }
 
 impl std::fmt::Display for FromJsonError {
@@ -853,8 +855,24 @@ impl From<JsonError> for FromJsonError {
             JsonError::BareControl(b, c) => {
                 FromJsonError::LiteralFormat("bare control character".to_owned(), b, c)
             }
-            JsonError::Expected(a, b, c) => FromJsonError::Expected(a, b, c),
+            JsonError::Expected(a, b, c) => {
+                FromJsonError::Expected("Expected ".to_owned() + &a, b, c)
+            }
         }
+    }
+}
+
+impl From<std::str::Utf8Error> for FromJsonError {
+    fn from(err: std::str::Utf8Error) -> Self {
+        let begin = err.valid_up_to();
+        let end = begin + err.error_len().unwrap_or(1);
+        Self::EncodingErr("not utf-8".to_owned(), begin as u64, end as u64)
+    }
+}
+
+impl From<std::io::Error> for FromJsonError {
+    fn from(err: std::io::Error) -> Self {
+        Self::IoError(err)
     }
 }
 
@@ -864,16 +882,17 @@ macro_rules! types {
     ($([$e:ident, $($i:literal),+]), + $(,)*) => {
         &[$((types!($e), &[$($i,)+]),)+]
     };
-    (Float) => {FieldType::Float(0.0)};
-    (Char) => {FieldType::Char('\0')};
-    (IntVector) => {FieldType::IntVector(std::vec::Vec::new())};
-    (StringVector) => {FieldType::StringVector(std::vec::Vec::new())};
-    (FloatArray) => {FieldType::FloatArray(std::vec::Vec::new())};
-    (TwoInt) => {FieldType::TwoInt(0, 0)};
+    (Float) => {&FieldType::Float(0.0)};
+    (Char) => {&FieldType::Char('\0')};
+    (IntVector) => {&FieldType::IntVector(std::vec::Vec::new())};
+    (StringVector) => {&FieldType::StringVector(std::vec::Vec::new())};
+    (FloatArray) => {&FieldType::FloatArray(std::vec::Vec::new())};
+    (TwoInt) => {&FieldType::TwoInt(0, 0)};
+    (TwoBool) => {&FieldType::TwoBool(false, false)};
 }
 
 #[rustfmt::skip]
-const TYPES: &[(FieldType, &[&'static str])] = types!(
+const TYPES: &[(&FieldType, &[&'static str])] = types!(
     [Char, "requirement_code"],
 
     [Float, "current_hp"],
@@ -920,6 +939,17 @@ const TYPES: &[(FieldType, &[&'static str])] = types!(
     [FloatArray, "areas", "*", "tiles", "*", "sidepos"],
 
     [TwoInt, "killRange"],
+
+    [TwoBool, "profile_options", "values", "quest_select_warnings"],
+    [TwoBool, "profile_options", "values", "provision_warnings"],
+    [TwoBool, "profile_options", "values", "deck_based_stage_coach"],
+    [TwoBool, "profile_options", "values", "curio_tracker"],
+    [TwoBool, "profile_options", "values", "dd_mode"],
+    [TwoBool, "profile_options", "values", "corpses"],
+    [TwoBool, "profile_options", "values", "stall_penalty"],
+    [TwoBool, "profile_options", "values", "deaths_door_recovery_debuffs"],
+    [TwoBool, "profile_options", "values", "retreats_can_fail"],
+    [TwoBool, "profile_options", "values", "multiplied_enemy_crits"],
 );
 
 fn hardcoded_type<T: AsRef<str> + std::fmt::Debug>(name_trace: &'_ [T]) -> Option<FieldType> {
@@ -931,7 +961,7 @@ fn hardcoded_type<T: AsRef<str> + std::fmt::Debug>(name_trace: &'_ [T]) -> Optio
                 .zip(name_trace.iter().rev())
                 .all(|(tst, name_frag)| tst == &"*" || tst == &name_frag.as_ref())
         {
-            Some(t).cloned()
+            Some((*t).clone())
         } else {
             None
         }
@@ -1126,6 +1156,11 @@ impl FieldType {
                     *i1 = reader.read_i32::<LittleEndian>()?;
                     *i2 = reader.read_i32::<LittleEndian>()?;
                 }
+                TwoBool(ref mut b1, ref mut b2) => {
+                    skip!(reader, to_skip_if_aligned);
+                    *b1 = reader.read_i32::<LittleEndian>()? != 0;
+                    *b2 = reader.read_i32::<LittleEndian>()? != 0;
+                }
                 Char(ref mut c) => {
                     let b = &mut [0u8];
                     reader.read_exact(b)?;
@@ -1151,12 +1186,7 @@ impl FieldType {
                     Ok(Int(reader.read_i32::<LittleEndian>()?))
                 } else {
                     let first_int = reader.read_i32::<LittleEndian>()?;
-                    if aligned_max_len == 8 && (first_int == 0 || first_int == 1) {
-                        Ok(TwoBool(
-                            first_int != 0,
-                            reader.read_i32::<LittleEndian>()? != 0,
-                        ))
-                    } else if (first_int as usize)
+                    if (first_int as usize)
                         .checked_add(4)
                         .ok_or(FromBinError::FormatErr)?
                         == aligned_max_len
