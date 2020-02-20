@@ -2,6 +2,9 @@ const rust = import('./pkg');
 
 
 rust.then(wasm => {
+
+	wasm.init();
+
 	function dragEnter(evt) {
 		const isFile = event.dataTransfer.types.includes("Files");
 		if (isFile) {
@@ -73,10 +76,52 @@ rust.then(wasm => {
 				row: annot.line,
 				column: annot.line,
 				text: annot.err,
-				type: "error" // also warning and information
+				type: "error"
 			}]);
+			var download = document.getElementById('downloadlink');
+			download.className = "link-disabled";
+			download.setAttribute('href', "");
 		} else {
 			editor.session.clearAnnotations();
+			var download = document.getElementById('downloadlink');
+			download.className = "";
+			download.setAttribute('href', "");
+		}
+	}
+
+	function arrayToBase64( bytes ) {
+		var len = bytes.byteLength;
+		var binary = '';
+		for (var i = 0; i < len; i++) {
+			binary += String.fromCharCode( bytes[ i ] );
+		}
+		return window.btoa( binary );
+	}
+
+	function downloadFile(filename, bincontent) {
+		if (window.navigator.msSaveBlob) { // // IE hack; see http://msdn.microsoft.com/en-us/library/ie/hh779016.aspx
+			var blob = new Blob([bincontent], { type: 'application/octet-stream' });
+			window.navigator.msSaveOrOpenBlob(blob, filename);
+			return true;
+		} else {
+			var element = document.getElementById('downloadlink');
+			element.setAttribute('href', 'data:application/octet-stream;base64,' + arrayToBase64(bincontent));
+			element.setAttribute('download', filename);
+			return false;
+		}
+	}
+
+
+	function onDownload(ev) {
+		var editor = ace.edit("editor");
+		var text = editor.getValue();
+		let result = wasm.encode(text);
+		if (result === 'undefined') {
+			ev.preventDefault();
+		} else {
+			if (downloadFile(document.getElementById('errmsg').textContent, result)) {
+				ev.preventDefault();
+			}
 		}
 	}
 
@@ -84,6 +129,9 @@ rust.then(wasm => {
 	area.addEventListener('drop', dropHandler);
 	area.addEventListener('dragenter', dragEnter);
 	area.addEventListener('dragover', dragEnter);
+
+	var download = document.getElementById('downloadlink');
+	download.addEventListener('click', onDownload);
 
 	var editor = ace.edit("editor");
 	editor.setTheme("ace/theme/monokai");

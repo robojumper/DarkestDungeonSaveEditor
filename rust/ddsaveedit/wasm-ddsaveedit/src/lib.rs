@@ -1,5 +1,3 @@
-mod utils;
-
 use ddsavelib::{file, file::FromJsonError};
 use wasm_bindgen::prelude::*;
 
@@ -25,13 +23,35 @@ impl Annotation {
 }
 
 #[wasm_bindgen]
+pub fn init() {
+    // When the `console_error_panic_hook` feature is enabled, we can call the
+    // `set_panic_hook` function at least once during initialization, and then
+    // we will get better error messages if our code ever panics.
+    //
+    // For more details see
+    // https://github.com/rustwasm/console_error_panic_hook#readme
+    #[cfg(feature = "console_error_panic_hook")]
+    console_error_panic_hook::set_once();
+}
+
+#[wasm_bindgen]
+pub fn encode(input: &str) -> Option<Vec<u8>> {
+    let pass_input = input;
+    let f = file::File::try_from_json(&mut pass_input.as_bytes()).ok()?;
+    let mut output = vec![];
+    f.write_to_bin(&mut std::io::Cursor::new(&mut output))
+        .ok()?;
+    Some(output)
+}
+
+#[wasm_bindgen]
 pub fn check(input: &str) -> Option<Annotation> {
     let pass_input = input;
     let f = file::File::try_from_json(&mut pass_input.as_bytes());
     match f {
         Ok(_) => None,
         Err(err) => {
-            let (string, first, end) = match err {
+            let (string, first, _) = match err {
                 FromJsonError::Expected(display, a, b) => (display, a, b),
                 FromJsonError::LiteralFormat(display, a, b) => (display, a, b),
                 FromJsonError::JsonErr(a, b) => ("json error".to_owned(), a, b),
@@ -46,7 +66,7 @@ pub fn check(input: &str) -> Option<Annotation> {
 
             let mut line = 0;
             let mut col = 0;
-            for (idx, &b) in input.as_bytes().iter().enumerate().take(first as usize) {
+            for &b in input.as_bytes().iter().take(first as usize) {
                 col += 1;
                 if b == b'\n' {
                     line += 1;

@@ -1,4 +1,4 @@
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::{
     convert::TryFrom,
     ffi::CStr,
@@ -429,7 +429,7 @@ impl File {
                 }
             }
         } else {
-            unreachable!()
+            unreachable!("is object")
         }
         Ok(())
     }
@@ -543,6 +543,17 @@ impl File {
         self.h.fields_offset = self.h.objects_offset + self.h.objects_size;
         self.h.data_offset = self.h.fields_offset + self.h.fields_num * 12;
     }
+
+    pub fn write_to_bin<W: Write>(&self, writer: &'_ mut W) -> std::io::Result<()> {
+        self.h.write_to_bin(writer)?;
+        self.o.write_to_bin(writer)?;
+        self.f.write_to_bin(writer)?;
+        let mut off = 0;
+        for f in &self.dat {
+            off = f.write_to_bin(writer, off)?;
+        }
+        Ok(())
+    }
 }
 
 const HEADER_MAGIC_NUMBER: [u8; 4] = [0x01, 0xB1, 0x00, 0x00];
@@ -612,6 +623,33 @@ impl Header {
         })
     }
 
+    pub fn write_to_bin<W: Write>(&self, inwriter: &'_ mut W) -> std::io::Result<()> {
+        let buf = &mut [0u8; Header::SIZE];
+        let mut writer: &mut [u8] = buf;
+
+        writer.write_all(&self.magic)?;
+        writer.write_u32::<LittleEndian>(self.version).unwrap();
+        writer.write_u32::<LittleEndian>(self.header_len).unwrap();
+        writer.write_u32::<LittleEndian>(0).unwrap(); // Zeroes
+        writer.write_u32::<LittleEndian>(self.objects_size).unwrap();
+        writer.write_u32::<LittleEndian>(self.objects_num).unwrap();
+        writer
+            .write_u32::<LittleEndian>(self.objects_offset)
+            .unwrap();
+        writer.write_u64::<LittleEndian>(0).unwrap();
+        writer.write_u64::<LittleEndian>(0).unwrap();
+        writer.write_u32::<LittleEndian>(self.fields_num).unwrap();
+        writer
+            .write_u32::<LittleEndian>(self.fields_offset)
+            .unwrap();
+        writer.write_u32::<LittleEndian>(0).unwrap();
+        writer.write_u32::<LittleEndian>(self.data_size).unwrap();
+        writer.write_u32::<LittleEndian>(self.data_offset).unwrap();
+
+        inwriter.write_all(buf)?;
+        Ok(())
+    }
+
     fn calc_bin_size(&self) -> usize {
         Header::SIZE
     }
@@ -649,6 +687,25 @@ impl Objects {
             })
         }
         Ok(o)
+    }
+
+    pub fn write_to_bin<W: Write>(&self, inwriter: &'_ mut W) -> std::io::Result<()> {
+        let mut buf = vec![0u8; 4 * 4];
+        for o in &self.objs {
+            let mut writer: &mut [u8] = &mut buf;
+            writer
+                .write_i32::<LittleEndian>(o.parent.map(|i| i.0 as i32).unwrap_or(-1))
+                .unwrap();
+            writer.write_u32::<LittleEndian>(o.field.0 as u32).unwrap();
+            writer
+                .write_u32::<LittleEndian>(o.num_direct_childs as u32)
+                .unwrap();
+            writer
+                .write_u32::<LittleEndian>(o.num_all_childs as u32)
+                .unwrap();
+            inwriter.write_all(&buf)?;
+        }
+        Ok(())
     }
 
     fn calc_bin_size(&self) -> usize {
@@ -690,6 +747,18 @@ impl Fields {
             })
         }
         Ok(f)
+    }
+
+    pub fn write_to_bin<W: Write>(&self, inwriter: &'_ mut W) -> std::io::Result<()> {
+        let mut buf = vec![0u8; 3 * 4];
+        for o in &self.fields {
+            let mut writer: &mut [u8] = &mut buf;
+            writer.write_i32::<LittleEndian>(o.name_hash).unwrap();
+            writer.write_u32::<LittleEndian>(o.offset).unwrap();
+            writer.write_u32::<LittleEndian>(o.field_info).unwrap();
+            inwriter.write_all(&buf)?;
+        }
+        Ok(())
     }
 
     fn calc_bin_size(&self) -> usize {
@@ -765,6 +834,106 @@ impl Field {
         };
 
         existing_size
+    }
+
+    /// Add bytes written
+    pub fn write_to_bin<W: Write>(
+        &self,
+        inwriter: &'_ mut W,
+        mut existing_offset: usize,
+    ) -> std::io::Result<usize> {
+        use FieldType::*;
+
+        inwriter.write_all(self.name.as_bytes())?;
+        inwriter.write_u8(0)?;
+        existing_offset += self.name.len() + 1;
+        let align = ((existing_offset + 3) & !0b11) - existing_offset;
+        let align_zeros = &vec![0u8; align];
+
+        existing_offset += match &self.tipe {
+            Bool(b) => {
+                inwriter.write_u8(if *b { 1u8 } else { 0u8 })?;
+                1
+            }
+            TwoBool(b1, b2) => {
+                inwriter.write_all(align_zeros)?;
+                inwriter.write_u32::<LittleEndian>(if *b1 { 1 } else { 0 })?;
+                inwriter.write_u32::<LittleEndian>(if *b2 { 1 } else { 0 })?;
+                align + 8
+            }
+            Int(i) => {
+                inwriter.write_all(align_zeros)?;
+                inwriter.write_i32::<LittleEndian>(*i)?;
+                align + 4
+            }
+            Float(f) => {
+                inwriter.write_all(align_zeros)?;
+                inwriter.write_f32::<LittleEndian>(*f)?;
+                align + 4
+            }
+            Char(c) => {
+                inwriter.write_u8(*c as u8)?;
+                1
+            }
+            String(ref s) => {
+                inwriter.write_all(align_zeros)?;
+                inwriter.write_u32::<LittleEndian>(s.len() as u32 + 1)?;
+                inwriter.write_all(s.as_bytes())?;
+                inwriter.write_u8(0)?;
+                align + 4 + s.len() + 1
+            }
+            IntVector(ref v) => {
+                inwriter.write_all(align_zeros)?;
+                inwriter.write_u32::<LittleEndian>(v.len() as u32)?;
+                for &i in v {
+                    inwriter.write_i32::<LittleEndian>(i)?;
+                }
+                inwriter.write_u8(0)?;
+                align + 4 + v.len() * 4
+            }
+            StringVector(ref v) => {
+                let mut tmp_size = 4;
+                let any_zeroes = &[0u8; 4];
+                for s in v {
+                    let additional_align = ((tmp_size + 3) & !0b11) - tmp_size;
+                    inwriter.write_all(&any_zeroes[0..additional_align - 1])?;
+                    inwriter.write_u32::<LittleEndian>(s.len() as u32 + 1)?;
+                    inwriter.write_all(s.as_bytes())?;
+                    inwriter.write_u8(0)?;
+                    tmp_size += additional_align;
+                    tmp_size += 4;
+                    tmp_size += s.len() + 1;
+                }
+                tmp_size + align
+            }
+            FloatArray(ref v) => {
+                inwriter.write_all(align_zeros)?;
+                inwriter.write_u32::<LittleEndian>(v.len() as u32)?;
+                for &f in v {
+                    inwriter.write_f32::<LittleEndian>(f)?;
+                }
+                inwriter.write_u8(0)?;
+                align + 4 * v.len()
+            }
+            TwoInt(i1, i2) => {
+                inwriter.write_all(align_zeros)?;
+                inwriter.write_i32::<LittleEndian>(*i1)?;
+                inwriter.write_i32::<LittleEndian>(*i2)?;
+                align + 8
+            }
+            File(Some(ref f)) => {
+                let mut v = vec![0u8; 0];
+                f.write_to_bin(&mut v)?;
+                inwriter.write_all(align_zeros)?;
+                inwriter.write_u32::<LittleEndian>(v.len() as u32)?;
+                inwriter.write_all(&v)?;
+                align + 4 + v.len()
+            }
+            File(None) => unreachable!("file already en-/decoded"),
+            Object(_) => 0,
+        };
+
+        Ok(existing_offset)
     }
 }
 

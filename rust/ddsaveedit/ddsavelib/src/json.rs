@@ -1,6 +1,5 @@
 use json_tools::{
-    Buffer, BufferType, Lexer as JsonLexer, Token as JsonToken,
-    TokenType as JsonTokenType,
+    Buffer, BufferType, Lexer as JsonLexer, Token as JsonToken, TokenType as JsonTokenType,
 };
 use std::{
     borrow::Cow,

@@ -34,11 +34,10 @@
       height: 50%;
     }
 
-    .interact {
+    .area {
       text-align: center;
-      vertical-align: middle;
       overflow: auto;
-      line-height: 90px;
+      overflow-wrap: break-word;
       border-style: dashed;
       border-radius: 5px;
       height: 90%;
@@ -53,6 +52,10 @@
     .interact * {
       pointer-events: none;
     }
+
+    .link-disabled {
+      color: lightgray;
+    }
   </style>
 </head>
 
@@ -60,13 +63,13 @@
   <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
   <div class="column left">
     <div class="part" id="dropouter">
-      <div id="droparea" class="interact">
+      <div id="droparea" class="area interact">
         <p id="errmsg">drop file here</p>
       </div>
     </div>
     <div class="part" id="downloadouter">
-      <div class="interact">
-        <p>download file here</p>
+      <div class="area">
+        <p><a id="downloadlink" class="link-disabled">download file</a></p>
       </div>
     </div>
   </div>
