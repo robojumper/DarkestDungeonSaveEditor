@@ -28,7 +28,7 @@ pub enum TokenType {
 #[derive(Debug, Clone)]
 pub enum JsonError {
     EOF,
-    ExpectedValue,
+    ExpectedValue(u64, u64),
     Expected(String, u64, u64),
     BareControl(u64, u64),
 }
@@ -304,7 +304,8 @@ fn parse_value<'a, T: Iterator<Item = JsonToken> + 'a>(
             | JsonTokenType::String
             | JsonTokenType::Null => yield parse_single(data, &mut lex).unwrap(),
             _ => {
-                return Err(JsonError::ExpectedValue);
+                let span = span!(&tok.buf);
+                return Err(JsonError::ExpectedValue(span.first, span.end));
             }
         }
         Ok(lex)
@@ -357,7 +358,7 @@ pub fn json_to_token<'a>(data: &'a str, tok: JsonToken) -> Result<Token<'a>, Jso
             kind: t,
             loc,
         }),
-        None => Err(JsonError::ExpectedValue),
+        None => Err(JsonError::ExpectedValue(span.first, span.end)),
     }
 }
 

@@ -39,7 +39,7 @@ macro_rules! indent {
 }
 
 impl File {
-    const BUILTIN_VERSION_FIELD: &'static str = "__version_dont_touch";
+    const BUILTIN_VERSION_FIELD: &'static str = "__revision_dont_touch";
 
     pub fn try_from_bin<R: Read + Seek>(reader: &'_ mut R) -> Result<Self, FromBinError> {
         let h = Header::try_from_bin(reader)?;
@@ -148,7 +148,7 @@ impl File {
         });
         // Identify type
         name_stack.push(name.to_owned());
-        let val = match lex.peek().ok_or(FromJsonError::JsonErr)?.clone()?.kind {
+        let val = match lex.peek().ok_or(FromJsonError::UnexpEOF)?.clone()?.kind {
             TokenType::BeginObject => {
                 if name == "raw_data" || name == "static_save" {
                     let inner = File::try_from_json_parser(lex)?;
@@ -355,9 +355,9 @@ impl File {
         eat: bool,
     ) -> Result<Token<'a>, FromJsonError> {
         let tok = if eat {
-            lex.next().ok_or(FromJsonError::JsonErr)??
+            lex.next().ok_or(FromJsonError::UnexpEOF)??
         } else {
-            lex.peek().ok_or(FromJsonError::JsonErr)?.clone()?
+            lex.peek().ok_or(FromJsonError::UnexpEOF)?.clone()?
         };
         if tok.kind != exp {
             return Err(FromJsonError::Expected(
@@ -376,6 +376,7 @@ impl File {
         allow_dupes: bool,
     ) -> std::io::Result<()> {
         writer.write_all(b"{\n")?;
+        indent!(writer, indent + 1);
         writer.write_fmt(format_args!(
             "\"{}\": {},\n",
             Self::BUILTIN_VERSION_FIELD,
@@ -443,6 +444,12 @@ impl File {
     ) -> std::io::Result<()> {
         use FieldType::*;
         let dat = &self.dat[field_idx.0];
+        /*indent!(writer, indent);
+        writer.write_fmt(format_args!(
+            "// Unknown bits: {}, {}\n",
+            self.f.fields[field_idx.0].unknown_bit(),
+            self.f.fields[field_idx.0].unused_bit2()
+        ))?;*/
         indent!(writer, indent);
         writer.write_all(b"\"")?;
         writer.write_all(dat.name.as_bytes())?;
@@ -708,6 +715,16 @@ impl FieldInfo {
             None
         }
     }
+
+    /*
+    fn unknown_bit(&self) -> bool {
+        (self.field_info & 0x8000_0000) != 0
+    }
+
+    fn unused_bit2(&self) -> bool {
+        (self.field_info & 0b10) != 0
+    }
+    */
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -816,12 +833,10 @@ impl std::error::Error for FromBinError {}
 
 #[derive(Debug)]
 pub enum FromJsonError {
-    UnknownField(String),
     Expected(String, u64, u64),
     LiteralFormat(String, u64, u64),
-    MissingRoot,
+    JsonErr(u64, u64),
     UnexpEOF,
-    JsonErr,
 }
 
 impl std::fmt::Display for FromJsonError {
@@ -834,7 +849,7 @@ impl From<JsonError> for FromJsonError {
     fn from(err: JsonError) -> Self {
         match err {
             JsonError::EOF => FromJsonError::UnexpEOF,
-            JsonError::ExpectedValue => FromJsonError::JsonErr,
+            JsonError::ExpectedValue(b, c) => FromJsonError::JsonErr(b, c),
             JsonError::BareControl(b, c) => {
                 FromJsonError::LiteralFormat("bare control character".to_owned(), b, c)
             }

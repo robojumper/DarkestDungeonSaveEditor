@@ -9,9 +9,9 @@ fn main() {
         let mut x = Vec::new();
         fil.write_to_json(&mut std::io::BufWriter::new(&mut x), 0, true)
             .unwrap();
-        eprintln!("done");
+        //eprintln!("done");
 
-        let _ = File::try_from_json(&mut std::io::Cursor::new(&mut x)).unwrap();
         println!("{}", std::str::from_utf8(&x).unwrap());
+        //let _ = File::try_from_json(&mut std::io::Cursor::new(&mut x)).unwrap();
     }
 }

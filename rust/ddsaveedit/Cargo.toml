@@ -3,4 +3,5 @@
 members = [
     "ddsavelib",
     "ddsaveedit",
+    "wasm-ddsaveedit",
 ]
