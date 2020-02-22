@@ -8,9 +8,7 @@ edition = "2018"
 
 [dependencies]
 byteorder = "1.3.4"
-json-tools = "1.1.2"
+# Pinned because unsafe code relies on Span behavior
+json-tools = "=1.1.2"
 
 [dev-dependencies]
-rayon = "1.3.0"
-# Causes a stack overflow for our files
-# pretty_assertions = "0.6.1"

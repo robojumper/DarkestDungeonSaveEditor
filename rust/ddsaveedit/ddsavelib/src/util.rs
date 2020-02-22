@@ -1,22 +1,21 @@
 use std::borrow::Cow;
 
 pub fn name_hash(s: &'_ str) -> i32 {
-    s.bytes()
-        .fold(0i32, |acc, c| acc.wrapping_mul(53).wrapping_add(c as i32))
+    s.bytes().fold(0i32, |acc, c| {
+        acc.wrapping_mul(53).wrapping_add(i32::from(c))
+    })
+}
+
+fn is_control_character(c: char) -> bool {
+    if let '\x08' | '\x0C' | '\n' | '\r' | '\t' = c {
+        true
+    } else {
+        false
+    }
 }
 
 pub fn escape(arg: &str) -> Cow<str> {
-    if arg
-        .chars()
-        .find(|&c| {
-            if let '\x08' | '\x0C' | '\n' | '\r' | '\t' | '"' | '\\' = c {
-                true
-            } else {
-                false
-            }
-        })
-        .is_some()
-    {
+    if arg.chars().any(|c| is_control_character(c) || c == '\\') {
         let mut s = String::new();
         for c in arg.chars() {
             match c {
@@ -30,22 +29,14 @@ pub fn escape(arg: &str) -> Cow<str> {
                 _ => s.push(c),
             }
         }
-        return Cow::Owned(s);
+        Cow::Owned(s)
+    } else {
+        Cow::Borrowed(arg)
     }
-    return Cow::Borrowed(arg);
 }
 
 pub fn unescape(arg: &str) -> Option<Cow<str>> {
-    if arg
-        .find(|c| {
-            if let '\x08' | '\x0C' | '\n' | '\r' | '\t' = c {
-                true
-            } else {
-                false
-            }
-        })
-        .is_some()
-    {
+    if arg.chars().any(is_control_character) {
         return None;
     }
     if arg.find('\\').is_some() {

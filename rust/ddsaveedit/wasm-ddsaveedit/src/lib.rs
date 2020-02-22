@@ -1,4 +1,4 @@
-use ddsavelib::{file, file::FromJsonError};
+use ddsavelib::{err::FromJsonError, file};
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -55,6 +55,7 @@ pub fn check(input: &str) -> Option<Annotation> {
                 FromJsonError::Expected(display, a, b) => (display, a, b),
                 FromJsonError::LiteralFormat(display, a, b) => (display, a, b),
                 FromJsonError::JsonErr(a, b) => ("json error".to_owned(), a, b),
+                FromJsonError::IntegerErr => ("too much".to_owned(), 0, 0),
                 FromJsonError::UnexpEOF => (
                     "unexpected end of file".to_owned(),
                     input.len() as u64 - 1,

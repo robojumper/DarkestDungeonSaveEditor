@@ -1,5 +1,4 @@
 use ddsavelib::file;
-use rayon::prelude::*;
 use std::{fs::read_dir, io::Read, path::PathBuf};
 
 const TEST_PROFILES_PATH: &'static str = "../../../src/test/resources";
@@ -19,7 +18,7 @@ fn test_loading() {
             }
         }
     }
-    file_paths.par_iter().for_each(|f| {
+    file_paths.iter().for_each(|f| {
         let data = {
             let file = std::fs::File::open(f.path()).unwrap();
             let mut buf_reader = std::io::BufReader::new(file);

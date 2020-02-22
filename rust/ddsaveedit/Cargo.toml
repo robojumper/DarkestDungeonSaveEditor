@@ -5,3 +5,7 @@ members = [
     "ddsaveedit",
     "wasm-ddsaveedit",
 ]
+
+
+[profile.release]
+lto = true

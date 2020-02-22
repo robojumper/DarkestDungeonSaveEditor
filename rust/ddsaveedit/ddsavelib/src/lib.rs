@@ -3,6 +3,6 @@
 #![feature(generators)]
 #![feature(generator_trait)]
 
+pub mod err;
 pub mod file;
-mod json;
 mod util;
