@@ -56,11 +56,12 @@ pub fn check(input: &str) -> Option<Annotation> {
                 FromJsonError::LiteralFormat(display, a, b) => (display, a, b),
                 FromJsonError::JsonErr(a, b) => ("json error".to_owned(), a, b),
                 FromJsonError::IntegerErr => ("too much".to_owned(), 0, 0),
-                FromJsonError::UnexpEOF => (
-                    "unexpected end of file".to_owned(),
-                    input.len() as u64 - 1,
-                    input.len() as u64,
-                ),
+                FromJsonError::UnexpEOF => {
+                    let in_len = input.len(); 
+                    ("unexpected end of file".to_owned(),
+                    (in_len as u64).saturating_sub(1),
+                    in_len as u64,
+                )},
                 FromJsonError::IoError(e) => (e.to_string(), 0, 0),
                 FromJsonError::EncodingErr(display, a, b) => (display, a, b),
             };

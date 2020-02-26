@@ -284,7 +284,7 @@ fn expect_control<T: Iterator<Item = JsonToken>>(
     }
 }
 
-pub(crate) fn json_to_token(data: &str, tok: JsonToken) -> Result<Token<'_>, JsonError> {
+fn json_to_token(data: &str, tok: JsonToken) -> Result<Token<'_>, JsonError> {
     let span = span!(tok.buf);
 
     let str_data = if tok.kind == JsonTokenType::String {

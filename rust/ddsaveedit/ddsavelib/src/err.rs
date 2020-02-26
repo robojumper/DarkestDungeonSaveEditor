@@ -95,7 +95,7 @@ impl std::fmt::Display for FromJsonError {
 
 impl From<JsonError> for FromJsonError {
     fn from(err: JsonError) -> Self {
-        err.into()
+        <&JsonError as Into<FromJsonError>>::into(&err)
     }
 }
 
