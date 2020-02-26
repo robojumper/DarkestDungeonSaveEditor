@@ -483,10 +483,11 @@ impl Field {
                 for &i in v {
                     inwriter.write_i32::<LittleEndian>(i)?;
                 }
-                inwriter.write_u8(0)?;
                 align + 4 + v.len() * 4
             }
             StringVector(ref v) => {
+                inwriter.write_all(align_zeros)?;
+                inwriter.write_u32::<LittleEndian>(v.len() as u32)?;
                 let mut tmp_size = 4;
                 let any_zeroes = &[0u8; 4];
                 for s in v {
@@ -503,11 +504,9 @@ impl Field {
             }
             FloatArray(ref v) => {
                 inwriter.write_all(align_zeros)?;
-                inwriter.write_u32::<LittleEndian>(v.len() as u32)?;
                 for &f in v {
                     inwriter.write_f32::<LittleEndian>(f)?;
                 }
-                inwriter.write_u8(0)?;
                 align + 4 * v.len()
             }
             TwoInt(i1, i2) => {

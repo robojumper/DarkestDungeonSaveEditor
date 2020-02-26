@@ -42,11 +42,19 @@ fn test_loading() {
             std::str::from_utf8(&x).unwrap(),
             std::str::from_utf8(&y).unwrap()
         );
-        let fil3 = File::try_from_json(&mut std::io::Cursor::new(&x)).unwrap();
-        assert_eq!(fil2, fil3);
 
         let mut b = Vec::new();
-        fil3.write_to_bin(&mut std::io::BufWriter::new(&mut b))
+        fil2.write_to_bin(&mut std::io::BufWriter::new(&mut b))
             .unwrap();
+
+        assert_eq!(
+            data.len(),
+            b.len(),
+            "{:?} binary/re-encoded different size",
+            f
+        );
+
+        let fil3 = File::try_from_bin(&mut std::io::Cursor::new(&b)).unwrap();
+        assert_eq!(fil2, fil3);
     });
 }
