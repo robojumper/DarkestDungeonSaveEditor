@@ -1,4 +1,4 @@
-use ddsavelib::file;
+use ddsavelib::File;
 use std::{fs::read_dir, io::Read, path::PathBuf};
 
 const TEST_PROFILES_PATH: &'static str = "../../../src/test/resources";
@@ -27,12 +27,12 @@ fn test_loading() {
             data
         };
 
-        let fil = file::File::try_from_bin(&mut std::io::Cursor::new(&data)).unwrap();
+        let fil = File::try_from_bin(&mut std::io::Cursor::new(&data)).unwrap();
         let mut x = Vec::new();
         fil.write_to_json(&mut std::io::BufWriter::new(&mut x), 0, true)
             .unwrap();
 
-        let fil2 = file::File::try_from_json(&mut std::io::Cursor::new(&x)).unwrap();
+        let fil2 = File::try_from_json(&mut std::io::Cursor::new(&x)).unwrap();
         assert_eq!(fil, fil2);
 
         let mut y = Vec::new();
@@ -42,7 +42,11 @@ fn test_loading() {
             std::str::from_utf8(&x).unwrap(),
             std::str::from_utf8(&y).unwrap()
         );
-        let fil3 = file::File::try_from_json(&mut std::io::Cursor::new(&x)).unwrap();
+        let fil3 = File::try_from_json(&mut std::io::Cursor::new(&x)).unwrap();
         assert_eq!(fil2, fil3);
+
+        let mut b = Vec::new();
+        fil3.write_to_bin(&mut std::io::BufWriter::new(&mut b))
+            .unwrap();
     });
 }

@@ -11,6 +11,17 @@ use json::{ExpectExt, Parser, Token, TokenType};
 use parts::{Data, FieldIdx, FieldInfo, FieldType, Fields, Header, ObjIdx, Objects};
 
 #[derive(Clone, Debug, PartialEq)]
+/// Represents a valid Darkest Dungeon save file.
+///
+/// # A note on binary file identity
+///
+/// Files produced by the game currently contain unidentified bits.
+/// Right now, if you read a binary file and encode it to binary
+/// again, you will encounter some different bits. Theoretically,
+/// sizes could be different due to data alignment, though this
+/// has not been observed in practice yet.
+/// Phrased differently, the Binary => [`File`] conversion is minimally lossy.
+/// [`File`] => Binary and [`File`] <=> JSON conversions are lossless.
 pub struct File {
     h: Header,
     o: Objects,
@@ -38,6 +49,8 @@ macro_rules! indent {
 impl File {
     const BUILTIN_VERSION_FIELD: &'static str = "__revision_dont_touch";
 
+    /// Attempt create a Darkest Dungeon save [`File`] from a [`Read`] representing
+    /// a binary encoded file.
     pub fn try_from_bin<R: Read + Seek>(reader: &'_ mut R) -> Result<Self, FromBinError> {
         let h = Header::try_from_bin(reader)?;
         check_offset!(reader, u64::from(h.objects_offset));
@@ -51,7 +64,7 @@ impl File {
         Ok(File { h, o, f, dat })
     }
 
-    /// Decode a `File` from a `Read` representing a JSON stream.
+    /// Attempt to decode a [`File`] from a [`Read`] representing a JSON stream.
     #[inline(never)]
     pub fn try_from_json<R: Read>(reader: &'_ mut R) -> Result<Self, FromJsonError> {
         let mut x = vec![];
@@ -178,6 +191,7 @@ impl File {
         Ok(field_index)
     }
 
+    /// Write this [`File`] as JSON.
     pub fn write_to_json<W: Write>(
         &self,
         writer: &'_ mut W,
@@ -336,6 +350,7 @@ impl File {
         Ok(u32::try_from(offset)?)
     }
 
+    /// Write this [`File`] as Binary.
     pub fn write_to_bin<W: Write>(&self, writer: &'_ mut W) -> std::io::Result<()> {
         self.h.write_to_bin(writer)?;
         self.o.write_to_bin(writer)?;

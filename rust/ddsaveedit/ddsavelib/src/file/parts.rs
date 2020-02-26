@@ -491,7 +491,7 @@ impl Field {
                 let any_zeroes = &[0u8; 4];
                 for s in v {
                     let additional_align = ((tmp_size + 3) & !0b11) - tmp_size;
-                    inwriter.write_all(&any_zeroes[0..additional_align - 1])?;
+                    inwriter.write_all(&any_zeroes[0..additional_align])?;
                     inwriter.write_u32::<LittleEndian>(s.len() as u32 + 1)?;
                     inwriter.write_all(s.as_bytes())?;
                     inwriter.write_u8(0)?;
@@ -711,7 +711,13 @@ pub fn decode_fields<R: Read + Seek>(
         let field_name = buf
             .get(off..off + len)
             .ok_or(FromBinError::SizeMismatch { at: off, exp: len })?;
-        let name = CStr::from_bytes_with_nul(&field_name)?.to_str()?.to_owned();
+        let name = {
+            let cs = CStr::from_bytes_with_nul(&field_name)?.to_str()?;
+            let mut n = String::new();
+            n.try_reserve(cs.len())?;
+            n.push_str(cs);
+            n
+        };
 
         if name_hash(&name) != field.name_hash {
             return Err(FromBinError::HashMismatch);
@@ -977,7 +983,13 @@ impl FieldType {
                         let len = reader.read_u32::<LittleEndian>()? as usize;
                         let mut buf = vec![0u8; len];
                         reader.read_exact(&mut buf)?;
-                        let string = CStr::from_bytes_with_nul(&buf)?.to_str()?.to_owned();
+                        let string = {
+                            let cs = CStr::from_bytes_with_nul(&buf)?.to_str()?;
+                            let mut n = std::string::String::new();
+                            n.try_reserve(cs.len())?;
+                            n.push_str(cs);
+                            n
+                        };
                         v.push(string);
                         to_skip = ((len + 3) & !0b11) - len;
                     }
@@ -1032,7 +1044,13 @@ impl FieldType {
                                 &mut Cursor::new(buf),
                             )?))))
                         } else {
-                            let string = CStr::from_bytes_with_nul(&buf)?.to_str()?.to_owned();
+                            let string = {
+                                let cs = CStr::from_bytes_with_nul(&buf)?.to_str()?;
+                                let mut n = std::string::String::new();
+                                n.try_reserve(cs.len())?;
+                                n.push_str(cs);
+                                n
+                            };
                             Ok(String(string))
                         }
                     } else {

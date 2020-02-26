@@ -4,5 +4,7 @@
 #![feature(generator_trait)]
 
 pub mod err;
-pub mod file;
+mod file;
 mod util;
+
+pub use file::File;

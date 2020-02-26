@@ -1,4 +1,4 @@
-use ddsavelib::file::*;
+use ddsavelib::File;
 
 fn main() {
     for arg in std::env::args().skip(1) {

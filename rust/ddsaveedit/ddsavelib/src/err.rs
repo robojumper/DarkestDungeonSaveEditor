@@ -1,16 +1,37 @@
+//! Provides the various errors that can occur when deserializing from Binary or JSON.
+//! Serializing should, save for I/O errors, always succeed. I/O errors can be avoided
+//! by using [`Write`](std::io::Write) or [`Read`](std::io::Read) implementations that do not error (like memory buffers).
+
 #[derive(Debug)]
+/// Errors that can occur when deserializing from Binary
 pub enum FromBinError {
-    UnknownField(String),
-    SizeMismatch { at: usize, exp: usize },
-    OffsetMismatch { exp: u64, is: u64 },
+    /// An I/O error occured.
     IoError(std::io::Error),
+    /// A field's type was not identified by looking up the hardcoded
+    /// names or applying a heuristic.
+    UnknownField(String),
+    /// Basically EOF
+    SizeMismatch { at: usize, exp: usize },
+    /// A section of the file was not at the location specified
+    /// in the header
+    OffsetMismatch { exp: u64, is: u64 },
+    /// The hash of a field name mismatched the hash specified in the
+    /// file.
     HashMismatch,
+    /// A string did not contain valid UTF-8.
     Utf8Error(std::str::Utf8Error),
-    CharError(u8),
+    /// A string was not NUL-terminated, or contained an interior
+    /// NUL-character.
     FromBytesWithNulError(std::ffi::FromBytesWithNulError),
+    /// A char field did not contain a single ASCII character.
+    CharError(u8),
+    /// Memory allocation to hold a collection's or string's elements failed.
     TryReserveError(std::collections::TryReserveError),
+    /// The file did not contain a single root object.
     MissingRoot,
+    /// An arithmetic error, probably involving offsets, occured.
     Arith,
+    /// Generic Binary format error.
     FormatErr,
 }
 
@@ -47,14 +68,23 @@ impl std::fmt::Display for FromBinError {
 impl std::error::Error for FromBinError {}
 
 #[derive(Debug)]
+/// Errors that can occur when deserializing from JSON
 pub enum FromJsonError {
-    Expected(String, u64, u64),
-    LiteralFormat(String, u64, u64),
-    JsonErr(u64, u64),
-    UnexpEOF,
-    IntegerErr,
-    EncodingErr(String, u64, u64),
+    /// An I/O error occured while writing.
     IoError(std::io::Error),
+    /// At this location, a different token was expected.
+    Expected(String, u64, u64),
+    /// The literal did not conform to the restrictions of
+    /// the save format.
+    LiteralFormat(String, u64, u64),
+    /// Invalid JSON syntax
+    JsonErr(u64, u64),
+    /// The file ended unexpectedly
+    UnexpEOF,
+    /// We ran out of indices
+    IntegerErr,
+    /// The String contained invalid bare control characters.
+    EncodingErr(String, u64, u64),
 }
 
 impl std::fmt::Display for FromJsonError {

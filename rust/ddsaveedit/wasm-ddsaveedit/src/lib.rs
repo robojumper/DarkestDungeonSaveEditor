@@ -1,4 +1,4 @@
-use ddsavelib::{err::FromJsonError, file};
+use ddsavelib::{err::FromJsonError, File};
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -37,7 +37,7 @@ pub fn init() {
 #[wasm_bindgen]
 pub fn encode(input: &str) -> Option<Vec<u8>> {
     let pass_input = input;
-    let f = file::File::try_from_json(&mut pass_input.as_bytes()).ok()?;
+    let f = File::try_from_json(&mut pass_input.as_bytes()).ok()?;
     let mut output = vec![];
     f.write_to_bin(&mut std::io::Cursor::new(&mut output))
         .ok()?;
@@ -47,7 +47,7 @@ pub fn encode(input: &str) -> Option<Vec<u8>> {
 #[wasm_bindgen]
 pub fn check(input: &str) -> Option<Annotation> {
     let pass_input = input;
-    let f = file::File::try_from_json(&mut pass_input.as_bytes());
+    let f = File::try_from_json(&mut pass_input.as_bytes());
     match f {
         Ok(_) => None,
         Err(err) => {
@@ -87,7 +87,7 @@ pub fn check(input: &str) -> Option<Annotation> {
 #[wasm_bindgen]
 pub fn decode(input: &[u8]) -> Result<String, JsValue> {
     let pass_input = input;
-    let f = file::File::try_from_bin(&mut std::io::Cursor::new(pass_input));
+    let f = File::try_from_bin(&mut std::io::Cursor::new(pass_input));
     match f {
         Ok(s) => {
             let mut x = Vec::new();
