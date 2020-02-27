@@ -154,7 +154,11 @@ impl Objects {
 
     pub fn try_from_bin<R: Read>(reader: &'_ mut R, header: &Header) -> Result<Self, FromBinError> {
         let mut o = Objects {
-            objs: Vec::with_capacity(header.objects_num as usize),
+            objs: {
+                let mut v = vec![];
+                v.try_reserve_exact(header.objects_num as usize)?;
+                v
+            },
         };
         let mut buf = vec![0u8; 4 * 4];
         for _ in 0..header.objects_num {
@@ -270,6 +274,7 @@ impl FieldIdx {
 }
 
 impl Fields {
+    #[allow(unused)]
     pub fn iter(&self) -> impl Iterator<Item = (FieldIdx, &FieldInfo)> {
         self.fields
             .iter()
@@ -289,7 +294,11 @@ impl Fields {
         header: &Header,
     ) -> Result<Self, FromBinError> {
         let mut f = Fields {
-            fields: Vec::with_capacity(header.fields_num as usize),
+            fields: {
+                let mut v = vec![];
+                v.try_reserve_exact(header.fields_num as usize)?;
+                v
+            },
         };
         let mut buf = vec![0u8; 3 * 4];
         for _ in 0..header.fields_num {
@@ -713,7 +722,7 @@ pub fn decode_fields<R: Read + Seek>(
         let name = {
             let cs = CStr::from_bytes_with_nul(&field_name)?.to_str()?;
             let mut n = String::new();
-            n.try_reserve(cs.len())?;
+            n.try_reserve_exact(cs.len())?;
             n.push_str(cs);
             n
         };
@@ -967,7 +976,7 @@ impl FieldType {
                 IntVector(ref mut v) => {
                     skip!(reader, to_skip_if_aligned);
                     let num = reader.read_u32::<LittleEndian>()? as usize;
-                    v.try_reserve(num)?;
+                    v.try_reserve_exact(num)?;
                     for _ in 0..num {
                         v.push(reader.read_i32::<LittleEndian>()?);
                     }
@@ -975,7 +984,7 @@ impl FieldType {
                 StringVector(ref mut v) => {
                     skip!(reader, to_skip_if_aligned);
                     let num = reader.read_u32::<LittleEndian>()? as usize;
-                    v.try_reserve(num)?;
+                    v.try_reserve_exact(num)?;
                     let mut to_skip = 0;
                     for _ in 0..num {
                         skip!(reader, to_skip);
@@ -985,7 +994,7 @@ impl FieldType {
                         let string = {
                             let cs = CStr::from_bytes_with_nul(&buf)?.to_str()?;
                             let mut n = std::string::String::new();
-                            n.try_reserve(cs.len())?;
+                            n.try_reserve_exact(cs.len())?;
                             n.push_str(cs);
                             n
                         };
@@ -996,6 +1005,7 @@ impl FieldType {
                 FloatArray(ref mut v) => {
                     skip!(reader, to_skip_if_aligned);
                     let num = (max_len - to_skip_if_aligned) / 4;
+                    v.try_reserve_exact(num)?;
                     for _ in 0..num {
                         v.push(reader.read_f32::<LittleEndian>()?);
                     }
@@ -1046,7 +1056,7 @@ impl FieldType {
                             let string = {
                                 let cs = CStr::from_bytes_with_nul(&buf)?.to_str()?;
                                 let mut n = std::string::String::new();
-                                n.try_reserve(cs.len())?;
+                                n.try_reserve_exact(cs.len())?;
                                 n.push_str(cs);
                                 n
                             };

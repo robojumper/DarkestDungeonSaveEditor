@@ -6,16 +6,11 @@ pub fn name_hash(s: &'_ str) -> i32 {
     })
 }
 
-fn is_control_character(c: char) -> bool {
-    if let '\x08' | '\x0C' | '\n' | '\r' | '\t' = c {
-        true
-    } else {
-        false
-    }
-}
-
 pub fn escape(arg: &str) -> Cow<str> {
-    if arg.chars().any(|c| is_control_character(c) || c == '\\') {
+    if arg
+        .chars()
+        .any(|c| matches!(c, '\x08' | '\x0C' | '\n' | '\r' | '\t' | '\\' | '"'))
+    {
         let mut s = String::new();
         for c in arg.chars() {
             match c {
@@ -36,7 +31,10 @@ pub fn escape(arg: &str) -> Cow<str> {
 }
 
 pub fn unescape(arg: &str) -> Option<Cow<str>> {
-    if arg.chars().any(is_control_character) {
+    if arg
+        .chars()
+        .any(|c| matches!(c, '\x08' | '\x0C' | '\n' | '\r' | '\t'))
+    {
         return None;
     }
     if arg.find('\\').is_some() {

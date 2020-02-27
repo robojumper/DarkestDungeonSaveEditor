@@ -23,6 +23,7 @@ impl Annotation {
 }
 
 #[wasm_bindgen]
+/// Initialize this library
 pub fn init() {
     // When the `console_error_panic_hook` feature is enabled, we can call the
     // `set_panic_hook` function at least once during initialization, and then
@@ -35,6 +36,7 @@ pub fn init() {
 }
 
 #[wasm_bindgen]
+/// Encode a JSON file to binary.
 pub fn encode(input: &str) -> Option<Vec<u8>> {
     let pass_input = input;
     let f = File::try_from_json(&mut pass_input.as_bytes()).ok()?;
@@ -45,6 +47,7 @@ pub fn encode(input: &str) -> Option<Vec<u8>> {
 }
 
 #[wasm_bindgen]
+/// Check the JSON file for errors.
 pub fn check(input: &str) -> Option<Annotation> {
     let pass_input = input;
     let f = File::try_from_json(&mut pass_input.as_bytes());
@@ -57,11 +60,13 @@ pub fn check(input: &str) -> Option<Annotation> {
                 FromJsonError::JsonErr(a, b) => ("json error".to_owned(), a, b),
                 FromJsonError::IntegerErr => ("too much".to_owned(), 0, 0),
                 FromJsonError::UnexpEOF => {
-                    let in_len = input.len(); 
-                    ("unexpected end of file".to_owned(),
-                    (in_len as u64).saturating_sub(1),
-                    in_len as u64,
-                )},
+                    let in_len = input.len();
+                    (
+                        "unexpected end of file".to_owned(),
+                        (in_len as u64).saturating_sub(1),
+                        in_len as u64,
+                    )
+                }
                 FromJsonError::IoError(e) => (e.to_string(), 0, 0),
                 FromJsonError::EncodingErr(display, a, b) => (display, a, b),
             };
@@ -86,6 +91,7 @@ pub fn check(input: &str) -> Option<Annotation> {
 }
 
 #[wasm_bindgen]
+/// Decode a binary file to JSON
 pub fn decode(input: &[u8]) -> Result<String, JsValue> {
     let pass_input = input;
     let f = File::try_from_bin(&mut std::io::Cursor::new(pass_input));
