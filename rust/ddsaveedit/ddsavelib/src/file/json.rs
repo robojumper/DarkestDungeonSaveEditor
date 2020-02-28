@@ -1,5 +1,6 @@
 use json_tools::{
-    Buffer, BufferType, Lexer as JsonLexer, Token as JsonToken, TokenType as JsonTokenType,
+    Buffer, BufferType, Lexer as JsonLexer, Span as JsonSpan, Token as JsonToken,
+    TokenType as JsonTokenType,
 };
 use std::{
     borrow::Cow,
@@ -8,7 +9,10 @@ use std::{
     pin::Pin,
 };
 
-use crate::{err::JsonError, util::unescape};
+use crate::{
+    err::JsonError,
+    util::{is_whitespace, unescape},
+};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum TokenType {
@@ -70,6 +74,98 @@ macro_rules! ungen {
     }};
 }
 
+enum VerifyWhitespace {
+    VerifyFrom(u64),
+    StoredToken(Option<JsonToken>),
+}
+
+/// For some reason, json_tools silently eats invalid tokens it considers whitespace.
+/// We recover them from between the spans of adjacent tokens and check whether they
+/// are truly whitespace.
+struct ValidatingLexer<'a> {
+    s: &'a str,
+    lexer: JsonLexer<std::str::Bytes<'a>>,
+    verify: VerifyWhitespace,
+}
+
+impl<'a> ValidatingLexer<'a> {
+    fn new(data: &'a str) -> ValidatingLexer<'a> {
+        Self {
+            s: data,
+            lexer: JsonLexer::new(data.bytes(), BufferType::Span),
+            verify: VerifyWhitespace::VerifyFrom(0),
+        }
+    }
+
+    fn trim(&self, mut a: usize, mut b: usize) -> (usize, usize) {
+        let slice = &self.s.as_bytes();
+        while a < slice.len() && is_whitespace(slice[a]) {
+            a += 1;
+        }
+        b = usize::min(b, slice.len());
+        while b > 0 && is_whitespace(slice[b - 1]) {
+            b -= 1;
+        }
+
+        (a, b)
+    }
+}
+
+impl<'a> Iterator for ValidatingLexer<'a> {
+    type Item = JsonToken;
+    fn next(&mut self) -> Option<Self::Item> {
+        match &self.verify {
+            VerifyWhitespace::VerifyFrom(start) => {
+                let opt_tok = self.lexer.next();
+
+                let (end, nextend) = match &opt_tok {
+                    Some(ref tok) => {
+                        let span = span!(&tok.buf);
+                        (span.first, span.end)
+                    }
+                    None => (self.s.len() as u64, 0),
+                };
+
+                if self.s[*start as usize..end as usize]
+                    .bytes()
+                    .all(is_whitespace)
+                {
+                    self.verify = VerifyWhitespace::VerifyFrom(nextend);
+                    opt_tok
+                } else {
+                    let start = *start;
+                    self.verify = VerifyWhitespace::StoredToken(opt_tok);
+                    let (first, end) = self.trim(start as usize, end as usize);
+                    let tok = JsonToken {
+                        buf: Buffer::Span(JsonSpan {
+                            first: first as u64,
+                            end: end as u64,
+                        }),
+                        kind: JsonTokenType::Invalid,
+                    };
+                    Some(tok)
+                }
+            }
+            VerifyWhitespace::StoredToken(tok) => {
+                let end = match tok {
+                    Some(tok) => {
+                        let span = span!(&tok.buf);
+                        span.end
+                    }
+                    None => self.s.len() as u64,
+                };
+                if let VerifyWhitespace::StoredToken(tok) =
+                    std::mem::replace(&mut self.verify, VerifyWhitespace::VerifyFrom(end))
+                {
+                    tok
+                } else {
+                    unreachable!();
+                }
+            }
+        }
+    }
+}
+
 pub(crate) struct Parser<'a> {
     gen: Pin<Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + 'a>>,
 }
@@ -99,7 +195,7 @@ pub(crate) fn parse<'a>(
     data: &'a str,
 ) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + 'a> {
     Box::new(move || {
-        let mut lex = JsonLexer::new(data.bytes(), BufferType::Span).peekable();
+        let mut lex = ValidatingLexer::new(data).peekable();
         if lex.peek().is_some() {
             ungen!(parse_value, data, lex)
         }

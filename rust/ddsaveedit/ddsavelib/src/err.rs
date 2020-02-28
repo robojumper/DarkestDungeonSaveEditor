@@ -107,9 +107,7 @@ impl<'a> From<&'a JsonError> for FromJsonError {
             JsonError::BareControl(b, c) => {
                 FromJsonError::LiteralFormat("bare control character".to_owned(), *b, *c)
             }
-            JsonError::Expected(a, b, c) => {
-                FromJsonError::Expected("Expected ".to_owned() + a, *b, *c)
-            }
+            JsonError::Expected(a, b, c) => FromJsonError::Expected(a.clone(), *b, *c),
         }
     }
 }

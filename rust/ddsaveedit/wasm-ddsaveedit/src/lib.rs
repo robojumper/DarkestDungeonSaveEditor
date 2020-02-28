@@ -12,6 +12,8 @@ pub struct Annotation {
     err: String,
     pub line: u32,
     pub col: u32,
+    pub eline: u32,
+    pub ecol: u32,
 }
 
 #[wasm_bindgen]
@@ -54,15 +56,17 @@ pub fn check(input: &str) -> Option<Annotation> {
     match f {
         Ok(_) => None,
         Err(err) => {
-            let (string, first, _) = match err {
-                FromJsonError::Expected(display, a, b) => (display, a, b),
-                FromJsonError::LiteralFormat(display, a, b) => (display, a, b),
-                FromJsonError::JsonErr(a, b) => ("json error".to_owned(), a, b),
-                FromJsonError::IntegerErr => ("too much".to_owned(), 0, 0),
+            let (string, first, end) = match err {
+                FromJsonError::Expected(display, a, b) => ("Expected ".to_owned() + &display, a, b),
+                FromJsonError::LiteralFormat(display, a, b) => {
+                    ("Invalid literal: ".to_owned() + &display, a, b)
+                }
+                FromJsonError::JsonErr(a, b) => ("JSON Syntax Error".to_owned(), a, b),
+                FromJsonError::IntegerErr => ("Too many items to encode".to_owned(), 0, 0),
                 FromJsonError::UnexpEOF => {
                     let in_len = input.len();
                     (
-                        "unexpected end of file".to_owned(),
+                        "Unexpected end of file".to_owned(),
                         (in_len as u64).saturating_sub(1),
                         in_len as u64,
                     )
@@ -81,10 +85,22 @@ pub fn check(input: &str) -> Option<Annotation> {
                 }
             }
 
+            let mut eline = 0;
+            let mut ecol = 0;
+            for &b in input.as_bytes().iter().take(end as usize) {
+                ecol += 1;
+                if b == b'\n' {
+                    eline += 1;
+                    ecol = 0;
+                }
+            }
+
             Some(Annotation {
                 err: string,
                 line,
                 col,
+                eline,
+                ecol,
             })
         }
     }

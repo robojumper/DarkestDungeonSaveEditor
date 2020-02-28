@@ -65,7 +65,6 @@ impl File {
     }
 
     /// Attempt to decode a [`File`] from a [`Read`] representing a JSON stream.
-    #[inline(never)]
     pub fn try_from_json<R: Read>(reader: &'_ mut R) -> Result<Self, FromJsonError> {
         let mut x = vec![];
         reader.read_to_end(&mut x)?;
@@ -97,8 +96,8 @@ impl File {
         }
         let vers = lex.expect(TokenType::Number, true)?;
         let vers_num: u32 = vers.dat.parse::<u32>().map_err(|_| {
-            FromJsonError::LiteralFormat(
-                "expected version num".to_owned(),
+            FromJsonError::Expected(
+                format!("{:?}", TokenType::Number),
                 vers.loc.first,
                 vers.loc.end,
             )

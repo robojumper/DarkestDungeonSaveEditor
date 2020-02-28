@@ -71,13 +71,20 @@ rust.then(wasm => {
 		var text = editor.getValue();
 		let annot = wasm.check(text);
 
+		markers = editor.session.getMarkers();
+		for (m in markers) {
+			editor.session.removeMarker(m);
+		}
+
 		if (typeof annot !== 'undefined') {
 			editor.session.setAnnotations([{
 				row: annot.line,
-				column: annot.line,
+				column: annot.col,
 				text: annot.err,
 				type: "error"
 			}]);
+			var Range = ace.Range;
+			editor.session.addMarker(new Range(annot.line, annot.col, annot.eline, annot.ecol), "aceerror", annot.err);
 			var download = document.getElementById('downloadlink');
 			download.className = "link-disabled";
 			download.removeAttribute('href');
@@ -89,13 +96,13 @@ rust.then(wasm => {
 		}
 	}
 
-	function arrayToBase64( bytes ) {
+	function arrayToBase64(bytes) {
 		var len = bytes.byteLength;
 		var binary = '';
 		for (var i = 0; i < len; i++) {
-			binary += String.fromCharCode( bytes[ i ] );
+			binary += String.fromCharCode(bytes[i]);
 		}
-		return window.btoa( binary );
+		return window.btoa(binary);
 	}
 
 	function downloadFile(filename, bincontent) {
@@ -138,4 +145,5 @@ rust.then(wasm => {
 	editor.session.setMode("ace/mode/json");
 	editor.session.on('change', onChange);
 	editor.session.setOption("useWorker", false);
+	document.body.appendChild(editor.container);
 });

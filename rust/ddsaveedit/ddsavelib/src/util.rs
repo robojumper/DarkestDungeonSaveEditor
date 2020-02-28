@@ -63,3 +63,7 @@ pub fn unescape(arg: &str) -> Option<Cow<str>> {
     }
     Some(Cow::Borrowed(arg))
 }
+
+pub fn is_whitespace(i: u8) -> bool {
+    return matches!(i, b'\r' | b'\n' | b'\t' | b' ');
+}
