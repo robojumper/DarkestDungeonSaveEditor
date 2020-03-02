@@ -43,7 +43,7 @@ pub fn encode(input: &str) -> Option<Vec<u8>> {
     let pass_input = input;
     let f = File::try_from_json(&mut pass_input.as_bytes()).ok()?;
     let mut output = vec![];
-    f.write_to_bin(&mut std::io::Cursor::new(&mut output))
+    f.write_to_bin(&mut output)
         .ok()?;
     Some(output)
 }
@@ -116,12 +116,12 @@ pub fn decode(input: &[u8]) -> Result<String, JsValue> {
             let mut x = Vec::new();
             let res = s.write_to_json(&mut std::io::BufWriter::new(&mut x), 0, true);
             match res {
-                Ok(_) => return Ok(std::str::from_utf8(&x).unwrap().to_owned()),
-                Err(_) => return Err("wasm_decode: io error???".into()),
+                Ok(_) => Ok(std::str::from_utf8(&x).unwrap().to_owned()),
+                Err(_) => Err("wasm_decode: io error???".into()),
             }
         }
         Err(_) => {
-            return Err("wasm_decode: error decoding, please file a GitHub issue at 
+            Err("wasm_decode: error decoding, please file a GitHub issue at 
 \"https://github.com/robojumper/DarkestDungeonSaveEditor/issues\""
                 .into())
         }

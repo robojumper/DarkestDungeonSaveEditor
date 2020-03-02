@@ -175,8 +175,8 @@ impl Objects {
                     None
                 },
                 field: FieldIdx(field),
-                num_direct_childs: num_direct_childs,
-                num_all_childs: num_all_childs,
+                num_direct_childs,
+                num_all_childs,
             })
         }
         Ok(o)
@@ -259,7 +259,7 @@ pub struct ObjIdx(u32);
 
 impl ObjIdx {
     /// Returns the numeric value of this object index
-    pub fn numeric(&self) -> u32 {
+    pub fn numeric(self) -> u32 {
         self.0 as u32
     }
 }
@@ -268,7 +268,7 @@ pub struct FieldIdx(u32);
 
 impl FieldIdx {
     /// Returns the numeric value of this field index
-    pub fn numeric(&self) -> u32 {
+    pub fn numeric(self) -> u32 {
         self.0
     }
 }
