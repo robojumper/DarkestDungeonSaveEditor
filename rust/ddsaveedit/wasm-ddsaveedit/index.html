@@ -36,7 +36,7 @@
 
     .area {
       text-align: center;
-      overflow: auto;
+      overflow: clip;
       overflow-wrap: break-word;
       border-style: dashed;
       border-radius: 5px;
@@ -51,6 +51,10 @@
 
     .interact * {
       pointer-events: none;
+    }
+
+    #filepick {
+      pointer-events: auto;
     }
 
     .link-disabled {
@@ -71,7 +75,8 @@
   <div class="column left">
     <div class="part" id="dropouter">
       <div id="droparea" class="area interact">
-        <p id="errmsg">drop file here</p>
+        <p id="errmsg">drop file here...</p>
+        <input type="file" id="filepick" accept=".json" title=" ">
       </div>
     </div>
     <div class="part" id="downloadouter">

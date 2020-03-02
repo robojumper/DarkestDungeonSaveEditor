@@ -1,4 +1,7 @@
-use ddsavelib::{err::FromJsonError, File};
+use ddsavelib::{
+    err::{FromBinError, FromJsonError},
+    File,
+};
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -43,8 +46,7 @@ pub fn encode(input: &str) -> Option<Vec<u8>> {
     let pass_input = input;
     let f = File::try_from_json(&mut pass_input.as_bytes()).ok()?;
     let mut output = vec![];
-    f.write_to_bin(&mut output)
-        .ok()?;
+    f.write_to_bin(&mut output).ok()?;
     Some(output)
 }
 
@@ -120,10 +122,12 @@ pub fn decode(input: &[u8]) -> Result<String, JsValue> {
                 Err(_) => Err("wasm_decode: io error???".into()),
             }
         }
-        Err(_) => {
-            Err("wasm_decode: error decoding, please file a GitHub issue at 
-\"https://github.com/robojumper/DarkestDungeonSaveEditor/issues\""
-                .into())
-        }
+        Err(err) => match err {
+            FromBinError::NotBinFile => Err("File does not appear to be a save file".into()),
+            FromBinError::IoError(_) => Err("wasm_decode: io error???".into()),
+            _ => Err("wasm_decode: error decoding, please file a GitHub issue at 
+                \"https://github.com/robojumper/DarkestDungeonSaveEditor/issues\""
+                .into()),
+        },
     }
 }

@@ -12,6 +12,43 @@ rust.then(wasm => {
 		}
 	}
 
+	function handleUpload(file) {
+		var reader = new FileReader();
+		reader.onload = function () {
+
+			var arrayBuffer = this.result;
+			var array = new Uint8Array(arrayBuffer);
+			var result = null;
+			try {
+				result = wasm.decode(array);
+				dropstyle(file.name, "green");
+				var editor = ace.edit("editor");
+				editor.setValue(result);
+			} catch (e) {
+				if (typeof e === 'string' || e instanceof String) {
+					var editor = ace.edit("editor");
+					editor.setValue(e);
+				}
+				console.log(e);
+				dropstyle("failed to decode", "red");
+			}
+		}
+		reader.readAsArrayBuffer(file);
+	}
+
+	function onUpload() {
+		var upload = document.getElementById('filepick');
+		const curFiles = upload.files;
+
+		if (curFiles.length == 1) {
+			var file = curFiles[0];
+			handleUpload(file);
+		} else {
+			dropstyle("expected exactly one file", "red");
+			return;
+		}
+	}
+
 	function dropHandler(ev) {
 		// Thanks MDN
 		// Prevent default behavior (Prevent file from being opened)
@@ -36,27 +73,7 @@ rust.then(wasm => {
 		}
 		console.log('... file.name = ' + file.name);
 
-		var reader = new FileReader();
-		reader.onload = function () {
-
-			var arrayBuffer = this.result;
-			var array = new Uint8Array(arrayBuffer);
-			var result = null;
-			try {
-				result = wasm.decode(array);
-				dropstyle(file.name, "green");
-			} catch (e) {
-				if (typeof e === 'string' || e instanceof String) {
-					var editor = ace.edit("editor");
-					editor.setValue(e);
-				}
-				console.log(e);
-				dropstyle("failed to decode", "red");
-			}
-			var editor = ace.edit("editor");
-			editor.setValue(result);
-		}
-		reader.readAsArrayBuffer(file);
+		handleUpload(file);
 	}
 
 	function dropstyle(err, col) {
@@ -139,6 +156,10 @@ rust.then(wasm => {
 
 	var download = document.getElementById('downloadlink');
 	download.addEventListener('click', onDownload);
+
+	var upload = document.getElementById('filepick');
+	upload.value = "";
+	upload.addEventListener('change', onUpload);
 
 	var editor = ace.edit("editor");
 	editor.setTheme("ace/theme/monokai");

@@ -50,6 +50,10 @@ impl Header {
             *tmp
         };
 
+        if magic != HEADER_MAGIC_NUMBER {
+            return Err(FromBinError::NotBinFile);
+        }
+
         let version = reader.read_u32::<LittleEndian>().unwrap();
         let header_len = reader.read_u32::<LittleEndian>().unwrap();
         let _ = reader.read_u32::<LittleEndian>().unwrap(); // Zeroes

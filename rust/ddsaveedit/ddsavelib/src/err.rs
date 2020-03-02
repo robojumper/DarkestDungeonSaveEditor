@@ -7,6 +7,8 @@
 pub enum FromBinError {
     /// An I/O error occured.
     IoError(std::io::Error),
+    /// Magic number mismatched
+    NotBinFile,
     /// A field's type was not identified by looking up the hardcoded
     /// names or applying a heuristic.
     UnknownField(String),
