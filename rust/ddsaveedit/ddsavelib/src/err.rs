@@ -75,18 +75,18 @@ pub enum FromJsonError {
     /// An I/O error occured while writing.
     IoError(std::io::Error),
     /// At this location, a different token was expected.
-    Expected(String, u64, u64),
+    Expected(String, usize, usize),
     /// The literal did not conform to the restrictions of
     /// the save format.
-    LiteralFormat(String, u64, u64),
+    LiteralFormat(String, usize, usize),
     /// Invalid JSON syntax
-    JsonErr(u64, u64),
+    JsonErr(usize, usize),
     /// The file ended unexpectedly
     UnexpEOF,
     /// We ran out of indices
     IntegerErr,
     /// The String contained invalid bare control characters.
-    EncodingErr(String, u64, u64),
+    EncodingErr(String, usize, usize),
 }
 
 impl std::fmt::Display for FromJsonError {
@@ -109,6 +109,9 @@ impl<'a> From<&'a JsonError> for FromJsonError {
             JsonError::BareControl(b, c) => {
                 FromJsonError::LiteralFormat("bare control character".to_owned(), *b, *c)
             }
+            JsonError::BadNumber(b, c) => {
+                FromJsonError::LiteralFormat("bad number format".to_owned(), *b, *c)
+            }
             JsonError::Expected(a, b, c) => FromJsonError::Expected(a.clone(), *b, *c),
         }
     }
@@ -124,7 +127,7 @@ impl From<std::str::Utf8Error> for FromJsonError {
     fn from(err: std::str::Utf8Error) -> Self {
         let begin = err.valid_up_to();
         let end = begin + err.error_len().unwrap_or(1);
-        Self::EncodingErr("not utf-8".to_owned(), begin as u64, end as u64)
+        Self::EncodingErr("not utf-8".to_owned(), begin, end)
     }
 }
 
@@ -137,11 +140,12 @@ impl From<std::io::Error> for FromJsonError {
 impl std::error::Error for FromJsonError {}
 
 #[derive(Debug, Clone)]
-pub(crate) enum JsonError {
+pub enum JsonError {
     EOF,
-    ExpectedValue(u64, u64),
-    Expected(String, u64, u64),
-    BareControl(u64, u64),
+    ExpectedValue(usize, usize),
+    Expected(String, usize, usize),
+    BareControl(usize, usize),
+    BadNumber(usize, usize),
 }
 
 impl std::fmt::Display for JsonError {

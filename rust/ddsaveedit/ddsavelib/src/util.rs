@@ -31,6 +31,7 @@ pub fn escape(arg: &str) -> Cow<str> {
 }
 
 pub fn unescape(arg: &str) -> Option<Cow<str>> {
+    // Bare control characters are disallowed
     if arg
         .chars()
         .any(|c| matches!(c, '\x08' | '\x0C' | '\n' | '\r' | '\t'))
@@ -64,6 +65,6 @@ pub fn unescape(arg: &str) -> Option<Cow<str>> {
     Some(Cow::Borrowed(arg))
 }
 
-pub fn is_whitespace(i: u8) -> bool {
-    return matches!(i, b'\r' | b'\n' | b'\t' | b' ');
+pub fn is_whitespace(i: char) -> bool {
+    return matches!(i, '\r' | '\n' | '\t' | ' ');
 }

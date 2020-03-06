@@ -29,14 +29,14 @@ fn test_loading() {
 
         let fil = File::try_from_bin(&mut std::io::Cursor::new(&data)).unwrap();
         let mut x = Vec::new();
-        fil.write_to_json(&mut std::io::BufWriter::new(&mut x), 0, true)
+        fil.write_to_json(&mut std::io::BufWriter::new(&mut x), true)
             .unwrap();
 
         let fil2 = File::try_from_json(&mut std::io::Cursor::new(&x)).unwrap();
         assert_eq!(fil, fil2);
 
         let mut y = Vec::new();
-        fil2.write_to_json(&mut std::io::BufWriter::new(&mut y), 0, true)
+        fil2.write_to_json(&mut std::io::BufWriter::new(&mut y), true)
             .unwrap();
         assert_eq!(
             std::str::from_utf8(&x).unwrap(),

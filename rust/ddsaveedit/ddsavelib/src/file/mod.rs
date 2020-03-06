@@ -1,5 +1,6 @@
 use std::{
     convert::TryFrom,
+    borrow::Cow,
     io::{Read, Seek, Write},
 };
 
@@ -34,14 +35,6 @@ macro_rules! check_offset {
         let pos = $rd.stream_position()?;
         if pos != $exp {
             return Err(FromBinError::OffsetMismatch { exp: $exp, is: pos });
-        }
-    }};
-}
-
-macro_rules! indent {
-    ($w:expr, $num:expr) => {{
-        for _ in 0..$num {
-            $w.write_all(b"    ")?;
         }
     }};
 }
@@ -84,23 +77,19 @@ impl File {
             dat: Default::default(),
         };
 
-        lex.expect(TokenType::BeginObject, true)?;
+        lex.expect(TokenType::BeginObject)?;
 
-        let vers_field_tok = lex.expect(TokenType::FieldName, true)?;
+        let vers_field_tok = lex.expect(TokenType::FieldName)?;
         if vers_field_tok.dat != Self::BUILTIN_VERSION_FIELD {
             return Err(FromJsonError::Expected(
                 Self::BUILTIN_VERSION_FIELD.to_owned(),
-                vers_field_tok.loc.first,
-                vers_field_tok.loc.end,
+                vers_field_tok.span.first,
+                vers_field_tok.span.end,
             ));
         }
-        let vers = lex.expect(TokenType::Number, true)?;
+        let vers = lex.expect(TokenType::Number)?;
         let vers_num: u32 = vers.dat.parse::<u32>().map_err(|_| {
-            FromJsonError::Expected(
-                format!("{:?}", TokenType::Number),
-                vers.loc.first,
-                vers.loc.end,
-            )
+            FromJsonError::Expected("Integer".to_owned(), vers.span.first, vers.span.end)
         })?;
 
         let mut name_stack = vec![];
@@ -114,7 +103,7 @@ impl File {
     fn read_child_fields<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
         &mut self,
         parent: Option<ObjIdx>,
-        name_stack: &mut Vec<String>,
+        name_stack: &mut Vec<Cow<'a, str>>,
         lex: &mut std::iter::Peekable<T>,
     ) -> Result<Vec<FieldIdx>, FromJsonError> {
         let mut child_fields = vec![];
@@ -125,14 +114,14 @@ impl File {
                 TokenType::EndObject => break,
                 TokenType::FieldName => {
                     let name = tok.dat;
-                    let idx = self.read_field(name.as_ref(), parent, name_stack, lex)?;
+                    let idx = self.read_field(name, parent, name_stack, lex)?;
                     child_fields.push(idx);
                 }
                 _ => {
                     return Err(FromJsonError::Expected(
                         "name or }".to_owned(),
-                        tok.loc.first,
-                        tok.loc.end,
+                        tok.span.first,
+                        tok.span.end,
                     ))
                 }
             }
@@ -143,14 +132,14 @@ impl File {
 
     fn read_field<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
         &mut self,
-        name: &str,
+        name: Cow<'a, str>,
         parent: Option<ObjIdx>,
-        name_stack: &mut Vec<String>,
+        name_stack: &mut Vec<Cow<'a, str>>,
         lex: &mut std::iter::Peekable<T>,
     ) -> Result<FieldIdx, FromJsonError> {
-        let field_index = self.f.create_field(name).ok_or(FromJsonError::IntegerErr)?;
+        let field_index = self.f.create_field(&name).ok_or(FromJsonError::IntegerErr)?;
         // Identify type
-        name_stack.push(name.to_owned());
+        name_stack.push(name.clone());
         let val = match lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?.kind {
             TokenType::BeginObject => {
                 if name == "raw_data" || name == "static_save" {
@@ -159,7 +148,7 @@ impl File {
                 } else {
                     lex.next();
                     self.dat
-                        .create_data(name, parent, FieldType::Object(vec![]));
+                        .create_data(name.clone(), parent, FieldType::Object(vec![]));
                     let obj_index = self
                         .o
                         .create_object(field_index, parent, 0, 0)
@@ -194,20 +183,31 @@ impl File {
     pub fn write_to_json<W: Write>(
         &self,
         writer: &'_ mut W,
-        indent: u32,
+        allow_dupes: bool,
+    ) -> std::io::Result<()> {
+        self.write_to_json_priv(writer, &mut vec![], allow_dupes)
+    }
+
+    fn write_to_json_priv<W: Write>(
+        &self,
+        mut writer: &'_ mut W,
+        indent: &mut Vec<u8>,
         allow_dupes: bool,
     ) -> std::io::Result<()> {
         writer.write_all(b"{\n")?;
-        indent!(writer, indent + 1);
-        writer.write_fmt(format_args!(
-            "\"{}\": {},\n",
-            Self::BUILTIN_VERSION_FIELD,
-            self.h.version()
-        ))?;
+        writer.write_all(&indent)?;
+        writer.write_all(b"    ")?;
+        writer.write_all(b"\"")?;
+        writer.write_all(Self::BUILTIN_VERSION_FIELD.as_bytes())?;
+        writer.write_all(b"\": ")?;
+        itoa::write(&mut writer, self.h.version())?;
+        writer.write_all(b",\n")?;
         if let Some(root) = self.o.iter().find(|o| o.parent.is_none()) {
-            self.write_field(root.field, writer, indent + 1, false, allow_dupes)?;
+            indent.extend_from_slice(b"    ");
+            self.write_field(root.field, writer, indent, false, allow_dupes)?;
+            indent.truncate(indent.len() - 4);
         }
-        indent!(writer, indent);
+        writer.write_all(&indent)?;
         writer.write_all(b"}")?;
         Ok(())
     }
@@ -216,7 +216,7 @@ impl File {
         &self,
         field_idx: FieldIdx,
         writer: &'_ mut W,
-        indent: u32,
+        indent: &mut Vec<u8>,
         comma: bool,
         allow_dupes: bool,
     ) -> std::io::Result<()> {
@@ -241,9 +241,11 @@ impl File {
                             continue;
                         }
                     }
-                    self.write_field(child, writer, indent + 1, idx != c.len() - 1, allow_dupes)?;
+                    indent.extend_from_slice(b"    ");
+                    self.write_field(child, writer, indent, idx != c.len() - 1, allow_dupes)?;
+                    indent.truncate(indent.len() - 4);
                 }
-                indent!(writer, indent);
+                writer.write_all(&indent)?;
                 if comma {
                     writer.write_all(b"},\n")?;
                 } else {
@@ -259,30 +261,47 @@ impl File {
     fn write_field<W: Write>(
         &self,
         field_idx: FieldIdx,
-        writer: &'_ mut W,
-        indent: u32,
+        mut writer: &'_ mut W,
+        indent: &mut Vec<u8>,
         comma: bool,
         allow_dupes: bool,
     ) -> std::io::Result<()> {
         use FieldType::*;
         let dat = &self.dat[field_idx];
-        indent!(writer, indent);
+        writer.write_all(&indent)?;
         writer.write_all(b"\"")?;
         writer.write_all(dat.name.as_bytes())?;
         writer.write_all(b"\" : ")?;
         match &dat.tipe {
-            Bool(b) => writer.write_fmt(format_args!("{}", b))?,
+            Bool(b) => writer.write_all(if *b { b"true" } else { b"false" })?,
             TwoBool(b1, b2) => {
-                writer.write_fmt(format_args!("[{}, {}]", b1, b2))?;
+                writer.write_all(b"[")?;
+                writer.write_all(if *b1 { b"true" } else { b"false" })?;
+                writer.write_all(b", ")?;
+                writer.write_all(if *b2 { b"true" } else { b"false" })?;
+                writer.write_all(b"]")?;
             }
-            Int(i) => writer.write_fmt(format_args!("{}", i))?,
-            Float(f) => writer.write_fmt(format_args!("{}", f))?,
-            Char(c) => writer.write_fmt(format_args!("\"{}\"", c))?,
-            String(s) => writer.write_fmt(format_args!("\"{}\"", escape(s)))?,
+            Int(i) => {
+                itoa::write(&mut writer, *i)?;
+            }
+            Float(f) => {
+                dtoa::write(&mut writer, *f)?;
+            }
+            Char(c) => {
+                writer.write_all(b"\"")?;
+                let buf = [*c as u8];
+                writer.write_all(&buf)?;
+                writer.write_all(b"\"")?;
+            }
+            String(s) => {
+                writer.write_all(b"\"")?;
+                writer.write_all(escape(s).as_bytes())?;
+                writer.write_all(b"\"")?;
+            }
             IntVector(ref v) => {
                 writer.write_all(b"[")?;
                 for (idx, num) in v.iter().enumerate() {
-                    writer.write_all(num.to_string().as_bytes())?;
+                    itoa::write(&mut writer, *num)?;
                     if idx != v.len() - 1 {
                         writer.write_all(b", ")?;
                     }
@@ -292,7 +311,9 @@ impl File {
             StringVector(ref v) => {
                 writer.write_all(b"[")?;
                 for (idx, s) in v.iter().enumerate() {
-                    writer.write_fmt(format_args!("\"{}\"", escape(s)))?;
+                    writer.write_all(b"\"")?;
+                    writer.write_all(escape(s).as_bytes())?;
+                    writer.write_all(b"\"")?;
                     if idx != v.len() - 1 {
                         writer.write_all(b", ")?;
                     }
@@ -302,7 +323,7 @@ impl File {
             FloatArray(ref v) => {
                 writer.write_all(b"[")?;
                 for (idx, f) in v.iter().enumerate() {
-                    writer.write_all(f.to_string().as_bytes())?;
+                    dtoa::write(&mut writer, *f)?;
                     if idx != v.len() - 1 {
                         writer.write_all(b", ")?;
                     }
@@ -310,11 +331,15 @@ impl File {
                 writer.write_all(b"]")?;
             }
             TwoInt(i1, i2) => {
-                writer.write_fmt(format_args!("[{}, {}]", i1, i2))?;
+                writer.write_all(b"[")?;
+                itoa::write(&mut writer, *i1)?;
+                writer.write_all(b", ")?;
+                itoa::write(&mut writer, *i2)?;
+                writer.write_all(b"]")?;
             }
             File(ref obf) => {
                 let fil = obf.as_ref().unwrap();
-                fil.write_to_json(writer, indent, allow_dupes)?;
+                fil.write_to_json_priv(writer, indent, allow_dupes)?;
             }
             Object(_) => {
                 self.write_object(field_idx, writer, indent, comma, allow_dupes)?;

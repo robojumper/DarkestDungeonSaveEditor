@@ -8,7 +8,12 @@ edition = "2018"
 
 [dependencies]
 byteorder = "1.3.4"
-# Pinned because unsafe code relies on Span behavior
-json-tools = "=1.1.2"
+itoa = "0.4.5"
+dtoa = "0.4.5"
 
 [dev-dependencies]
+criterion = "0.3.1"
+
+[[bench]]
+name = "load_save"
+harness = false

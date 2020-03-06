@@ -17,7 +17,7 @@ use crate::{
 };
 
 pub const HEADER_MAGIC_NUMBER: [u8; 4] = [0x01, 0xB1, 0x00, 0x00];
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Header {
     magic: [u8; 4],
     //version: [u8; 4],
@@ -146,7 +146,7 @@ pub struct ObjectInfo {
     pub num_direct_childs: u32,
     pub num_all_childs: u32,
 }
-#[derive(Clone, Default, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Objects {
     objs: Vec<ObjectInfo>,
 }
@@ -236,21 +236,23 @@ impl Objects {
 
 impl Index<ObjIdx> for Objects {
     type Output = ObjectInfo;
+    #[inline]
     fn index(&self, index: ObjIdx) -> &Self::Output {
         &self.objs[index.0 as usize]
     }
 }
 
 impl IndexMut<ObjIdx> for Objects {
+    #[inline]
     fn index_mut(&mut self, index: ObjIdx) -> &mut Self::Output {
         &mut self.objs[index.0 as usize]
     }
 }
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Fields {
     fields: Vec<FieldInfo>,
 }
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FieldInfo {
     pub name_hash: i32,
     pub offset: u32,
@@ -392,12 +394,14 @@ impl FieldInfo {
 
 impl Index<FieldIdx> for Fields {
     type Output = FieldInfo;
+    #[inline]
     fn index(&self, index: FieldIdx) -> &Self::Output {
         &self.fields[index.0 as usize]
     }
 }
 
 impl IndexMut<FieldIdx> for Fields {
+    #[inline]
     fn index_mut(&mut self, index: FieldIdx) -> &mut Self::Output {
         &mut self.fields[index.0 as usize]
     }
@@ -551,12 +555,14 @@ pub struct Data {
 
 impl Index<FieldIdx> for Data {
     type Output = Field;
+    #[inline]
     fn index(&self, index: FieldIdx) -> &Self::Output {
         &self.dat[index.0 as usize]
     }
 }
 
 impl IndexMut<FieldIdx> for Data {
+    #[inline]
     fn index_mut(&mut self, index: FieldIdx) -> &mut Self::Output {
         &mut self.dat[index.0 as usize]
     }
@@ -567,9 +573,9 @@ impl Data {
         self.dat.iter()
     }
 
-    pub fn create_data(&mut self, name: &str, parent: Option<ObjIdx>, tipe: FieldType) {
+    pub fn create_data(&mut self, name: std::borrow::Cow<'_, str>, parent: Option<ObjIdx>, tipe: FieldType) {
         self.dat.push(Field {
-            name: name.to_owned(),
+            name: name.into_owned(),
             parent,
             tipe,
         });
@@ -698,8 +704,7 @@ pub fn decode_fields<R: Read + Seek>(
     let mut buf = vec![0; max_size];
     reader.read_exact(&mut buf)?;
 
-    //let mut offset_sizes = std::collections::HashMap::<u32, usize>::new();
-    let mut offset_sizes = std::collections::BTreeMap::<usize, usize>::new();
+    let mut offset_sizes = std::collections::HashMap::<usize, usize>::new();
     let mut offsets = f
         .fields
         .iter()
@@ -712,7 +717,7 @@ pub fn decode_fields<R: Read + Seek>(
     if let Some(&last) = offsets.last() {
         offset_sizes.insert(last, max_size.checked_sub(last).ok_or(FromBinError::Arith)?);
     }
-    //println!("{:?}", offset_sizes);
+
     let mut data = Data { dat: Vec::new() };
     let mut obj_stack = Vec::new();
     let mut obj_nums = Vec::new();
@@ -758,7 +763,6 @@ pub fn decode_fields<R: Read + Seek>(
                 &name_trace,
             )?
         };
-        //println!("{}", name);
         data.dat.push(self::Field {
             name,
             parent: obj_stack.last().copied(),
@@ -812,19 +816,15 @@ fn build_name_trace<'a>(
 }
 
 impl FieldType {
-    pub(crate) fn try_from_json<
-        'a,
-        T: Iterator<Item = Result<Token<'a>, JsonError>>,
-        N: AsRef<str>,
-    >(
-        lex: &mut std::iter::Peekable<T>,
+    pub fn try_from_json<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>, N: AsRef<str>>(
+        lex: &mut T,
         name_stack: &'_ [N],
     ) -> Result<Self, FromJsonError> {
         macro_rules! parse_prim {
             ($tok:expr, $t:ty, $err:expr) => {{
                 let tok = $tok;
                 tok.dat.parse::<$t>().map_err(|_| {
-                    FromJsonError::LiteralFormat($err.to_owned(), tok.loc.first, tok.loc.end)
+                    FromJsonError::LiteralFormat($err.to_owned(), tok.span.first, tok.span.end)
                 })?
             }};
         }
@@ -832,11 +832,11 @@ impl FieldType {
         if let Some(mut val) = hardcoded_type(name_stack) {
             match &mut val {
                 FieldType::Float(ref mut f) => {
-                    let tok = lex.expect(TokenType::Number, true)?;
+                    let tok = lex.expect(TokenType::Number)?;
                     *f = parse_prim!(tok, f32, "float");
                 }
                 FieldType::IntVector(ref mut v) => {
-                    lex.expect(TokenType::BeginArray, true)?;
+                    lex.expect(TokenType::BeginArray)?;
                     loop {
                         let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
                         match tok.kind {
@@ -847,15 +847,15 @@ impl FieldType {
                             _ => {
                                 return Err(FromJsonError::Expected(
                                     "string or ]".to_owned(),
-                                    tok.loc.first,
-                                    tok.loc.end,
+                                    tok.span.first,
+                                    tok.span.end,
                                 ))
                             }
                         }
                     }
                 }
                 FieldType::StringVector(ref mut v) => {
-                    lex.expect(TokenType::BeginArray, true)?;
+                    lex.expect(TokenType::BeginArray)?;
                     loop {
                         let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
                         match tok.kind {
@@ -866,15 +866,15 @@ impl FieldType {
                             _ => {
                                 return Err(FromJsonError::Expected(
                                     "string or ]".to_owned(),
-                                    tok.loc.first,
-                                    tok.loc.end,
+                                    tok.span.first,
+                                    tok.span.end,
                                 ))
                             }
                         }
                     }
                 }
                 FieldType::FloatArray(ref mut v) => {
-                    lex.expect(TokenType::BeginArray, true)?;
+                    lex.expect(TokenType::BeginArray)?;
                     loop {
                         let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
                         match tok.kind {
@@ -885,23 +885,23 @@ impl FieldType {
                             _ => {
                                 return Err(FromJsonError::Expected(
                                     "string or ]".to_owned(),
-                                    tok.loc.first,
-                                    tok.loc.end,
+                                    tok.span.first,
+                                    tok.span.end,
                                 ))
                             }
                         }
                     }
                 }
                 FieldType::TwoInt(ref mut i1, ref mut i2) => {
-                    lex.expect(TokenType::BeginArray, true)?;
-                    let t1 = lex.expect(TokenType::Number, true)?;
+                    lex.expect(TokenType::BeginArray)?;
+                    let t1 = lex.expect(TokenType::Number)?;
                     *i1 = parse_prim!(t1, i32, "integer");
-                    let t2 = lex.expect(TokenType::Number, true)?;
+                    let t2 = lex.expect(TokenType::Number)?;
                     *i2 = parse_prim!(t2, i32, "integer");
-                    lex.expect(TokenType::EndArray, true)?;
+                    lex.expect(TokenType::EndArray)?;
                 }
                 FieldType::TwoBool(ref mut b1, ref mut b2) => {
-                    lex.expect(TokenType::BeginArray, true)?;
+                    lex.expect(TokenType::BeginArray)?;
                     let tok1 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
                     *b1 = if tok1.kind == TokenType::BoolTrue {
                         true
@@ -910,8 +910,8 @@ impl FieldType {
                     } else {
                         return Err(FromJsonError::Expected(
                             "bool".to_owned(),
-                            tok1.loc.first,
-                            tok1.loc.end,
+                            tok1.span.first,
+                            tok1.span.end,
                         ));
                     };
                     let tok2 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
@@ -922,22 +922,22 @@ impl FieldType {
                     } else {
                         return Err(FromJsonError::Expected(
                             "bool".to_owned(),
-                            tok2.loc.first,
-                            tok2.loc.end,
+                            tok2.span.first,
+                            tok2.span.end,
                         ));
                     };
-                    lex.expect(TokenType::EndArray, true)?;
+                    lex.expect(TokenType::EndArray)?;
                 }
                 FieldType::Char(ref mut c) => {
-                    let tok = lex.expect(TokenType::String, true)?;
+                    let tok = lex.expect(TokenType::String)?;
                     let bytes = tok.dat.as_bytes();
                     if bytes.len() == 1 && bytes[0].is_ascii() {
                         *c = bytes[0] as char;
                     } else {
                         return Err(FromJsonError::LiteralFormat(
                             "exactly one ascii char".to_owned(),
-                            tok.loc.first,
-                            tok.loc.end,
+                            tok.span.first,
+                            tok.span.end,
                         ));
                     }
                 }
@@ -955,8 +955,8 @@ impl FieldType {
                 _ => {
                     return Err(FromJsonError::LiteralFormat(
                         "unknown field".to_owned(),
-                        tok.loc.first,
-                        tok.loc.end,
+                        tok.span.first,
+                        tok.span.end,
                     ))
                 }
             })

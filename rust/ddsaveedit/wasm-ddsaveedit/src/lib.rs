@@ -4,12 +4,6 @@ use ddsavelib::{
 };
 use wasm_bindgen::prelude::*;
 
-// When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
-// allocator.
-#[cfg(feature = "wee_alloc")]
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
 #[wasm_bindgen]
 pub struct Annotation {
     err: String,
@@ -69,8 +63,8 @@ pub fn check(input: &str) -> Option<Annotation> {
                     let in_len = input.len();
                     (
                         "Unexpected end of file".to_owned(),
-                        (in_len as u64).saturating_sub(1),
-                        in_len as u64,
+                        in_len.saturating_sub(1),
+                        in_len,
                     )
                 }
                 FromJsonError::IoError(e) => (e.to_string(), 0, 0),
@@ -79,8 +73,10 @@ pub fn check(input: &str) -> Option<Annotation> {
 
             let mut line = 0;
             let mut col = 0;
-            for &b in input.as_bytes().iter().take(first as usize) {
-                col += 1;
+            for (idx, &b) in input.as_bytes().iter().take(first as usize).enumerate() {
+                if input.is_char_boundary(idx) {
+                    col += 1;
+                }
                 if b == b'\n' {
                     line += 1;
                     col = 0;
@@ -89,8 +85,10 @@ pub fn check(input: &str) -> Option<Annotation> {
 
             let mut eline = 0;
             let mut ecol = 0;
-            for &b in input.as_bytes().iter().take(end as usize) {
-                ecol += 1;
+            for (idx, &b) in input.as_bytes().iter().take(end as usize).enumerate() {
+                if input.is_char_boundary(idx) {
+                    ecol += 1;
+                }
                 if b == b'\n' {
                     eline += 1;
                     ecol = 0;
@@ -116,7 +114,7 @@ pub fn decode(input: &[u8]) -> Result<String, JsValue> {
     match f {
         Ok(s) => {
             let mut x = Vec::new();
-            let res = s.write_to_json(&mut std::io::BufWriter::new(&mut x), 0, true);
+            let res = s.write_to_json(&mut std::io::BufWriter::new(&mut x), true);
             match res {
                 Ok(_) => Ok(std::str::from_utf8(&x).unwrap().to_owned()),
                 Err(_) => Err("wasm_decode: io error???".into()),
