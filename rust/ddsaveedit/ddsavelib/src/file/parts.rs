@@ -3,7 +3,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::{
     convert::TryFrom,
     ffi::CStr,
-    io::{Cursor, Read, Seek, Write},
+    io::{Read, Write},
     ops::{Index, IndexMut},
 };
 
@@ -26,13 +26,13 @@ pub struct Header {
     //zeroes1: [u8; 4],
     objects_size: u32,
     objects_num: u32,
-    pub objects_offset: u32,
+    objects_offset: u32,
     //zeroes2: [u8; 16],
     fields_num: u32,
-    pub fields_offset: u32,
+    fields_offset: u32,
     //zeroes3: [u32; 4],
     data_size: u32,
-    pub data_offset: u32,
+    data_offset: u32,
 }
 
 impl Header {
@@ -56,17 +56,41 @@ impl Header {
 
         let version = reader.read_u32::<LittleEndian>().unwrap();
         let header_len = reader.read_u32::<LittleEndian>().unwrap();
+        if header_len != u32::try_from(Header::SIZE).unwrap() {
+            return Err(FromBinError::OffsetMismatch {
+                exp: u64::try_from(Header::SIZE).unwrap(),
+                is: header_len.into(),
+            });
+        }
         let _ = reader.read_u32::<LittleEndian>().unwrap(); // Zeroes
         let objects_size = reader.read_u32::<LittleEndian>().unwrap();
         let objects_num = reader.read_u32::<LittleEndian>().unwrap();
         let objects_offset = reader.read_u32::<LittleEndian>().unwrap();
+        if objects_offset != header_len {
+            return Err(FromBinError::OffsetMismatch {
+                exp: header_len.into(),
+                is: objects_offset.into(),
+            });
+        }
         let _ = reader.read_u64::<LittleEndian>().unwrap();
         let _ = reader.read_u64::<LittleEndian>().unwrap();
         let fields_num = reader.read_u32::<LittleEndian>().unwrap();
         let fields_offset = reader.read_u32::<LittleEndian>().unwrap();
+        if fields_offset != objects_offset + objects_num * 16 {
+            return Err(FromBinError::OffsetMismatch {
+                exp: fields_offset.into(),
+                is: (objects_offset + objects_num * 16).into(),
+            });
+        }
         let _ = reader.read_u32::<LittleEndian>().unwrap();
         let data_size = reader.read_u32::<LittleEndian>().unwrap();
         let data_offset = reader.read_u32::<LittleEndian>().unwrap();
+        if data_offset != fields_offset + fields_num * 12 {
+            return Err(FromBinError::OffsetMismatch {
+                exp: data_offset.into(),
+                is: (fields_offset + fields_num * 12).into(),
+            });
+        }
         Ok(Header {
             magic,
             version,
@@ -295,10 +319,7 @@ impl Fields {
             .map(|(f, a)| (FieldIdx(f as u32), a))
     }
 
-    pub fn try_from_bin<R: Read + Seek>(
-        reader: &'_ mut R,
-        header: &Header,
-    ) -> Result<Self, FromBinError> {
+    pub fn try_from_bin<R: Read>(reader: &'_ mut R, header: &Header) -> Result<Self, FromBinError> {
         let mut f = Fields {
             fields: {
                 let mut v = vec![];
@@ -573,7 +594,12 @@ impl Data {
         self.dat.iter()
     }
 
-    pub fn create_data(&mut self, name: std::borrow::Cow<'_, str>, parent: Option<ObjIdx>, tipe: FieldType) {
+    pub fn create_data(
+        &mut self,
+        name: std::borrow::Cow<'_, str>,
+        parent: Option<ObjIdx>,
+        tipe: FieldType,
+    ) {
         self.dat.push(Field {
             name: name.into_owned(),
             parent,
@@ -694,7 +720,7 @@ macro_rules! skip {
     };
 }
 
-pub fn decode_fields<R: Read + Seek>(
+pub fn decode_fields<R: Read>(
     reader: &'_ mut R,
     f: &'_ mut Fields,
     o: &'_ Objects,
@@ -1052,10 +1078,9 @@ impl FieldType {
                     if len.checked_add(4).ok_or(FromBinError::FormatErr)? == aligned_max_len {
                         let mut buf = vec![0u8; len];
                         reader.read_exact(&mut buf)?;
+                        let mut buf: &[u8] = &buf;
                         if len >= 4 && buf[0..4] == HEADER_MAGIC_NUMBER {
-                            Ok(File(Some(Box::new(self::File::try_from_bin(
-                                &mut Cursor::new(buf),
-                            )?))))
+                            Ok(File(Some(Box::new(self::File::try_from_bin(&mut buf)?))))
                         } else {
                             let string = {
                                 let cs = CStr::from_bytes_with_nul(&buf)?.to_str()?;

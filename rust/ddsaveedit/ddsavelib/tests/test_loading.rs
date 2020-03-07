@@ -27,25 +27,21 @@ fn test_loading() {
             data
         };
 
-        let fil = File::try_from_bin(&mut std::io::Cursor::new(&data)).unwrap();
+        let fil = File::try_from_bin(&mut &*data).unwrap();
         let mut x = Vec::new();
-        fil.write_to_json(&mut std::io::BufWriter::new(&mut x), true)
-            .unwrap();
-
-        let fil2 = File::try_from_json(&mut std::io::Cursor::new(&x)).unwrap();
+        fil.write_to_json(&mut x, true).unwrap();
+        let fil2 = File::try_from_json(&mut &*x).unwrap();
         assert_eq!(fil, fil2);
 
         let mut y = Vec::new();
-        fil2.write_to_json(&mut std::io::BufWriter::new(&mut y), true)
-            .unwrap();
+        fil2.write_to_json(&mut y, true).unwrap();
         assert_eq!(
             std::str::from_utf8(&x).unwrap(),
             std::str::from_utf8(&y).unwrap()
         );
 
         let mut b = Vec::new();
-        fil2.write_to_bin(&mut std::io::BufWriter::new(&mut b))
-            .unwrap();
+        fil2.write_to_bin(&mut b).unwrap();
 
         assert_eq!(
             data.len(),
@@ -54,7 +50,7 @@ fn test_loading() {
             f
         );
 
-        let fil3 = File::try_from_bin(&mut std::io::Cursor::new(&b)).unwrap();
+        let fil3 = File::try_from_bin(&mut &*b).unwrap();
         assert_eq!(fil2, fil3);
     });
 }

@@ -108,13 +108,12 @@ pub fn check(input: &str) -> Option<Annotation> {
 
 #[wasm_bindgen]
 /// Decode a binary file to JSON
-pub fn decode(input: &[u8]) -> Result<String, JsValue> {
-    let pass_input = input;
-    let f = File::try_from_bin(&mut std::io::Cursor::new(pass_input));
+pub fn decode(mut input: &[u8]) -> Result<String, JsValue> {
+    let f = File::try_from_bin(&mut input);
     match f {
         Ok(s) => {
             let mut x = Vec::new();
-            let res = s.write_to_json(&mut std::io::BufWriter::new(&mut x), true);
+            let res = s.write_to_json(&mut x, true);
             match res {
                 Ok(_) => Ok(std::str::from_utf8(&x).unwrap().to_owned()),
                 Err(_) => Err("wasm_decode: io error???".into()),

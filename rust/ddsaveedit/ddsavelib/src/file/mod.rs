@@ -1,7 +1,7 @@
 use std::{
-    convert::TryFrom,
     borrow::Cow,
-    io::{Read, Seek, Write},
+    convert::TryFrom,
+    io::{Read, Write},
 };
 
 use crate::{err::*, util::escape};
@@ -30,29 +30,15 @@ pub struct File {
     dat: Data,
 }
 
-macro_rules! check_offset {
-    ($rd:expr, $exp:expr) => {{
-        let pos = $rd.stream_position()?;
-        if pos != $exp {
-            return Err(FromBinError::OffsetMismatch { exp: $exp, is: pos });
-        }
-    }};
-}
-
 impl File {
     const BUILTIN_VERSION_FIELD: &'static str = "__revision_dont_touch";
 
     /// Attempt create a Darkest Dungeon save [`File`] from a [`Read`] representing
     /// a binary encoded file.
-    pub fn try_from_bin<R: Read + Seek>(reader: &'_ mut R) -> Result<Self, FromBinError> {
+    pub fn try_from_bin<R: Read>(reader: &'_ mut R) -> Result<Self, FromBinError> {
         let h = Header::try_from_bin(reader)?;
-        check_offset!(reader, u64::from(h.objects_offset));
         let o: Objects = Objects::try_from_bin(reader, &h)?;
-
-        check_offset!(reader, u64::from(h.fields_offset));
         let mut f = Fields::try_from_bin(reader, &h)?;
-
-        check_offset!(reader, u64::from(h.data_offset));
         let dat = parts::decode_fields(reader, &mut f, &o, &h)?;
         Ok(File { h, o, f, dat })
     }
@@ -137,18 +123,22 @@ impl File {
         name_stack: &mut Vec<Cow<'a, str>>,
         lex: &mut std::iter::Peekable<T>,
     ) -> Result<FieldIdx, FromJsonError> {
-        let field_index = self.f.create_field(&name).ok_or(FromJsonError::IntegerErr)?;
+        let field_index = self
+            .f
+            .create_field(&name)
+            .ok_or(FromJsonError::IntegerErr)?;
         // Identify type
         name_stack.push(name.clone());
-        let val = match lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?.kind {
+        match lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?.kind {
             TokenType::BeginObject => {
                 if name == "raw_data" || name == "static_save" {
                     let inner = File::try_from_json_parser(lex)?;
-                    Some(FieldType::File(Some(Box::new(inner))))
+                    self.dat
+                        .create_data(name, parent, FieldType::File(Some(Box::new(inner))));
                 } else {
                     lex.next();
                     self.dat
-                        .create_data(name.clone(), parent, FieldType::Object(vec![]));
+                        .create_data(name, parent, FieldType::Object(vec![]));
                     let obj_index = self
                         .o
                         .create_object(field_index, parent, 0, 0)
@@ -167,14 +157,13 @@ impl File {
                     } else {
                         unreachable!("pushed obj earlier");
                     }
-                    None
                 }
             }
-            _ => Some(FieldType::try_from_json(lex, &name_stack)?),
+            _ => {
+                self.dat
+                    .create_data(name, parent, FieldType::try_from_json(lex, &name_stack)?);
+            }
         };
-        if let Some(val) = val {
-            self.dat.create_data(name, parent, val);
-        }
         name_stack.pop();
         Ok(field_index)
     }

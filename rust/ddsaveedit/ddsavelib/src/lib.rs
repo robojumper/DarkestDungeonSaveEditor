@@ -1,4 +1,3 @@
-#![feature(seek_convenience)]
 #![feature(try_reserve)]
 #![feature(generators)]
 #![feature(generator_trait)]

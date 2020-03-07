@@ -1,6 +1,6 @@
+use criterion::{criterion_group, criterion_main, Criterion};
 use ddsavelib::File;
 use std::{fs::read_dir, io::Read, path::PathBuf};
-use criterion::{criterion_group, criterion_main, Criterion};
 
 const INTERESTING_FILES: &'static str = "../../../src/test/resources/otherFiles";
 
@@ -33,7 +33,7 @@ fn test_from_bin(c: &mut Criterion) {
         let data = load_file(&p);
         c.bench_function(
             &("from_bin: ".to_owned() + &p.file_name().unwrap().to_string_lossy()),
-            |b| b.iter(|| File::try_from_bin(&mut std::io::Cursor::new(&data)).unwrap()),
+            |b| b.iter(|| File::try_from_bin(&mut &*data).unwrap())
         );
     }
 }
@@ -42,14 +42,13 @@ fn test_to_json(c: &mut Criterion) {
     let paths = get_paths();
     for p in paths {
         let data = load_file(&p);
-        let f = File::try_from_bin(&mut std::io::Cursor::new(&data)).unwrap();
+        let f = File::try_from_bin(&mut &*data).unwrap();
         c.bench_function(
             &("to_json: ".to_owned() + &p.file_name().unwrap().to_string_lossy()),
             |b| {
                 b.iter(|| {
                     let mut x = Vec::new();
-                    f.write_to_json(&mut std::io::BufWriter::new(&mut x), true)
-                        .unwrap();
+                    f.write_to_json(&mut x, true).unwrap();
                 })
             },
         );
@@ -60,14 +59,13 @@ fn test_to_bin(c: &mut Criterion) {
     let paths = get_paths();
     for p in paths {
         let data = load_file(&p);
-        let f = File::try_from_bin(&mut std::io::Cursor::new(&data)).unwrap();
+        let f = File::try_from_bin(&mut &*data).unwrap();
         c.bench_function(
             &("to_bin: ".to_owned() + &p.file_name().unwrap().to_string_lossy()),
             |b| {
                 b.iter(|| {
                     let mut x = Vec::new();
-                    f.write_to_bin(&mut std::io::BufWriter::new(&mut x))
-                        .unwrap();
+                    f.write_to_bin(&mut x).unwrap();
                 })
             },
         );
@@ -78,13 +76,16 @@ fn test_from_json(c: &mut Criterion) {
     let paths = get_paths();
     for p in paths {
         let data = load_file(&p);
-        let f = File::try_from_bin(&mut std::io::Cursor::new(&data)).unwrap();
+        let f = File::try_from_bin(&mut &*data).unwrap();
         let mut x = Vec::new();
-        f.write_to_json(&mut std::io::BufWriter::new(&mut x), true)
-            .unwrap();
+        f.write_to_json(&mut x, true).unwrap();
         c.bench_function(
             &("from_json: ".to_owned() + &p.file_name().unwrap().to_string_lossy()),
-            |b| b.iter(|| File::try_from_json(&mut std::io::Cursor::new(&x)).unwrap()),
+            |b| {
+                b.iter(|| {
+                    File::try_from_json(&mut &*x).unwrap();
+                })
+            },
         );
     }
 }
