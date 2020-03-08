@@ -625,8 +625,8 @@ pub enum FieldType {
 }
 
 macro_rules! types {
-    ($([$e:ident, $($i:literal),+]), + $(,)*) => {
-        &[$((types!($e), &[$($i,)+]),)+]
+    ($types:ident, $([$e:ident, $($i:literal),+]), + $(,)*) => {
+        const $types: &[(&FieldType, &[&str])] = &[$((types!($e), &[$($i,)+]),)+];
     };
     (Float) => {&FieldType::Float(0.0)};
     (Char) => {&FieldType::Char('\0')};
@@ -638,7 +638,7 @@ macro_rules! types {
 }
 
 #[rustfmt::skip]
-const TYPES: &[(&FieldType, &[&str])] = types!(
+types!(TYPES,
     [Char, "requirement_code"],
 
     [Float, "current_hp"],
@@ -698,20 +698,32 @@ const TYPES: &[(&FieldType, &[&str])] = types!(
     [TwoBool, "profile_options", "values", "multiplied_enemy_crits"],
 );
 
-pub fn hardcoded_type<T: AsRef<str>>(name_trace: &'_ [T]) -> Option<FieldType> {
-    TYPES.iter().find_map(|(t, path)| {
-        if name_trace.len() >= path.len()
-            && path
-                .iter()
-                .rev()
-                .zip(name_trace.iter().rev())
-                .all(|(tst, name_frag)| tst == &"*" || tst == &name_frag.as_ref())
-        {
-            Some((*t).clone())
-        } else {
-            None
-        }
-    })
+pub fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Option<FieldType> {
+    use once_cell::sync::OnceCell;
+    static TYPES_MAP: OnceCell<std::collections::HashMap<&str, Vec<(&[&str], &FieldType)>>> = OnceCell::new();
+    if let Some(candidates) = TYPES_MAP.get_or_init(|| {
+        let mut map = std::collections::HashMap::new();
+        TYPES.iter().for_each(|(tip, trace)| {
+            map.entry(*trace.last().unwrap()).or_insert_with(Vec::new).push((&trace[0..trace.len() - 1], *tip));
+        });
+        map
+    }).get(name.as_ref()) {
+        candidates.iter().find_map(|(path, t)| {
+            if parents.len() >= path.len()
+                && path
+                    .iter()
+                    .rev()
+                    .zip(parents.iter().rev())
+                    .all(|(tst, name_frag)| tst == &"*" || tst == &name_frag.as_ref())
+            {
+                Some((*t).clone())
+            } else {
+                None
+            }
+        })
+    } else {
+        None
+    }
 }
 
 macro_rules! skip {
@@ -744,9 +756,10 @@ pub fn decode_fields<R: Read>(
         offset_sizes.insert(last, max_size.checked_sub(last).ok_or(FromBinError::Arith)?);
     }
 
-    let mut data = Data { dat: Vec::new() };
-    let mut obj_stack = Vec::new();
-    let mut obj_nums = Vec::new();
+    let mut data = Data { dat: vec![] };
+    let mut obj_stack = vec![];
+    let mut obj_nums = vec![];
+    let mut obj_names: Vec<String> = vec![];
     for (idx, field) in f.fields.iter().enumerate() {
         // Read name
         let off = field.offset as usize;
@@ -768,7 +781,6 @@ pub fn decode_fields<R: Read>(
 
         let data_begin = off + len;
         let data_end = off + offset_sizes[&(field.offset as usize)]; // exclusive
-        let name_trace = build_name_trace(&data, &o, &name, &obj_stack)?;
         let field_type = if field.is_object() {
             FieldType::Object(vec![])
         } else {
@@ -786,11 +798,12 @@ pub fn decode_fields<R: Read>(
                 &mut field_data,
                 to_skip_if_aligned,
                 data_end - data_begin,
-                &name_trace,
+                &obj_names,
+                &name,
             )?
         };
         data.dat.push(self::Field {
-            name,
+            name: name.clone(),
             parent: obj_stack.last().copied(),
             tipe: field_type,
         });
@@ -815,6 +828,7 @@ pub fn decode_fields<R: Read>(
             }
             obj_stack.push(field.object_index().unwrap());
             obj_nums.push(0u32);
+            obj_names.push(name.clone());
         }
 
         while !obj_stack.is_empty()
@@ -822,29 +836,18 @@ pub fn decode_fields<R: Read>(
         {
             obj_stack.pop();
             obj_nums.pop();
+            obj_names.pop();
         }
     }
 
     Ok(data)
 }
 
-fn build_name_trace<'a>(
-    fields: &'a Data,
-    objs: &'a Objects,
-    name: &'a str,
-    obj_stack: &'a [ObjIdx],
-) -> Result<Vec<&'a str>, FromBinError> {
-    obj_stack
-        .iter()
-        .map(|i| Ok(fields[objs[*i].field].name.as_str()))
-        .chain(std::iter::once(Ok(name)))
-        .collect::<Result<Vec<_>, _>>()
-}
-
 impl FieldType {
-    pub fn try_from_json<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>, N: AsRef<str>>(
+    pub fn try_from_json<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
         lex: &mut T,
-        name_stack: &'_ [N],
+        name_stack: &'_ [impl AsRef<str>],
+        name: impl AsRef<str>,
     ) -> Result<Self, FromJsonError> {
         macro_rules! parse_prim {
             ($tok:expr, $t:ty, $err:expr) => {{
@@ -855,7 +858,7 @@ impl FieldType {
             }};
         }
 
-        if let Some(mut val) = hardcoded_type(name_stack) {
+        if let Some(mut val) = hardcoded_type(name_stack, name) {
             match &mut val {
                 FieldType::Float(ref mut f) => {
                     let tok = lex.expect(TokenType::Number)?;
@@ -993,11 +996,12 @@ impl FieldType {
         reader: &'_ mut R,
         to_skip_if_aligned: usize,
         max_len: usize,
-        name_trace: &'_ [&'_ str],
+        name_trace: &'_ [impl AsRef<str>],
+        name: &'_ str,
     ) -> Result<Self, FromBinError> {
         use FieldType::*;
 
-        if let Some(mut val) = hardcoded_type(name_trace) {
+        if let Some(mut val) = hardcoded_type(name_trace, name) {
             match &mut val {
                 Float(ref mut f) => {
                     skip!(reader, to_skip_if_aligned);
@@ -1093,7 +1097,7 @@ impl FieldType {
                         }
                     } else {
                         Err(FromBinError::UnknownField(
-                            (*name_trace.last().unwrap()).to_string(),
+                            (*name_trace.last().unwrap()).as_ref().to_owned(),
                         ))
                     }
                 }

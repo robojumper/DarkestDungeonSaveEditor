@@ -8,7 +8,7 @@
 
 A Darkest Dungeon Save Game Reader, Editor and Writer. Requires Java Runtime Environment 8+.
 
-*There also is an experimental [Rust](rust/) implementation with an online save editor.*
+*There also is an experimental [Rust](rust/ddsaveedit/) implementation with an online save editor.*
 
 ## [Download](https://github.com/robojumper/DarkestDungeonSaveEditor/releases/latest)
 

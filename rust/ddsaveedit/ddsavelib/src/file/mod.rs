@@ -128,7 +128,6 @@ impl File {
             .create_field(&name)
             .ok_or(FromJsonError::IntegerErr)?;
         // Identify type
-        name_stack.push(name.clone());
         match lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?.kind {
             TokenType::BeginObject => {
                 if name == "raw_data" || name == "static_save" {
@@ -138,7 +137,7 @@ impl File {
                 } else {
                     lex.next();
                     self.dat
-                        .create_data(name, parent, FieldType::Object(vec![]));
+                        .create_data(name.clone(), parent, FieldType::Object(vec![]));
                     let obj_index = self
                         .o
                         .create_object(field_index, parent, 0, 0)
@@ -148,7 +147,9 @@ impl File {
                         (obj_index.numeric() & FieldInfo::OBJ_IDX_BITS) << 11;
 
                     // Recursion here
+                    name_stack.push(name);
                     let childs = self.read_child_fields(Some(obj_index), name_stack, lex)?;
+                    name_stack.pop();
 
                     self.o[obj_index].num_direct_childs = childs.len() as u32;
                     self.o[obj_index].num_all_childs = self.f.len() - 1 - field_index.numeric();
@@ -160,11 +161,11 @@ impl File {
                 }
             }
             _ => {
+                let f = FieldType::try_from_json(lex, &name_stack, name.as_ref())?;
                 self.dat
-                    .create_data(name, parent, FieldType::try_from_json(lex, &name_stack)?);
+                    .create_data(name, parent, f);
             }
         };
-        name_stack.pop();
         Ok(field_index)
     }
 
