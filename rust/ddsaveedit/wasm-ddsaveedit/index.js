@@ -1,9 +1,7 @@
 const rust = import('./pkg');
-
+import names from './names_cache.txt';
 
 rust.then(wasm => {
-
-	wasm.init();
 
 	function dragEnter(evt) {
 		const isFile = event.dataTransfer.types.includes("Files");
@@ -88,8 +86,8 @@ rust.then(wasm => {
 		var text = editor.getValue();
 		let annot = wasm.check(text);
 
-		markers = editor.session.getMarkers();
-		for (m in markers) {
+		var markers = editor.session.getMarkers();
+		for (var m in markers) {
 			editor.session.removeMarker(m);
 		}
 
@@ -148,6 +146,17 @@ rust.then(wasm => {
 			}
 		}
 	}
+
+	wasm.init();
+
+	var oReq = new XMLHttpRequest();
+	oReq.addEventListener("load", function () {
+		var text = this.responseText;
+		var split_names = text.split(/\r?\n/);
+		wasm.set_names(split_names);
+	});
+	oReq.open("GET", names);
+	oReq.send();
 
 	var area = document.getElementById('droparea');
 	area.addEventListener('drop', dropHandler);

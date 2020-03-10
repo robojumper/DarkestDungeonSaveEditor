@@ -9,6 +9,14 @@ module.exports = {
         path: path.resolve(__dirname, 'dist'),
         filename: 'index.js',
     },
+    module: {
+        rules: [
+            {
+               test: /\.txt$/i,
+                use: 'file-loader',
+            },
+        ],
+    },
     plugins: [
         new HtmlWebpackPlugin({
             template: 'index.html'

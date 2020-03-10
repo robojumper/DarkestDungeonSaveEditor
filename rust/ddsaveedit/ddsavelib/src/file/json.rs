@@ -195,7 +195,7 @@ macro_rules! ungen {
     }};
 }
 
-pub struct Parser<'a> {
+pub(crate) struct Parser<'a> {
     gen: Pin<Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + 'a>>,
 }
 
@@ -220,7 +220,7 @@ impl<'a> Iterator for Parser<'a> {
     }
 }
 
-pub fn parse<'a>(
+pub(crate) fn parse<'a>(
     data: &'a str,
 ) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + 'a> {
     Box::new(move || {
@@ -415,7 +415,7 @@ fn json_to_token(data: &str, tok: LexerToken) -> Result<Token<'_>, JsonError> {
     })
 }
 
-pub trait ExpectExt<'a> {
+pub(crate) trait ExpectExt<'a> {
     fn expect(&mut self, exp: TokenType) -> Result<Token<'a>, JsonError>;
 }
 

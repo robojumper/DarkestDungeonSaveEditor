@@ -8,6 +8,3 @@ has a few benefits:
   the Java version.
 * WASM: Rust can natively target WebAssembly, so there is a bare-bones browser version
   available at [https://robojumper.github.io/DarkestDungeonSaveEditor/](https://robojumper.github.io/DarkestDungeonSaveEditor/)
-
-Currently not supported: Name hashes.
-  

@@ -1,7 +1,9 @@
 use ddsavelib::{
     err::{FromBinError, FromJsonError},
-    File,
+    File, Unhasher,
 };
+use once_cell::sync::Lazy;
+use std::sync::RwLock;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -21,6 +23,8 @@ impl Annotation {
     }
 }
 
+static UNHASH: Lazy<RwLock<Unhasher<String>>> = Lazy::new(|| RwLock::new(Default::default()));
+
 #[wasm_bindgen]
 /// Initialize this library
 pub fn init() {
@@ -32,6 +36,15 @@ pub fn init() {
     // https://github.com/rustwasm/console_error_panic_hook#readme
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
+}
+
+#[wasm_bindgen]
+/// Offer names to be used for unhashing.
+pub fn set_names(n: Vec<JsValue>) {
+    let mut m = UNHASH.write().unwrap();
+    for name in n {
+        m.offer_name(name.as_string().unwrap());
+    }
 }
 
 #[wasm_bindgen]
@@ -113,7 +126,7 @@ pub fn decode(mut input: &[u8]) -> Result<String, JsValue> {
     match f {
         Ok(s) => {
             let mut x = Vec::new();
-            let res = s.write_to_json(&mut x, true);
+            let res = s.write_to_json(&mut x, true, &UNHASH.read().unwrap());
             match res {
                 Ok(_) => Ok(std::str::from_utf8(&x).unwrap().to_owned()),
                 Err(_) => Err("wasm_decode: io error???".into()),

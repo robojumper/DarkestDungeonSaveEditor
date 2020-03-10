@@ -140,7 +140,7 @@ impl From<std::io::Error> for FromJsonError {
 impl std::error::Error for FromJsonError {}
 
 #[derive(Debug, Clone)]
-pub enum JsonError {
+pub(crate) enum JsonError {
     EOF,
     ExpectedValue(usize, usize),
     Expected(String, usize, usize),

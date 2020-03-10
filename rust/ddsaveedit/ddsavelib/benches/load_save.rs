@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use ddsavelib::File;
+use ddsavelib::{File, Unhasher};
 use std::{fs::read_dir, io::Read, path::PathBuf};
 
 const INTERESTING_FILES: &'static str = "../../../src/test/resources/otherFiles";
@@ -33,7 +33,7 @@ fn test_from_bin(c: &mut Criterion) {
         let data = load_file(&p);
         c.bench_function(
             &("from_bin: ".to_owned() + &p.file_name().unwrap().to_string_lossy()),
-            |b| b.iter(|| File::try_from_bin(&mut &*data).unwrap())
+            |b| b.iter(|| File::try_from_bin(&mut &*data).unwrap()),
         );
     }
 }
@@ -48,7 +48,7 @@ fn test_to_json(c: &mut Criterion) {
             |b| {
                 b.iter(|| {
                     let mut x = Vec::new();
-                    f.write_to_json(&mut x, true).unwrap();
+                    f.write_to_json(&mut x, true, &Unhasher::empty()).unwrap();
                 })
             },
         );
@@ -78,7 +78,7 @@ fn test_from_json(c: &mut Criterion) {
         let data = load_file(&p);
         let f = File::try_from_bin(&mut &*data).unwrap();
         let mut x = Vec::new();
-        f.write_to_json(&mut x, true).unwrap();
+        f.write_to_json(&mut x, true, &Unhasher::empty()).unwrap();
         c.bench_function(
             &("from_json: ".to_owned() + &p.file_name().unwrap().to_string_lossy()),
             |b| {

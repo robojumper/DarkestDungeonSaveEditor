@@ -1,15 +1,61 @@
 use std::{
-    borrow::Cow,
+    borrow::{Borrow, Cow},
+    collections::HashMap,
     convert::TryFrom,
     io::{Read, Write},
 };
 
-use crate::{err::*, util::escape};
+use crate::{
+    err::*,
+    util::{escape, name_hash},
+};
 
 mod json;
 mod parts;
 use json::{ExpectExt, Parser, Token, TokenType};
 use parts::{Data, FieldIdx, FieldInfo, FieldType, Fields, Header, ObjIdx, Objects};
+
+/// A map from name hash -> name to make the JSON format more legible.
+/// 
+/// User-provided in [`File::write_to_json`].
+#[derive(Debug, Default)]
+pub struct Unhasher<T: Borrow<str>> {
+    map: HashMap<i32, T>,
+}
+
+impl<T: Borrow<str>> Unhasher<T> {
+    /// Create a new empty [`Unhasher`].
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
+    }
+
+    /// Offer a single name that could potentially appear in a save file in hashed form.
+    pub fn offer_name(&mut self, name: T) {
+        self.map.insert(name_hash(name.borrow()), name);
+    }
+
+    /// Offer names that could potentially appear in a save file in hashed form.
+    pub fn offer_names<I: IntoIterator<Item = T>>(&mut self, names: I) {
+        for name in names {
+            self.map.insert(name_hash(name.borrow()), name);
+        }
+    }
+
+    fn unhash(&self, i: i32) -> Option<&str> {
+        self.map.get(&i).map(|s| s.borrow())
+    }
+}
+
+impl Unhasher<&str> {
+    /// Create an empty [`Unhasher`]. Shorthand for `Unhasher::<&str>::new()`.
+    pub fn empty() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 /// Represents a valid Darkest Dungeon save file.
@@ -162,27 +208,28 @@ impl File {
             }
             _ => {
                 let f = FieldType::try_from_json(lex, &name_stack, name.as_ref())?;
-                self.dat
-                    .create_data(name, parent, f);
+                self.dat.create_data(name, parent, f);
             }
         };
         Ok(field_index)
     }
 
     /// Write this [`File`] as JSON.
-    pub fn write_to_json<W: Write>(
+    pub fn write_to_json<T: Borrow<str>, W: Write>(
         &self,
         writer: &'_ mut W,
         allow_dupes: bool,
+        unhash: &Unhasher<T>,
     ) -> std::io::Result<()> {
-        self.write_to_json_priv(writer, &mut vec![], allow_dupes)
+        self.write_to_json_priv(writer, &mut vec![], allow_dupes, unhash)
     }
 
-    fn write_to_json_priv<W: Write>(
+    fn write_to_json_priv<T: Borrow<str>, W: Write>(
         &self,
         mut writer: &'_ mut W,
         indent: &mut Vec<u8>,
         allow_dupes: bool,
+        unhash: &Unhasher<T>,
     ) -> std::io::Result<()> {
         writer.write_all(b"{\n")?;
         writer.write_all(&indent)?;
@@ -194,7 +241,7 @@ impl File {
         writer.write_all(b",\n")?;
         if let Some(root) = self.o.iter().find(|o| o.parent.is_none()) {
             indent.extend_from_slice(b"    ");
-            self.write_field(root.field, writer, indent, false, allow_dupes)?;
+            self.write_field(root.field, writer, indent, false, allow_dupes, unhash)?;
             indent.truncate(indent.len() - 4);
         }
         writer.write_all(&indent)?;
@@ -202,13 +249,14 @@ impl File {
         Ok(())
     }
 
-    fn write_object<W: Write>(
+    fn write_object<T: Borrow<str>, W: Write>(
         &self,
         field_idx: FieldIdx,
         writer: &'_ mut W,
         indent: &mut Vec<u8>,
         comma: bool,
         allow_dupes: bool,
+        unhash: &Unhasher<T>,
     ) -> std::io::Result<()> {
         let dat = &self.dat[field_idx];
         if let FieldType::Object(ref c) = dat.tipe {
@@ -232,7 +280,14 @@ impl File {
                         }
                     }
                     indent.extend_from_slice(b"    ");
-                    self.write_field(child, writer, indent, idx != c.len() - 1, allow_dupes)?;
+                    self.write_field(
+                        child,
+                        writer,
+                        indent,
+                        idx != c.len() - 1,
+                        allow_dupes,
+                        unhash,
+                    )?;
                     indent.truncate(indent.len() - 4);
                 }
                 writer.write_all(&indent)?;
@@ -248,13 +303,14 @@ impl File {
         Ok(())
     }
 
-    fn write_field<W: Write>(
+    fn write_field<T: Borrow<str>, W: Write>(
         &self,
         field_idx: FieldIdx,
         mut writer: &'_ mut W,
         indent: &mut Vec<u8>,
         comma: bool,
         allow_dupes: bool,
+        unhash: &Unhasher<T>,
     ) -> std::io::Result<()> {
         use FieldType::*;
         let dat = &self.dat[field_idx];
@@ -271,9 +327,17 @@ impl File {
                 writer.write_all(if *b2 { b"true" } else { b"false" })?;
                 writer.write_all(b"]")?;
             }
-            Int(i) => {
-                itoa::write(&mut writer, *i)?;
-            }
+            Int(i) => match unhash.unhash(*i) {
+                Some(s) => {
+                    writer.write_all(b"\"")?;
+                    writer.write_all(b"###")?;
+                    writer.write_all(escape(s.borrow()).as_bytes())?;
+                    writer.write_all(b"\"")?;
+                }
+                None => {
+                    itoa::write(&mut writer, *i)?;
+                }
+            },
             Float(f) => {
                 dtoa::write(&mut writer, *f)?;
             }
@@ -290,8 +354,18 @@ impl File {
             }
             IntVector(ref v) => {
                 writer.write_all(b"[")?;
-                for (idx, num) in v.iter().enumerate() {
-                    itoa::write(&mut writer, *num)?;
+                for (idx, i) in v.iter().enumerate() {
+                    match unhash.unhash(*i) {
+                        Some(s) => {
+                            writer.write_all(b"\"")?;
+                            writer.write_all(b"###")?;
+                            writer.write_all(escape(s.borrow()).as_bytes())?;
+                            writer.write_all(b"\"")?;
+                        }
+                        None => {
+                            itoa::write(&mut writer, *i)?;
+                        }
+                    }
                     if idx != v.len() - 1 {
                         writer.write_all(b", ")?;
                     }
@@ -329,10 +403,10 @@ impl File {
             }
             File(ref obf) => {
                 let fil = obf.as_ref().unwrap();
-                fil.write_to_json_priv(writer, indent, allow_dupes)?;
+                fil.write_to_json_priv(writer, indent, allow_dupes, unhash)?;
             }
             Object(_) => {
-                self.write_object(field_idx, writer, indent, comma, allow_dupes)?;
+                self.write_object(field_idx, writer, indent, comma, allow_dupes, unhash)?;
             }
         };
 

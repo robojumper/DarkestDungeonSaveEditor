@@ -1,6 +1,6 @@
-use crate::file::json::Token;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::{
+    collections::HashMap,
     convert::TryFrom,
     ffi::CStr,
     io::{Read, Write},
@@ -10,7 +10,7 @@ use std::{
 use crate::{
     err::*,
     file::{
-        json::{ExpectExt, TokenType},
+        json::{ExpectExt, Token, TokenType},
         File,
     },
     util::name_hash,
@@ -700,14 +700,19 @@ types!(TYPES,
 
 pub fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Option<FieldType> {
     use once_cell::sync::OnceCell;
-    static TYPES_MAP: OnceCell<std::collections::HashMap<&str, Vec<(&[&str], &FieldType)>>> = OnceCell::new();
-    if let Some(candidates) = TYPES_MAP.get_or_init(|| {
-        let mut map = std::collections::HashMap::new();
-        TYPES.iter().for_each(|(tip, trace)| {
-            map.entry(*trace.last().unwrap()).or_insert_with(Vec::new).push((&trace[0..trace.len() - 1], *tip));
-        });
-        map
-    }).get(name.as_ref()) {
+    static TYPES_MAP: OnceCell<HashMap<&str, Vec<(&[&str], &FieldType)>>> = OnceCell::new();
+    if let Some(candidates) = TYPES_MAP
+        .get_or_init(|| {
+            let mut map = HashMap::new();
+            TYPES.iter().for_each(|(tip, trace)| {
+                map.entry(*trace.last().unwrap())
+                    .or_insert_with(Vec::new)
+                    .push((&trace[0..trace.len() - 1], *tip));
+            });
+            map
+        })
+        .get(name.as_ref())
+    {
         candidates.iter().find_map(|(path, t)| {
             if parents.len() >= path.len()
                 && path
@@ -742,7 +747,7 @@ pub fn decode_fields<R: Read>(
     let mut buf = vec![0; max_size];
     reader.read_exact(&mut buf)?;
 
-    let mut offset_sizes = std::collections::HashMap::<usize, usize>::new();
+    let mut offset_sizes = HashMap::<usize, usize>::new();
     let mut offsets = f
         .fields
         .iter()
@@ -844,7 +849,7 @@ pub fn decode_fields<R: Read>(
 }
 
 impl FieldType {
-    pub fn try_from_json<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
+    pub(crate) fn try_from_json<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
         lex: &mut T,
         name_stack: &'_ [impl AsRef<str>],
         name: impl AsRef<str>,
@@ -872,6 +877,9 @@ impl FieldType {
                             TokenType::EndArray => break,
                             TokenType::Number => {
                                 v.push(parse_prim!(tok, i32, "integer"));
+                            }
+                            TokenType::String if tok.dat.starts_with("###") => {
+                                v.push(name_hash(&tok.dat[3..]));
                             }
                             _ => {
                                 return Err(FromJsonError::Expected(
@@ -978,7 +986,13 @@ impl FieldType {
             let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
             Ok(match tok.kind {
                 TokenType::Number => FieldType::Int(parse_prim!(tok, i32, "integer")),
-                TokenType::String => FieldType::String(parse_prim!(tok, String, "string")),
+                TokenType::String => {
+                    if tok.dat.starts_with("###") {
+                        FieldType::Int(name_hash(&tok.dat[3..]))
+                    } else {
+                        FieldType::String(parse_prim!(tok, String, "string"))
+                    }
+                }
                 TokenType::BoolTrue => FieldType::Bool(true),
                 TokenType::BoolFalse => FieldType::Bool(false),
                 _ => {

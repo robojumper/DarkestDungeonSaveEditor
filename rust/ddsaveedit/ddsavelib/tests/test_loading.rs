@@ -1,23 +1,39 @@
-use ddsavelib::File;
-use std::{fs::read_dir, io::Read, path::PathBuf};
+use ddsavelib::{File, Unhasher};
+use std::{
+    fs,
+    io::{BufRead, Read},
+    path::PathBuf,
+};
 
 const TEST_PROFILES_PATH: &'static str = "../../../src/test/resources";
+const NAMES_PATH: &'static str = "../wasm-ddsaveedit/names_cache.txt";
+
 #[test]
 fn test_loading() {
     let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     d.push(TEST_PROFILES_PATH);
     let mut file_paths = vec![];
     //panic!(d.to_str().unwrap().to_string());
-    for file in read_dir(d).unwrap() {
+    for file in fs::read_dir(d).unwrap() {
         let entry = file.unwrap();
         let meta = entry.metadata().unwrap();
         if meta.file_type().is_dir() {
             // This is a directory, test for every file...
-            for savefile in read_dir(entry.path()).unwrap() {
+            for savefile in fs::read_dir(entry.path()).unwrap() {
                 file_paths.push(savefile.unwrap());
             }
         }
     }
+
+    let mut npath = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    npath.push(NAMES_PATH);
+    let f = fs::File::open(npath).unwrap();
+    let mut map = Unhasher::new();
+    for l in std::io::BufReader::new(f).lines() {
+        let l = l.unwrap();
+        map.offer_name(l);
+    }
+
     file_paths.iter().for_each(|f| {
         let data = {
             let file = std::fs::File::open(f.path()).unwrap();
@@ -29,12 +45,12 @@ fn test_loading() {
 
         let fil = File::try_from_bin(&mut &*data).unwrap();
         let mut x = Vec::new();
-        fil.write_to_json(&mut x, true).unwrap();
+        fil.write_to_json(&mut x, true, &map).unwrap();
         let fil2 = File::try_from_json(&mut &*x).unwrap();
         assert_eq!(fil, fil2);
 
         let mut y = Vec::new();
-        fil2.write_to_json(&mut y, true).unwrap();
+        fil2.write_to_json(&mut y, true, &map).unwrap();
         assert_eq!(
             std::str::from_utf8(&x).unwrap(),
             std::str::from_utf8(&y).unwrap()
