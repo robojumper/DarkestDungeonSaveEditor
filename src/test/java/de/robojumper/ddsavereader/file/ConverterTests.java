@@ -109,6 +109,12 @@ public class ConverterTests {
     public void testRedditProfile() throws ParseException, IOException {
         testCorrectConversion("profileReddit");
     }
+    
+    @Test
+    public void testModLimit() throws ParseException, IOException {
+        testCorrectConversion("modlimit");
+    }
+
 
     @Test
     public void testOtherFiles() throws ParseException, IOException {

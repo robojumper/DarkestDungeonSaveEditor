@@ -13,7 +13,7 @@ fn test_loading() {
     let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     d.push(TEST_PROFILES_PATH);
     let mut file_paths = vec![];
-    //panic!(d.to_str().unwrap().to_string());
+
     for file in fs::read_dir(d).unwrap() {
         let entry = file.unwrap();
         let meta = entry.metadata().unwrap();
@@ -47,13 +47,15 @@ fn test_loading() {
         let mut x = Vec::new();
         fil.write_to_json(&mut x, true, &map).unwrap();
         let fil2 = File::try_from_json(&mut &*x).unwrap();
-        assert_eq!(fil, fil2);
+        assert_eq!(fil, fil2, "{:?} bin->json->struct: structs differ", f);
 
         let mut y = Vec::new();
         fil2.write_to_json(&mut y, true, &map).unwrap();
         assert_eq!(
             std::str::from_utf8(&x).unwrap(),
-            std::str::from_utf8(&y).unwrap()
+            std::str::from_utf8(&y).unwrap(),
+            "{:?} bin->json->json: json differs",
+            f
         );
 
         let mut b = Vec::new();
@@ -62,11 +64,11 @@ fn test_loading() {
         assert_eq!(
             data.len(),
             b.len(),
-            "{:?} binary/re-encoded different size",
+            "{:?} bin->json->bin: different sizes",
             f
         );
 
         let fil3 = File::try_from_bin(&mut &*b).unwrap();
-        assert_eq!(fil2, fil3);
+        assert_eq!(fil2, fil3, "{:?} bin->json->bin->struct: structs differ", f);
     });
 }
