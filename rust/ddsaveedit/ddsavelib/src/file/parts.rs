@@ -41,11 +41,13 @@ impl Header {
     pub fn try_from_bin<R: Read>(reader: &'_ mut R) -> Result<Self, FromBinError> {
         // Reading all 64 header bytes upfront elides all the checks in later unwraps/?s.
         let buf = &mut [0u8; Header::SIZE];
-        reader.read_exact(buf)?;
+        reader
+            .read_exact(buf)
+            .map_err(|_| FromBinError::NotBinFile)?;
         let mut reader: &[u8] = buf;
 
-        let tmp = &mut [0u8; 4];
         let magic = {
+            let tmp = &mut [0u8; 4];
             reader.read_exact(tmp).unwrap();
             *tmp
         };

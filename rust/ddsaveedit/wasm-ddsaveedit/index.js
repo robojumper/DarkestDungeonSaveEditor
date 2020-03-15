@@ -19,6 +19,13 @@ rust.then(wasm => {
 			var result = null;
 			try {
 				result = wasm.decode(array);
+				// FIXME: This should be throwing the exception
+				// once it stops leaking stack space
+				// https://github.com/rustwasm/wasm-bindgen/issues/1963
+				if (result.startsWith("Error")) {
+					throw result;
+				}
+				console.log('ok');
 				dropstyle(file.name, "green");
 				var editor = ace.edit("editor");
 				editor.setValue(result);
@@ -69,7 +76,7 @@ rust.then(wasm => {
 				return;
 			}
 		}
-		console.log('... file.name = ' + file.name);
+		console.log('file.name = ' + file.name);
 
 		handleUpload(file);
 	}

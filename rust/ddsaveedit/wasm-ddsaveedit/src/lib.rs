@@ -121,23 +121,24 @@ pub fn check(input: &str) -> Option<Annotation> {
 
 #[wasm_bindgen]
 /// Decode a binary file to JSON
-pub fn decode(mut input: &[u8]) -> Result<String, JsValue> {
+pub fn decode(mut input: &[u8]) -> String {
+    // FIXME: Use Result once it stops leaking stack space
+    // https://github.com/rustwasm/wasm-bindgen/issues/1963
     let f = File::try_from_bin(&mut input);
     match f {
         Ok(s) => {
             let mut x = Vec::new();
             let res = s.write_to_json(&mut x, true, &UNHASH.read().unwrap());
             match res {
-                Ok(_) => Ok(std::str::from_utf8(&x).unwrap().to_owned()),
-                Err(_) => Err("wasm_decode: io error???".into()),
+                Ok(_) => std::str::from_utf8(&x).unwrap().to_owned(),
+                Err(_) => "Error: io error???".to_owned(),
             }
         }
         Err(err) => match err {
-            FromBinError::NotBinFile => Err("File does not appear to be a save file".into()),
-            FromBinError::IoError(_) => Err("wasm_decode: io error???".into()),
-            _ => Err("wasm_decode: error decoding, please file a GitHub issue at 
+            FromBinError::NotBinFile => "Error: File does not appear to be a save file".to_owned(),
+            _ => "Error: error decoding, please file a GitHub issue at 
                 \"https://github.com/robojumper/DarkestDungeonSaveEditor/issues\""
-                .into()),
+                .to_owned(),
         },
     }
 }
