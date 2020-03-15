@@ -16,7 +16,7 @@ use json::{ExpectExt, Parser, Token, TokenType};
 use parts::{Data, FieldIdx, FieldInfo, FieldType, Fields, Header, ObjIdx, Objects};
 
 /// A map from name hash -> name to make the JSON format more legible.
-/// 
+///
 /// User-provided in [`File::write_to_json`].
 #[derive(Debug, Default)]
 pub struct Unhasher<T: Borrow<str>> {
@@ -99,6 +99,23 @@ impl File {
         Self::try_from_json_parser(lex)
     }
 
+    fn read_version_field<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
+        lex: &mut std::iter::Peekable<T>,
+    ) -> Result<u32, FromJsonError> {
+        let vers_field_tok = lex.expect(TokenType::FieldName)?;
+        if vers_field_tok.dat != Self::BUILTIN_VERSION_FIELD {
+            return Err(FromJsonError::Expected(
+                Self::BUILTIN_VERSION_FIELD.to_owned(),
+                vers_field_tok.span.first,
+                vers_field_tok.span.end,
+            ));
+        }
+        let vers = lex.expect(TokenType::Number)?;
+        vers.dat.parse::<u32>().map_err(|_| {
+            FromJsonError::Expected("Integer".to_owned(), vers.span.first, vers.span.end)
+        })
+    }
+
     fn try_from_json_parser<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
         lex: &mut std::iter::Peekable<T>,
     ) -> Result<Self, FromJsonError> {
@@ -111,22 +128,28 @@ impl File {
 
         lex.expect(TokenType::BeginObject)?;
 
-        let vers_field_tok = lex.expect(TokenType::FieldName)?;
-        if vers_field_tok.dat != Self::BUILTIN_VERSION_FIELD {
-            return Err(FromJsonError::Expected(
-                Self::BUILTIN_VERSION_FIELD.to_owned(),
-                vers_field_tok.span.first,
-                vers_field_tok.span.end,
-            ));
-        }
-        let vers = lex.expect(TokenType::Number)?;
-        let vers_num: u32 = vers.dat.parse::<u32>().map_err(|_| {
-            FromJsonError::Expected("Integer".to_owned(), vers.span.first, vers.span.end)
-        })?;
+        let next_tok = lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?;
+        let vers_num = if next_tok.kind == TokenType::FieldName
+            && next_tok.dat == Self::BUILTIN_VERSION_FIELD
+        {
+            Some(Self::read_version_field(lex)?)
+        } else {
+            None
+        };
 
         let mut name_stack = vec![];
 
-        s.read_child_fields(None, &mut name_stack, lex)?;
+        // Expect a single "base_root" field
+        let name = lex.expect(TokenType::FieldName)?.dat;
+        s.read_field(name, None, &mut name_stack, lex)?;
+
+        let vers_num = match vers_num {
+            Some(n) => n,
+            None => Self::read_version_field(lex)?,
+        };
+
+        lex.expect(TokenType::EndObject)?;
+
         let data_size = s.fixup_offsets()?;
         s.h.fixup_header(s.o.len(), s.f.len(), vers_num, data_size)?;
         Ok(s)
