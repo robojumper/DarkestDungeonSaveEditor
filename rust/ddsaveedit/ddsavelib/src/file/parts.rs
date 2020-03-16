@@ -702,7 +702,8 @@ types!(TYPES,
 
 pub fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Option<FieldType> {
     use once_cell::sync::OnceCell;
-    static TYPES_MAP: OnceCell<HashMap<&str, Vec<(&[&str], &FieldType)>>> = OnceCell::new();
+    type PathTypeList<'a> = Vec<(&'a [&'a str], &'a FieldType)>;
+    static TYPES_MAP: OnceCell<HashMap<&str, PathTypeList>> = OnceCell::new();
     if let Some(candidates) = TYPES_MAP
         .get_or_init(|| {
             let mut map = HashMap::new();
@@ -721,7 +722,7 @@ pub fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> 
                     .iter()
                     .rev()
                     .zip(parents.iter().rev())
-                    .all(|(tst, name_frag)| tst == &"*" || tst == &name_frag.as_ref())
+                    .all(|(&tst, name_frag)| tst == "*" || tst == name_frag.as_ref())
             {
                 Some((*t).clone())
             } else {

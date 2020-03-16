@@ -1,7 +1,7 @@
 use std::{
-    borrow::{Borrow, Cow},
+    borrow::Cow,
     collections::HashMap,
-    convert::TryFrom,
+    convert::{AsRef, TryFrom},
     io::{Read, Write},
 };
 
@@ -19,11 +19,11 @@ use parts::{Data, FieldIdx, FieldInfo, FieldType, Fields, Header, ObjIdx, Object
 ///
 /// User-provided in [`File::write_to_json`].
 #[derive(Debug, Default)]
-pub struct Unhasher<T: Borrow<str>> {
+pub struct Unhasher<T: AsRef<str>> {
     map: HashMap<i32, T>,
 }
 
-impl<T: Borrow<str>> Unhasher<T> {
+impl<T: AsRef<str>> Unhasher<T> {
     /// Create a new empty [`Unhasher`].
     pub fn new() -> Self {
         Self {
@@ -33,18 +33,18 @@ impl<T: Borrow<str>> Unhasher<T> {
 
     /// Offer a single name that could potentially appear in a save file in hashed form.
     pub fn offer_name(&mut self, name: T) {
-        self.map.insert(name_hash(name.borrow()), name);
+        self.map.insert(name_hash(name.as_ref()), name);
     }
 
     /// Offer names that could potentially appear in a save file in hashed form.
     pub fn offer_names<I: IntoIterator<Item = T>>(&mut self, names: I) {
         for name in names {
-            self.map.insert(name_hash(name.borrow()), name);
+            self.map.insert(name_hash(name.as_ref()), name);
         }
     }
 
     fn unhash(&self, i: i32) -> Option<&str> {
-        self.map.get(&i).map(|s| s.borrow())
+        self.map.get(&i).map(|s| s.as_ref())
     }
 }
 
@@ -69,6 +69,9 @@ impl Unhasher<&str> {
 /// has not been observed in practice yet.
 /// Phrased differently, the Binary => [`File`] conversion is minimally lossy.
 /// [`File`] => Binary and [`File`] <=> JSON conversions are lossless.
+///
+/// It is recommended that tools operating on the JSON representation preserve
+/// the order of fields in the file.
 pub struct File {
     h: Header,
     o: Objects,
@@ -238,7 +241,7 @@ impl File {
     }
 
     /// Write this [`File`] as JSON.
-    pub fn write_to_json<T: Borrow<str>, W: Write>(
+    pub fn write_to_json<T: AsRef<str>, W: Write>(
         &self,
         writer: &'_ mut W,
         allow_dupes: bool,
@@ -247,7 +250,7 @@ impl File {
         self.write_to_json_priv(writer, &mut vec![], allow_dupes, unhash)
     }
 
-    fn write_to_json_priv<T: Borrow<str>, W: Write>(
+    fn write_to_json_priv<T: AsRef<str>, W: Write>(
         &self,
         mut writer: &'_ mut W,
         indent: &mut Vec<u8>,
@@ -272,7 +275,7 @@ impl File {
         Ok(())
     }
 
-    fn write_object<T: Borrow<str>, W: Write>(
+    fn write_object<T: AsRef<str>, W: Write>(
         &self,
         field_idx: FieldIdx,
         writer: &'_ mut W,
@@ -326,7 +329,7 @@ impl File {
         Ok(())
     }
 
-    fn write_field<T: Borrow<str>, W: Write>(
+    fn write_field<T: AsRef<str>, W: Write>(
         &self,
         field_idx: FieldIdx,
         mut writer: &'_ mut W,
@@ -354,7 +357,7 @@ impl File {
                 Some(s) => {
                     writer.write_all(b"\"")?;
                     writer.write_all(b"###")?;
-                    writer.write_all(escape(s.borrow()).as_bytes())?;
+                    writer.write_all(escape(s).as_bytes())?;
                     writer.write_all(b"\"")?;
                 }
                 None => {
@@ -382,7 +385,7 @@ impl File {
                         Some(s) => {
                             writer.write_all(b"\"")?;
                             writer.write_all(b"###")?;
-                            writer.write_all(escape(s.borrow()).as_bytes())?;
+                            writer.write_all(escape(s).as_bytes())?;
                             writer.write_all(b"\"")?;
                         }
                         None => {
