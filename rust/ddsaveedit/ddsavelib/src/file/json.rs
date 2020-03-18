@@ -177,8 +177,11 @@ pub struct Token<'a> {
 }
 
 macro_rules! ungen {
-    ($f:ident, $data:expr, $l:ident) => {{
-        let mut gen: Pin<Box<_>> = $f($data, $l).into();
+    ($f:ident, $data:expr, $l:ident) => {
+        ungen!($f($data, $l).into(), $l)
+    };
+    ($e:expr, $l:ident) => {{
+        let mut gen: Pin<Box<_>> = $e;
         loop {
             let res = gen.as_mut().resume(());
             match res {
@@ -191,6 +194,20 @@ macro_rules! ungen {
                     Err(er) => return Err(er),
                 },
             }
+        }
+    }};
+}
+
+macro_rules! maybe_ungen {
+    ($f:ident, $data:expr, $l:ident) => {{
+        let res = $f($data, $l);
+        match res {
+            OrMore::Zero(e) => return Err(e),
+            OrMore::One(tok, l) => {
+                $l = l;
+                yield tok;
+            }
+            OrMore::More(gen) => ungen!(gen.into(), $l),
         }
     }};
 }
@@ -226,11 +243,11 @@ pub(crate) fn parse<'a>(
     Box::new(move || {
         let mut lex = Lexer::new(data).peekable();
         if lex.peek().is_some() {
-            ungen!(parse_value, data, lex)
+            maybe_ungen!(parse_value, data, lex)
         }
         while lex.peek().is_some() {
             expect_control(TokenType::Comma, &mut lex)?;
-            ungen!(parse_value, data, lex)
+            maybe_ungen!(parse_value, data, lex)
         }
         Ok(())
     })
@@ -277,7 +294,7 @@ fn parse_object<'a, T: Iterator<Item = LexerToken> + 'a>(
                     name.kind = TokenType::FieldName;
                     yield name;
                     expect_control(TokenType::Colon, &mut lex)?;
-                    ungen!(parse_value, data, lex);
+                    maybe_ungen!(parse_value, data, lex);
                     let tok2 = lex.next().ok_or(JsonError::EOF)?;
                     match tok2.kind {
                         TokenType::EndObject => {
@@ -318,7 +335,7 @@ fn parse_array<'a, T: Iterator<Item = LexerToken> + 'a>(
                     break;
                 }
                 _ => {
-                    ungen!(parse_value, data, lex);
+                    maybe_ungen!(parse_value, data, lex);
                     let tok2 = lex.next().ok_or(JsonError::EOF)?;
                     match tok2.kind {
                         TokenType::EndArray => {
@@ -344,26 +361,42 @@ fn parse_array<'a, T: Iterator<Item = LexerToken> + 'a>(
     })
 }
 
+enum OrMore<'a, Y, O, E> {
+    Zero(E),
+    One(Y, O),
+    More(Box<dyn Generator<Yield = Y, Return = Result<O, E>> + 'a>),
+}
+
 fn parse_value<'a, T: Iterator<Item = LexerToken> + 'a>(
     data: &'a str,
     mut lex: Peekable<T>,
-) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<Peekable<T>, JsonError>> + 'a> {
-    Box::new(move || {
-        let tok = lex.peek().ok_or(JsonError::EOF)?;
-        match tok.kind {
-            TokenType::BeginObject => ungen!(parse_object, data, lex),
-            TokenType::BeginArray => ungen!(parse_array, data, lex),
-            TokenType::Number
-            | TokenType::BoolTrue
-            | TokenType::BoolFalse
-            | TokenType::String
-            | TokenType::Null => yield parse_single(data, &mut lex)?,
-            _ => {
-                return Err(JsonError::ExpectedValue(tok.span.first, tok.span.end));
+) -> OrMore<Token<'a>, Peekable<T>, JsonError> {
+    let tok = match lex.peek().ok_or(JsonError::EOF) {
+        Ok(tok) => tok,
+        Err(e) => return OrMore::Zero(e),
+    };
+    match tok.kind {
+        TokenType::BeginObject => OrMore::More(Box::new(move || {
+            ungen!(parse_object, data, lex);
+            Ok(lex)
+        })),
+        TokenType::BeginArray => OrMore::More(Box::new(move || {
+            ungen!(parse_array, data, lex);
+            Ok(lex)
+        })),
+        TokenType::Number
+        | TokenType::BoolTrue
+        | TokenType::BoolFalse
+        | TokenType::String
+        | TokenType::Null => {
+            let maybe_tok = parse_single(data, &mut lex);
+            match maybe_tok {
+                Ok(tok) => OrMore::One(tok, lex),
+                Err(err) => OrMore::Zero(err),
             }
         }
-        Ok(lex)
-    })
+        _ => OrMore::Zero(JsonError::ExpectedValue(tok.span.first, tok.span.end)),
+    }
 }
 
 fn parse_single<'b, 'a: 'b, T: Iterator<Item = LexerToken>>(
