@@ -86,20 +86,20 @@ impl<'a> Iterator for Lexer<'a> {
             tup = self.it.next()?;
             is_whitespace(tup.1)
         } {}
-        let (kind, first, end) = match tup.1 {
-            '{' => (TokenType::BeginObject, tup.0, self.cur_pos()),
-            '}' => (TokenType::EndObject, tup.0, self.cur_pos()),
-            '[' => (TokenType::BeginArray, tup.0, self.cur_pos()),
-            ']' => (TokenType::EndArray, tup.0, self.cur_pos()),
-            ':' => (TokenType::Colon, tup.0, self.cur_pos()),
-            ',' => (TokenType::Comma, tup.0, self.cur_pos()),
+        let kind = match tup.1 {
+            '{' => TokenType::BeginObject,
+            '}' => TokenType::EndObject,
+            '[' => TokenType::BeginArray,
+            ']' => TokenType::EndArray,
+            ':' => TokenType::Colon,
+            ',' => TokenType::Comma,
             't' => {
                 // Attempt `true`
                 if self.it.next()?.1 == 'r' && self.it.next()?.1 == 'u' && self.it.next()?.1 == 'e'
                 {
-                    (TokenType::BoolTrue, tup.0, self.cur_pos())
+                    TokenType::BoolTrue
                 } else {
-                    (TokenType::Invalid, tup.0, self.cur_pos())
+                    TokenType::Invalid
                 }
             }
             'f' => {
@@ -109,51 +109,56 @@ impl<'a> Iterator for Lexer<'a> {
                     && self.it.next()?.1 == 's'
                     && self.it.next()?.1 == 'e'
                 {
-                    (TokenType::BoolFalse, tup.0, self.cur_pos())
+                    TokenType::BoolFalse
                 } else {
-                    (TokenType::Invalid, tup.0, self.cur_pos())
+                    TokenType::Invalid
                 }
             }
             'n' => {
                 // Attempt `null`
                 if self.it.next()?.1 == 'u' && self.it.next()?.1 == 'l' && self.it.next()?.1 == 'l'
                 {
-                    (TokenType::Null, tup.0, self.cur_pos())
+                    TokenType::Null
                 } else {
-                    (TokenType::Invalid, tup.0, self.cur_pos())
+                    TokenType::Invalid
                 }
             }
             '"' => {
                 // Attempt string
-                let mut prev = None;
-                while {
+                let mut esc = false;
+                loop {
                     let nxt = self.it.next()?;
-                    if prev.is_some() && prev.unwrap() == '\\' && nxt.1 == '\"' {
-                        prev = Some(nxt.1);
-                        true
-                    } else {
-                        prev = Some(nxt.1);
-                        !matches!(nxt.1, '"')
+                    match nxt.1 {
+                        '\\' => esc = !esc,
+                        '\"' if !esc => {
+                            break;
+                        }
+                        _ => {
+                            esc = false;
+                        }
                     }
-                } {}
-                (TokenType::String, tup.0, self.cur_pos())
+                }
+                TokenType::String
             }
             '0'..='9' | '-' | '+' | '.' | 'E' | 'e' => {
                 // Attempt number
                 while matches!(self.it.peek()?.1, '0'..='9' | '-' | '+' | '.' | 'E' | 'e') {
                     self.it.next();
                 }
-                (TokenType::Number, tup.0, self.cur_pos())
+                TokenType::Number
             }
             _ => {
                 // Invalid
-                (TokenType::Invalid, tup.0, self.cur_pos())
+                TokenType::Invalid
             }
         };
 
         Some(LexerToken {
             kind,
-            span: Span { first, end },
+            span: Span {
+                first: tup.0,
+                end: self.cur_pos(),
+            },
         })
     }
 }
