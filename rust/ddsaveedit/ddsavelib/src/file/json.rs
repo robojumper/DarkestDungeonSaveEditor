@@ -311,7 +311,7 @@ fn parse_object<'a, T: Iterator<Item = LexerToken> + 'a>(
                         }
                         _ => {
                             return Err(JsonError::Expected(
-                                "expected , (comma) or } (closing brace)".to_owned(),
+                                ", (comma) or } (closing brace)".to_owned(),
                                 tok2.span.first,
                                 tok2.span.end,
                             ));
@@ -352,7 +352,7 @@ fn parse_array<'a, T: Iterator<Item = LexerToken> + 'a>(
                         }
                         _ => {
                             return Err(JsonError::Expected(
-                                "expected , (comma) or ] (closing bracket)".to_owned(),
+                                ", (comma) or ] (closing bracket)".to_owned(),
                                 tok2.span.first,
                                 tok2.span.end,
                             ));
