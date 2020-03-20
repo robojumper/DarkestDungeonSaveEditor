@@ -15,6 +15,8 @@ mod parts;
 use json::{ExpectExt, Parser, Token, TokenType};
 use parts::{Data, FieldIdx, FieldInfo, FieldType, Fields, Header, ObjIdx, Objects};
 
+use string_cache::{Atom, EmptyStaticAtomSet};
+
 /// A map from name hash -> name to make the JSON format more legible.
 ///
 /// User-provided in [`File::write_to_json`].
@@ -161,7 +163,7 @@ impl File {
     fn read_child_fields<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
         &mut self,
         parent: Option<ObjIdx>,
-        name_stack: &mut Vec<Cow<'a, str>>,
+        name_stack: &mut Vec<Atom<EmptyStaticAtomSet>>,
         lex: &mut std::iter::Peekable<T>,
     ) -> Result<Vec<FieldIdx>, FromJsonError> {
         let mut child_fields = vec![];
@@ -192,9 +194,10 @@ impl File {
         &mut self,
         name: Cow<'a, str>,
         parent: Option<ObjIdx>,
-        name_stack: &mut Vec<Cow<'a, str>>,
+        name_stack: &mut Vec<Atom<EmptyStaticAtomSet>>,
         lex: &mut std::iter::Peekable<T>,
     ) -> Result<FieldIdx, FromJsonError> {
+        let name = Atom::from(name.as_ref());
         let field_index = self
             .f
             .create_field(&name)
@@ -202,7 +205,7 @@ impl File {
         // Identify type
         match lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?.kind {
             TokenType::BeginObject => {
-                if name == "raw_data" || name == "static_save" {
+                if &name == "raw_data" || &name == "static_save" {
                     let inner = File::try_from_json_parser(lex)?;
                     self.dat
                         .create_data(name, parent, FieldType::File(Some(Box::new(inner))));

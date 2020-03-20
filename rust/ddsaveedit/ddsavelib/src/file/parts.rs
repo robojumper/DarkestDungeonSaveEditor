@@ -16,6 +16,8 @@ use crate::{
     util::name_hash,
 };
 
+use string_cache::{Atom, EmptyStaticAtomSet};
+
 pub const HEADER_MAGIC_NUMBER: [u8; 4] = [0x01, 0xB1, 0x00, 0x00];
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Header {
@@ -432,7 +434,7 @@ impl IndexMut<FieldIdx> for Fields {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Field {
-    pub name: String,
+    pub name: Atom<EmptyStaticAtomSet>,
     pub parent: Option<ObjIdx>,
     pub tipe: FieldType,
 }
@@ -598,12 +600,12 @@ impl Data {
 
     pub fn create_data(
         &mut self,
-        name: std::borrow::Cow<'_, str>,
+        name: Atom<EmptyStaticAtomSet>,
         parent: Option<ObjIdx>,
         tipe: FieldType,
     ) {
         self.dat.push(Field {
-            name: name.into_owned(),
+            name,
             parent,
             tipe,
         });
@@ -767,7 +769,7 @@ pub fn decode_fields<R: Read>(
     let mut data = Data { dat: vec![] };
     let mut obj_stack = vec![];
     let mut obj_nums = vec![];
-    let mut obj_names: Vec<String> = vec![];
+    let mut obj_names: Vec<Atom<EmptyStaticAtomSet>> = vec![];
     for (idx, field) in f.fields.iter().enumerate() {
         // Read name
         let off = field.offset as usize;
@@ -777,10 +779,7 @@ pub fn decode_fields<R: Read>(
             .ok_or(FromBinError::SizeMismatch { at: off, exp: len })?;
         let name = {
             let cs = CStr::from_bytes_with_nul(&field_name)?.to_str()?;
-            let mut n = String::new();
-            n.try_reserve_exact(cs.len())?;
-            n.push_str(cs);
-            n
+            Atom::from(cs)
         };
 
         if name_hash(&name) != field.name_hash {
@@ -901,7 +900,7 @@ impl FieldType {
                         match tok.kind {
                             TokenType::EndArray => break,
                             TokenType::String => {
-                                v.push(parse_prim!(tok, String, "string"));
+                                v.push(tok.dat.into_owned());
                             }
                             _ => {
                                 return Err(FromJsonError::Expected(
@@ -993,7 +992,7 @@ impl FieldType {
                     if tok.dat.starts_with("###") {
                         FieldType::Int(name_hash(&tok.dat[3..]))
                     } else {
-                        FieldType::String(parse_prim!(tok, String, "string"))
+                        FieldType::String(tok.dat.into_owned())
                     }
                 }
                 TokenType::BoolTrue => FieldType::Bool(true),
