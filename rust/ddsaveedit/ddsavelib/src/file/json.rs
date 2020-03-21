@@ -1,472 +1,533 @@
 use std::{
     borrow::Cow,
-    iter::Peekable,
-    ops::{Generator, GeneratorState},
-    pin::Pin,
+    convert::AsRef,
+    io::{Read, Write},
 };
 
+use super::{hardcoded_type, FieldIdx, FieldInfo, FieldType, File, ObjIdx, Unhasher};
 use crate::{
-    err::JsonError,
-    util::{is_whitespace, unescape},
+    err::*,
+    util::{escape, name_hash},
 };
+use json_parser::{ExpectExt, Parser, Token, TokenType};
+use string_cache::{Atom, EmptyStaticAtomSet};
 
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum TokenType {
-    BeginObject,
-    EndObject,
-    BeginArray,
-    EndArray,
-    FieldName,
-    Number,
-    BoolTrue,
-    BoolFalse,
-    String,
-    Null,
+mod json_parser;
 
-    // Private variants
-    Invalid,
-    Comma,
-    Colon,
-}
+impl File {
+    const BUILTIN_VERSION_FIELD: &'static str = "__revision_dont_touch";
 
-impl std::fmt::Debug for TokenType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        self.as_ref().fmt(f)
+    /// Attempt to decode a [`File`] from a [`Read`] representing a JSON stream.
+    pub fn try_from_json<R: Read>(reader: &'_ mut R) -> Result<Self, FromJsonError> {
+        let mut x = vec![];
+        reader.read_to_end(&mut x)?;
+        let slic = std::str::from_utf8(&x)?;
+
+        let lex = &mut Parser::new(slic).peekable();
+        Self::try_from_json_parser(lex)
     }
-}
 
-impl AsRef<str> for TokenType {
-    fn as_ref(&self) -> &str {
-        use TokenType::*;
-        match self {
-            BeginObject => "{",
-            EndObject => "}",
-            BeginArray => "[",
-            EndArray => "]",
-            FieldName => "<field name>",
-            Number => "<number>",
-            BoolTrue => "true",
-            BoolFalse => "false",
-            String => "<string>",
-            Null => "null",
-            Comma => ",",
-            Colon => ":",
-            Invalid => "<invalid>",
+    fn read_version_field<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
+        lex: &mut std::iter::Peekable<T>,
+    ) -> Result<u32, FromJsonError> {
+        let vers_field_tok = lex.expect(TokenType::FieldName)?;
+        if vers_field_tok.dat != Self::BUILTIN_VERSION_FIELD {
+            return Err(FromJsonError::Expected(
+                Self::BUILTIN_VERSION_FIELD.to_owned(),
+                vers_field_tok.span.first,
+                vers_field_tok.span.end,
+            ));
         }
+        let vers = lex.expect(TokenType::Number)?;
+        vers.dat.parse::<u32>().map_err(|_| {
+            FromJsonError::Expected("Integer".to_owned(), vers.span.first, vers.span.end)
+        })
     }
-}
 
-struct Lexer<'a> {
-    src: &'a str,
-    it: std::iter::Peekable<std::str::CharIndices<'a>>,
-}
+    fn try_from_json_parser<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
+        lex: &mut std::iter::Peekable<T>,
+    ) -> Result<Self, FromJsonError> {
+        let mut s = Self {
+            h: Default::default(),
+            o: Default::default(),
+            f: Default::default(),
+            dat: Default::default(),
+        };
 
-impl<'a> Lexer<'a> {
-    fn new(src: &'a str) -> Self {
-        Self {
-            src,
-            it: src.char_indices().peekable(),
+        lex.expect(TokenType::BeginObject)?;
+
+        let next_tok = lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?;
+        let vers_num = if next_tok.kind == TokenType::FieldName
+            && next_tok.dat == Self::BUILTIN_VERSION_FIELD
+        {
+            Some(Self::read_version_field(lex)?)
+        } else {
+            None
+        };
+
+        let mut name_stack = vec![];
+
+        // Expect a single "base_root" field
+        let name = lex.expect(TokenType::FieldName)?.dat;
+        s.read_field(name, None, &mut name_stack, lex)?;
+
+        let vers_num = match vers_num {
+            Some(n) => n,
+            None => Self::read_version_field(lex)?,
+        };
+
+        lex.expect(TokenType::EndObject)?;
+
+        let data_size = s.fixup_offsets()?;
+        s.h.fixup_header(s.o.len(), s.f.len(), vers_num, data_size)?;
+        Ok(s)
+    }
+
+    fn read_child_fields<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
+        &mut self,
+        parent: Option<ObjIdx>,
+        name_stack: &mut Vec<Atom<EmptyStaticAtomSet>>,
+        lex: &mut std::iter::Peekable<T>,
+    ) -> Result<Vec<FieldIdx>, FromJsonError> {
+        let mut child_fields = vec![];
+
+        loop {
+            let tok = lex.next().ok_or(JsonError::EOF)??;
+            match tok.kind {
+                TokenType::EndObject => break,
+                TokenType::FieldName => {
+                    let name = tok.dat;
+                    let idx = self.read_field(name, parent, name_stack, lex)?;
+                    child_fields.push(idx);
+                }
+                _ => {
+                    return Err(FromJsonError::Expected(
+                        "name or }".to_owned(),
+                        tok.span.first,
+                        tok.span.end,
+                    ))
+                }
+            }
         }
+
+        Ok(child_fields)
     }
 
-    fn cur_pos(&mut self) -> usize {
-        self.it
-            .peek()
-            .map(|i| i.0)
-            .unwrap_or_else(|| self.src.len())
-    }
-}
+    fn read_field<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
+        &mut self,
+        name: Cow<'a, str>,
+        parent: Option<ObjIdx>,
+        name_stack: &mut Vec<Atom<EmptyStaticAtomSet>>,
+        lex: &mut std::iter::Peekable<T>,
+    ) -> Result<FieldIdx, FromJsonError> {
+        let name = Atom::from(name.as_ref());
+        let field_index = self
+            .f
+            .create_field(&name)
+            .ok_or(FromJsonError::IntegerErr)?;
+        // Identify type
+        match lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?.kind {
+            TokenType::BeginObject => {
+                if &name == "raw_data" || &name == "static_save" {
+                    let inner = File::try_from_json_parser(lex)?;
+                    self.dat
+                        .create_data(name, parent, FieldType::File(Some(Box::new(inner))));
+                } else {
+                    lex.next();
+                    self.dat
+                        .create_data(name.clone(), parent, FieldType::Object(vec![]));
+                    let obj_index = self
+                        .o
+                        .create_object(field_index, parent, 0, 0)
+                        .ok_or(FromJsonError::IntegerErr)?;
+                    self.f[field_index].field_info |= 1;
+                    self.f[field_index].field_info |=
+                        (obj_index.numeric() & FieldInfo::OBJ_IDX_BITS) << 11;
 
-impl<'a> Iterator for Lexer<'a> {
-    type Item = LexerToken;
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut tup;
-        // Skip whitespace
-        while {
-            tup = self.it.next()?;
-            is_whitespace(tup.1)
-        } {}
-        let kind = match tup.1 {
-            '{' => TokenType::BeginObject,
-            '}' => TokenType::EndObject,
-            '[' => TokenType::BeginArray,
-            ']' => TokenType::EndArray,
-            ':' => TokenType::Colon,
-            ',' => TokenType::Comma,
-            't' => {
-                // Attempt `true`
-                if self.it.next()?.1 == 'r' && self.it.next()?.1 == 'u' && self.it.next()?.1 == 'e'
-                {
-                    TokenType::BoolTrue
-                } else {
-                    TokenType::Invalid
-                }
-            }
-            'f' => {
-                // Attempt `false`
-                if self.it.next()?.1 == 'a'
-                    && self.it.next()?.1 == 'l'
-                    && self.it.next()?.1 == 's'
-                    && self.it.next()?.1 == 'e'
-                {
-                    TokenType::BoolFalse
-                } else {
-                    TokenType::Invalid
-                }
-            }
-            'n' => {
-                // Attempt `null`
-                if self.it.next()?.1 == 'u' && self.it.next()?.1 == 'l' && self.it.next()?.1 == 'l'
-                {
-                    TokenType::Null
-                } else {
-                    TokenType::Invalid
-                }
-            }
-            '"' => {
-                // Attempt string
-                let mut esc = false;
-                loop {
-                    let nxt = self.it.next()?;
-                    match nxt.1 {
-                        '\\' => esc = !esc,
-                        '\"' if !esc => {
-                            break;
-                        }
-                        _ => {
-                            esc = false;
-                        }
+                    // Recursion here
+                    name_stack.push(name);
+                    let childs = self.read_child_fields(Some(obj_index), name_stack, lex)?;
+                    name_stack.pop();
+
+                    self.o[obj_index].num_direct_childs = childs.len() as u32;
+                    self.o[obj_index].num_all_childs = self.f.len() - 1 - field_index.numeric();
+                    if let FieldType::Object(ref mut chl) = self.dat[field_index].tipe {
+                        *chl = childs;
+                    } else {
+                        unreachable!("pushed obj earlier");
                     }
                 }
-                TokenType::String
-            }
-            '0'..='9' | '-' | '+' | '.' | 'E' | 'e' => {
-                // Attempt number
-                while matches!(self.it.peek()?.1, '0'..='9' | '-' | '+' | '.' | 'E' | 'e') {
-                    self.it.next();
-                }
-                TokenType::Number
             }
             _ => {
-                // Invalid
-                TokenType::Invalid
+                let f = FieldType::try_from_json(lex, &name_stack, name.as_ref())?;
+                self.dat.create_data(name, parent, f);
+            }
+        };
+        Ok(field_index)
+    }
+
+    /// Write this [`File`] as JSON.
+    pub fn write_to_json<T: AsRef<str>, W: Write>(
+        &self,
+        writer: &'_ mut W,
+        allow_dupes: bool,
+        unhash: &Unhasher<T>,
+    ) -> std::io::Result<()> {
+        self.write_to_json_priv(writer, &mut vec![], allow_dupes, unhash)
+    }
+
+    fn write_to_json_priv<T: AsRef<str>, W: Write>(
+        &self,
+        writer: &'_ mut W,
+        indent: &mut Vec<u8>,
+        allow_dupes: bool,
+        unhash: &Unhasher<T>,
+    ) -> std::io::Result<()> {
+        writer.write_all(b"{\n")?;
+        writer.write_all(&indent)?;
+        writer.write_all(b"    ")?;
+        writer.write_all(b"\"")?;
+        writer.write_all(Self::BUILTIN_VERSION_FIELD.as_bytes())?;
+        writer.write_all(b"\": ")?;
+        itoa::write(writer.by_ref(), self.h.version())?;
+        writer.write_all(b",\n")?;
+        if let Some(root) = self.o.iter().find(|o| o.parent.is_none()) {
+            indent.extend_from_slice(b"    ");
+            self.write_field(root.field, writer, indent, false, allow_dupes, unhash)?;
+            indent.truncate(indent.len() - 4);
+        }
+        writer.write_all(&indent)?;
+        writer.write_all(b"}")?;
+        Ok(())
+    }
+
+    fn write_object<T: AsRef<str>, W: Write>(
+        &self,
+        field_idx: FieldIdx,
+        writer: &'_ mut W,
+        indent: &mut Vec<u8>,
+        comma: bool,
+        allow_dupes: bool,
+        unhash: &Unhasher<T>,
+    ) -> std::io::Result<()> {
+        let dat = &self.dat[field_idx];
+        if let FieldType::Object(ref c) = dat.tipe {
+            if c.is_empty() {
+                if comma {
+                    writer.write_all(b"{},\n")?;
+                } else {
+                    writer.write_all(b"{}\n")?;
+                }
+            } else {
+                writer.write_all(b"{\n")?;
+                let mut emitted_fields = if allow_dupes {
+                    None
+                } else {
+                    Some(std::collections::HashSet::new())
+                };
+                for (idx, &child) in c.iter().enumerate() {
+                    if let Some(ref mut emitted_fields) = emitted_fields {
+                        if !emitted_fields.insert(&self.dat[child].name) {
+                            continue;
+                        }
+                    }
+                    indent.extend_from_slice(b"    ");
+                    self.write_field(
+                        child,
+                        writer,
+                        indent,
+                        idx != c.len() - 1,
+                        allow_dupes,
+                        unhash,
+                    )?;
+                    indent.truncate(indent.len() - 4);
+                }
+                writer.write_all(&indent)?;
+                if comma {
+                    writer.write_all(b"},\n")?;
+                } else {
+                    writer.write_all(b"}\n")?;
+                }
+            }
+        } else {
+            unreachable!("is object")
+        }
+        Ok(())
+    }
+
+    fn write_field<T: AsRef<str>, W: Write>(
+        &self,
+        field_idx: FieldIdx,
+        writer: &'_ mut W,
+        indent: &mut Vec<u8>,
+        comma: bool,
+        allow_dupes: bool,
+        unhash: &Unhasher<T>,
+    ) -> std::io::Result<()> {
+        use FieldType::*;
+        let dat = &self.dat[field_idx];
+        writer.write_all(&indent)?;
+        writer.write_all(b"\"")?;
+        writer.write_all(dat.name.as_bytes())?;
+        writer.write_all(b"\" : ")?;
+        match &dat.tipe {
+            Bool(b) => writer.write_all(if *b { b"true" } else { b"false" })?,
+            TwoBool(b1, b2) => {
+                writer.write_all(b"[")?;
+                writer.write_all(if *b1 { b"true" } else { b"false" })?;
+                writer.write_all(b", ")?;
+                writer.write_all(if *b2 { b"true" } else { b"false" })?;
+                writer.write_all(b"]")?;
+            }
+            Int(i) => match unhash.unhash(*i) {
+                Some(s) => {
+                    writer.write_all(b"\"")?;
+                    writer.write_all(b"###")?;
+                    writer.write_all(escape(s).as_bytes())?;
+                    writer.write_all(b"\"")?;
+                }
+                None => {
+                    itoa::write(writer.by_ref(), *i)?;
+                }
+            },
+            Float(f) => {
+                dtoa::write(writer.by_ref(), *f)?;
+            }
+            Char(c) => {
+                writer.write_all(b"\"")?;
+                let buf = [*c as u8];
+                writer.write_all(&buf)?;
+                writer.write_all(b"\"")?;
+            }
+            String(s) => {
+                writer.write_all(b"\"")?;
+                writer.write_all(escape(s).as_bytes())?;
+                writer.write_all(b"\"")?;
+            }
+            IntVector(ref v) => {
+                writer.write_all(b"[")?;
+                for (idx, i) in v.iter().enumerate() {
+                    match unhash.unhash(*i) {
+                        Some(s) => {
+                            writer.write_all(b"\"")?;
+                            writer.write_all(b"###")?;
+                            writer.write_all(escape(s).as_bytes())?;
+                            writer.write_all(b"\"")?;
+                        }
+                        None => {
+                            itoa::write(writer.by_ref(), *i)?;
+                        }
+                    }
+                    if idx != v.len() - 1 {
+                        writer.write_all(b", ")?;
+                    }
+                }
+                writer.write_all(b"]")?;
+            }
+            StringVector(ref v) => {
+                writer.write_all(b"[")?;
+                for (idx, s) in v.iter().enumerate() {
+                    writer.write_all(b"\"")?;
+                    writer.write_all(escape(s).as_bytes())?;
+                    writer.write_all(b"\"")?;
+                    if idx != v.len() - 1 {
+                        writer.write_all(b", ")?;
+                    }
+                }
+                writer.write_all(b"]")?;
+            }
+            FloatArray(ref v) => {
+                writer.write_all(b"[")?;
+                for (idx, f) in v.iter().enumerate() {
+                    dtoa::write(writer.by_ref(), *f)?;
+                    if idx != v.len() - 1 {
+                        writer.write_all(b", ")?;
+                    }
+                }
+                writer.write_all(b"]")?;
+            }
+            TwoInt(i1, i2) => {
+                writer.write_all(b"[")?;
+                itoa::write(writer.by_ref(), *i1)?;
+                writer.write_all(b", ")?;
+                itoa::write(writer.by_ref(), *i2)?;
+                writer.write_all(b"]")?;
+            }
+            File(ref obf) => {
+                let fil = obf.as_ref().unwrap();
+                fil.write_to_json_priv(writer, indent, allow_dupes, unhash)?;
+            }
+            Object(_) => {
+                self.write_object(field_idx, writer, indent, comma, allow_dupes, unhash)?;
             }
         };
 
-        Some(LexerToken {
-            kind,
-            span: Span {
-                first: tup.0,
-                end: self.cur_pos(),
-            },
-        })
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct Span {
-    pub first: usize,
-    pub end: usize,
-}
-
-struct LexerToken {
-    pub kind: TokenType,
-    pub span: Span,
-}
-
-#[derive(Clone, Debug)]
-pub struct Token<'a> {
-    pub kind: TokenType,
-    pub dat: Cow<'a, str>,
-    pub span: Span,
-}
-
-macro_rules! ungen {
-    ($f:ident, $data:expr, $l:ident) => {
-        ungen!($f($data, $l).into(), $l)
-    };
-    ($e:expr, $l:ident) => {{
-        let mut gen: Pin<Box<_>> = $e;
-        loop {
-            let res = gen.as_mut().resume(());
-            match res {
-                GeneratorState::Yielded(tok) => yield tok,
-                GeneratorState::Complete(r) => match r {
-                    Ok(l) => {
-                        $l = l;
-                        break;
-                    }
-                    Err(er) => return Err(er),
-                },
-            }
-        }
-    }};
-}
-
-macro_rules! maybe_ungen {
-    ($f:ident, $data:expr, $l:ident) => {{
-        let res = $f($data, $l);
-        match res {
-            OrMore::Zero(e) => return Err(e),
-            OrMore::One(tok, l) => {
-                $l = l;
-                yield tok;
-            }
-            OrMore::More(gen) => ungen!(gen.into(), $l),
-        }
-    }};
-}
-
-pub(crate) struct Parser<'a> {
-    gen: Pin<Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + 'a>>,
-}
-
-impl<'a> Parser<'a> {
-    pub fn new(data: &'a str) -> Self {
-        Self {
-            gen: parse(data).into(),
-        }
-    }
-}
-
-impl<'a> Iterator for Parser<'a> {
-    type Item = Result<Token<'a>, JsonError>;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.gen.as_mut().resume(()) {
-            GeneratorState::Yielded(tok) => Some(Ok(tok)),
-            GeneratorState::Complete(err) => match err {
-                Ok(_) => None,
-                Err(e) => Some(Err(e)),
-            },
-        }
-    }
-}
-
-pub(crate) fn parse<'a>(
-    data: &'a str,
-) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + 'a> {
-    Box::new(move || {
-        let mut lex = Lexer::new(data).peekable();
-        if lex.peek().is_some() {
-            maybe_ungen!(parse_value, data, lex)
-        }
-        while lex.peek().is_some() {
-            expect_control(TokenType::Comma, &mut lex)?;
-            maybe_ungen!(parse_value, data, lex)
-        }
-        Ok(())
-    })
-}
-
-fn eat<'b, 'a, T: Iterator<Item = LexerToken>>(
-    data: &'a str,
-    exp: TokenType,
-    lex: &'b mut Peekable<T>,
-) -> Result<Token<'a>, JsonError> {
-    if lex.peek().is_some() {
-        let tok = parse_single(data, lex)?;
-        if tok.kind == exp {
-            return Ok(tok);
+        if let Object(_) = dat.tipe {
+        } else if comma {
+            writer.write_all(b",\n")?;
         } else {
-            return Err(JsonError::Expected(
-                exp.as_ref().to_owned(),
-                tok.span.first,
-                tok.span.end,
-            ));
-        }
-    }
-    Err(JsonError::EOF)
-}
-
-// E0626: This takes and returns ownership of the lexer because calling functions
-// can't hold onto `lex` while yielding our items
-fn parse_object<'a, T: Iterator<Item = LexerToken> + 'a>(
-    data: &'a str,
-    mut lex: Peekable<T>,
-) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<Peekable<T>, JsonError>> + 'a> {
-    Box::new(move || {
-        yield eat(data, TokenType::BeginObject, &mut lex)?;
-
-        loop {
-            let tok = lex.peek().ok_or(JsonError::EOF)?;
-            match tok.kind {
-                TokenType::EndObject => {
-                    yield json_to_token(data, lex.next().unwrap())?;
-                    break;
-                }
-                _ => {
-                    let mut name = eat(data, TokenType::String, &mut lex)?;
-                    name.kind = TokenType::FieldName;
-                    yield name;
-                    expect_control(TokenType::Colon, &mut lex)?;
-                    maybe_ungen!(parse_value, data, lex);
-                    let tok2 = lex.next().ok_or(JsonError::EOF)?;
-                    match tok2.kind {
-                        TokenType::EndObject => {
-                            yield json_to_token(data, tok2)?;
-                            break;
-                        }
-                        TokenType::Comma => {
-                            continue;
-                        }
-                        _ => {
-                            return Err(JsonError::Expected(
-                                ", (comma) or } (closing brace)".to_owned(),
-                                tok2.span.first,
-                                tok2.span.end,
-                            ));
-                        }
-                    }
-                }
-            }
+            writer.write_all(b"\n")?;
         }
 
-        Ok(lex)
-    })
-}
-
-fn parse_array<'a, T: Iterator<Item = LexerToken> + 'a>(
-    data: &'a str,
-    mut lex: Peekable<T>,
-) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<Peekable<T>, JsonError>> + 'a> {
-    Box::new(move || {
-        yield eat(data, TokenType::BeginArray, &mut lex)?;
-
-        loop {
-            let tok = lex.peek().ok_or(JsonError::EOF)?;
-            match tok.kind {
-                TokenType::EndArray => {
-                    yield json_to_token(data, lex.next().unwrap())?;
-                    break;
-                }
-                _ => {
-                    maybe_ungen!(parse_value, data, lex);
-                    let tok2 = lex.next().ok_or(JsonError::EOF)?;
-                    match tok2.kind {
-                        TokenType::EndArray => {
-                            yield json_to_token(data, tok2)?;
-                            break;
-                        }
-                        TokenType::Comma => {
-                            continue;
-                        }
-                        _ => {
-                            return Err(JsonError::Expected(
-                                ", (comma) or ] (closing bracket)".to_owned(),
-                                tok2.span.first,
-                                tok2.span.end,
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(lex)
-    })
-}
-
-enum OrMore<'a, Y, O, E> {
-    Zero(E),
-    One(Y, O),
-    More(Box<dyn Generator<Yield = Y, Return = Result<O, E>> + 'a>),
-}
-
-fn parse_value<'a, T: Iterator<Item = LexerToken> + 'a>(
-    data: &'a str,
-    mut lex: Peekable<T>,
-) -> OrMore<Token<'a>, Peekable<T>, JsonError> {
-    let tok = match lex.peek().ok_or(JsonError::EOF) {
-        Ok(tok) => tok,
-        Err(e) => return OrMore::Zero(e),
-    };
-    match tok.kind {
-        TokenType::BeginObject => OrMore::More(Box::new(move || {
-            ungen!(parse_object, data, lex);
-            Ok(lex)
-        })),
-        TokenType::BeginArray => OrMore::More(Box::new(move || {
-            ungen!(parse_array, data, lex);
-            Ok(lex)
-        })),
-        TokenType::Number
-        | TokenType::BoolTrue
-        | TokenType::BoolFalse
-        | TokenType::String
-        | TokenType::Null => {
-            let maybe_tok = parse_single(data, &mut lex);
-            match maybe_tok {
-                Ok(tok) => OrMore::One(tok, lex),
-                Err(err) => OrMore::Zero(err),
-            }
-        }
-        _ => OrMore::Zero(JsonError::ExpectedValue(tok.span.first, tok.span.end)),
-    }
-}
-
-fn parse_single<'b, 'a: 'b, T: Iterator<Item = LexerToken>>(
-    data: &'a str,
-    lex: &'b mut T,
-) -> Result<Token<'a>, JsonError> {
-    let tok = lex.next().ok_or(JsonError::EOF)?;
-    json_to_token(data, tok)
-}
-
-fn expect_control<T: Iterator<Item = LexerToken>>(
-    exp: TokenType,
-    lex: &mut T,
-) -> Result<(), JsonError> {
-    let tok = lex.next().ok_or(JsonError::EOF)?;
-    if tok.kind == exp {
         Ok(())
-    } else {
-        Err(JsonError::Expected(
-            exp.as_ref().to_owned(),
-            tok.span.first,
-            tok.span.end,
-        ))
     }
 }
 
-fn json_to_token(data: &str, tok: LexerToken) -> Result<Token<'_>, JsonError> {
-    let span = tok.span;
-    let str_data = Cow::from(&data[span.first as usize..span.end as usize]);
-
-    let str_data = match tok.kind {
-        TokenType::String => {
-            let st = &data[span.first as usize + 1..span.end as usize - 1];
-            unescape(&st).ok_or(JsonError::BareControl(span.first, span.end))?
+impl FieldType {
+    pub(crate) fn try_from_json<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
+        lex: &mut T,
+        name_stack: &'_ [impl AsRef<str>],
+        name: impl AsRef<str>,
+    ) -> Result<Self, FromJsonError> {
+        macro_rules! parse_prim {
+            ($tok:expr, $t:ty, $err:expr) => {{
+                let tok = $tok;
+                tok.dat.parse::<$t>().map_err(|_| {
+                    FromJsonError::LiteralFormat($err.to_owned(), tok.span.first, tok.span.end)
+                })?
+            }};
         }
-        TokenType::Number => {
-            if str_data.parse::<i32>().is_err() && str_data.parse::<f32>().is_err() {
-                return Err(JsonError::BadNumber(span.first, span.end));
+
+        if let Some(mut val) = hardcoded_type(name_stack, name) {
+            match &mut val {
+                FieldType::Float(ref mut f) => {
+                    let tok = lex.expect(TokenType::Number)?;
+                    *f = parse_prim!(tok, f32, "float");
+                }
+                FieldType::IntVector(ref mut v) => {
+                    lex.expect(TokenType::BeginArray)?;
+                    loop {
+                        let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+                        match tok.kind {
+                            TokenType::EndArray => break,
+                            TokenType::Number => {
+                                v.push(parse_prim!(tok, i32, "integer"));
+                            }
+                            TokenType::String if tok.dat.starts_with("###") => {
+                                v.push(name_hash(&tok.dat[3..]));
+                            }
+                            _ => {
+                                return Err(FromJsonError::Expected(
+                                    "string or ]".to_owned(),
+                                    tok.span.first,
+                                    tok.span.end,
+                                ))
+                            }
+                        }
+                    }
+                }
+                FieldType::StringVector(ref mut v) => {
+                    lex.expect(TokenType::BeginArray)?;
+                    loop {
+                        let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+                        match tok.kind {
+                            TokenType::EndArray => break,
+                            TokenType::String => {
+                                v.push(tok.dat.into_owned());
+                            }
+                            _ => {
+                                return Err(FromJsonError::Expected(
+                                    "string or ]".to_owned(),
+                                    tok.span.first,
+                                    tok.span.end,
+                                ))
+                            }
+                        }
+                    }
+                }
+                FieldType::FloatArray(ref mut v) => {
+                    lex.expect(TokenType::BeginArray)?;
+                    loop {
+                        let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+                        match tok.kind {
+                            TokenType::EndArray => break,
+                            TokenType::Number => {
+                                v.push(parse_prim!(tok, f32, "float"));
+                            }
+                            _ => {
+                                return Err(FromJsonError::Expected(
+                                    "string or ]".to_owned(),
+                                    tok.span.first,
+                                    tok.span.end,
+                                ))
+                            }
+                        }
+                    }
+                }
+                FieldType::TwoInt(ref mut i1, ref mut i2) => {
+                    lex.expect(TokenType::BeginArray)?;
+                    let t1 = lex.expect(TokenType::Number)?;
+                    *i1 = parse_prim!(t1, i32, "integer");
+                    let t2 = lex.expect(TokenType::Number)?;
+                    *i2 = parse_prim!(t2, i32, "integer");
+                    lex.expect(TokenType::EndArray)?;
+                }
+                FieldType::TwoBool(ref mut b1, ref mut b2) => {
+                    lex.expect(TokenType::BeginArray)?;
+                    let tok1 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+                    *b1 = if tok1.kind == TokenType::BoolTrue {
+                        true
+                    } else if tok1.kind == TokenType::BoolFalse {
+                        false
+                    } else {
+                        return Err(FromJsonError::Expected(
+                            "bool".to_owned(),
+                            tok1.span.first,
+                            tok1.span.end,
+                        ));
+                    };
+                    let tok2 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+                    *b2 = if tok2.kind == TokenType::BoolTrue {
+                        true
+                    } else if tok2.kind == TokenType::BoolFalse {
+                        false
+                    } else {
+                        return Err(FromJsonError::Expected(
+                            "bool".to_owned(),
+                            tok2.span.first,
+                            tok2.span.end,
+                        ));
+                    };
+                    lex.expect(TokenType::EndArray)?;
+                }
+                FieldType::Char(ref mut c) => {
+                    let tok = lex.expect(TokenType::String)?;
+                    let bytes = tok.dat.as_bytes();
+                    if bytes.len() == 1 && bytes[0].is_ascii() {
+                        *c = bytes[0] as char;
+                    } else {
+                        return Err(FromJsonError::LiteralFormat(
+                            "exactly one ascii char".to_owned(),
+                            tok.span.first,
+                            tok.span.end,
+                        ));
+                    }
+                }
+                _ => unreachable!("unhandled hardcoded field while from json"),
             }
-            str_data
+            Ok(val)
+        } else {
+            // Decode heuristic
+            let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+            Ok(match tok.kind {
+                TokenType::Number => FieldType::Int(parse_prim!(tok, i32, "integer")),
+                TokenType::String => {
+                    if tok.dat.starts_with("###") {
+                        FieldType::Int(name_hash(&tok.dat[3..]))
+                    } else {
+                        FieldType::String(tok.dat.into_owned())
+                    }
+                }
+                TokenType::BoolTrue => FieldType::Bool(true),
+                TokenType::BoolFalse => FieldType::Bool(false),
+                _ => {
+                    return Err(FromJsonError::LiteralFormat(
+                        "unknown field".to_owned(),
+                        tok.span.first,
+                        tok.span.end,
+                    ))
+                }
+            })
         }
-        _ => str_data,
-    };
-
-    Ok(Token {
-        kind: tok.kind,
-        dat: str_data,
-        span,
-    })
-}
-
-pub(crate) trait ExpectExt<'a> {
-    fn expect(&mut self, exp: TokenType) -> Result<Token<'a>, JsonError>;
-}
-
-impl<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>> ExpectExt<'a> for T {
-    fn expect(&mut self, exp: TokenType) -> Result<Token<'a>, JsonError> {
-        let tok = self.next().ok_or(JsonError::EOF)??;
-        if tok.kind != exp {
-            return Err(JsonError::Expected(
-                exp.as_ref().to_owned(),
-                tok.span.first,
-                tok.span.end,
-            ));
-        }
-        Ok(tok)
     }
 }

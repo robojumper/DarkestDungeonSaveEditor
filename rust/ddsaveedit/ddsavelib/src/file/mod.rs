@@ -1,21 +1,15 @@
 use std::{
-    borrow::Cow,
     collections::HashMap,
     convert::{AsRef, TryFrom},
-    io::{Read, Write},
+    ops::{Index, IndexMut},
 };
 
-use crate::{
-    err::*,
-    util::{escape, name_hash},
-};
-
-mod json;
-mod parts;
-use json::{ExpectExt, Parser, Token, TokenType};
-use parts::{Data, FieldIdx, FieldInfo, FieldType, Fields, Header, ObjIdx, Objects};
+use crate::util::name_hash;
 
 use string_cache::{Atom, EmptyStaticAtomSet};
+
+mod bin;
+mod json;
 
 /// A map from name hash -> name to make the JSON format more legible.
 ///
@@ -82,382 +76,6 @@ pub struct File {
 }
 
 impl File {
-    const BUILTIN_VERSION_FIELD: &'static str = "__revision_dont_touch";
-
-    /// Attempt create a Darkest Dungeon save [`File`] from a [`Read`] representing
-    /// a binary encoded file.
-    pub fn try_from_bin<R: Read>(reader: &'_ mut R) -> Result<Self, FromBinError> {
-        let h = Header::try_from_bin(reader)?;
-        let o: Objects = Objects::try_from_bin(reader, &h)?;
-        let mut f = Fields::try_from_bin(reader, &h)?;
-        let dat = parts::decode_fields(reader, &mut f, &o, &h)?;
-        Ok(File { h, o, f, dat })
-    }
-
-    /// Attempt to decode a [`File`] from a [`Read`] representing a JSON stream.
-    pub fn try_from_json<R: Read>(reader: &'_ mut R) -> Result<Self, FromJsonError> {
-        let mut x = vec![];
-        reader.read_to_end(&mut x)?;
-        let slic = std::str::from_utf8(&x)?;
-
-        let lex = &mut Parser::new(slic).peekable();
-        Self::try_from_json_parser(lex)
-    }
-
-    fn read_version_field<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
-        lex: &mut std::iter::Peekable<T>,
-    ) -> Result<u32, FromJsonError> {
-        let vers_field_tok = lex.expect(TokenType::FieldName)?;
-        if vers_field_tok.dat != Self::BUILTIN_VERSION_FIELD {
-            return Err(FromJsonError::Expected(
-                Self::BUILTIN_VERSION_FIELD.to_owned(),
-                vers_field_tok.span.first,
-                vers_field_tok.span.end,
-            ));
-        }
-        let vers = lex.expect(TokenType::Number)?;
-        vers.dat.parse::<u32>().map_err(|_| {
-            FromJsonError::Expected("Integer".to_owned(), vers.span.first, vers.span.end)
-        })
-    }
-
-    fn try_from_json_parser<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
-        lex: &mut std::iter::Peekable<T>,
-    ) -> Result<Self, FromJsonError> {
-        let mut s = Self {
-            h: Default::default(),
-            o: Default::default(),
-            f: Default::default(),
-            dat: Default::default(),
-        };
-
-        lex.expect(TokenType::BeginObject)?;
-
-        let next_tok = lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?;
-        let vers_num = if next_tok.kind == TokenType::FieldName
-            && next_tok.dat == Self::BUILTIN_VERSION_FIELD
-        {
-            Some(Self::read_version_field(lex)?)
-        } else {
-            None
-        };
-
-        let mut name_stack = vec![];
-
-        // Expect a single "base_root" field
-        let name = lex.expect(TokenType::FieldName)?.dat;
-        s.read_field(name, None, &mut name_stack, lex)?;
-
-        let vers_num = match vers_num {
-            Some(n) => n,
-            None => Self::read_version_field(lex)?,
-        };
-
-        lex.expect(TokenType::EndObject)?;
-
-        let data_size = s.fixup_offsets()?;
-        s.h.fixup_header(s.o.len(), s.f.len(), vers_num, data_size)?;
-        Ok(s)
-    }
-
-    fn read_child_fields<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
-        &mut self,
-        parent: Option<ObjIdx>,
-        name_stack: &mut Vec<Atom<EmptyStaticAtomSet>>,
-        lex: &mut std::iter::Peekable<T>,
-    ) -> Result<Vec<FieldIdx>, FromJsonError> {
-        let mut child_fields = vec![];
-
-        loop {
-            let tok = lex.next().ok_or(JsonError::EOF)??;
-            match tok.kind {
-                TokenType::EndObject => break,
-                TokenType::FieldName => {
-                    let name = tok.dat;
-                    let idx = self.read_field(name, parent, name_stack, lex)?;
-                    child_fields.push(idx);
-                }
-                _ => {
-                    return Err(FromJsonError::Expected(
-                        "name or }".to_owned(),
-                        tok.span.first,
-                        tok.span.end,
-                    ))
-                }
-            }
-        }
-
-        Ok(child_fields)
-    }
-
-    fn read_field<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
-        &mut self,
-        name: Cow<'a, str>,
-        parent: Option<ObjIdx>,
-        name_stack: &mut Vec<Atom<EmptyStaticAtomSet>>,
-        lex: &mut std::iter::Peekable<T>,
-    ) -> Result<FieldIdx, FromJsonError> {
-        let name = Atom::from(name.as_ref());
-        let field_index = self
-            .f
-            .create_field(&name)
-            .ok_or(FromJsonError::IntegerErr)?;
-        // Identify type
-        match lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?.kind {
-            TokenType::BeginObject => {
-                if &name == "raw_data" || &name == "static_save" {
-                    let inner = File::try_from_json_parser(lex)?;
-                    self.dat
-                        .create_data(name, parent, FieldType::File(Some(Box::new(inner))));
-                } else {
-                    lex.next();
-                    self.dat
-                        .create_data(name.clone(), parent, FieldType::Object(vec![]));
-                    let obj_index = self
-                        .o
-                        .create_object(field_index, parent, 0, 0)
-                        .ok_or(FromJsonError::IntegerErr)?;
-                    self.f[field_index].field_info |= 1;
-                    self.f[field_index].field_info |=
-                        (obj_index.numeric() & FieldInfo::OBJ_IDX_BITS) << 11;
-
-                    // Recursion here
-                    name_stack.push(name);
-                    let childs = self.read_child_fields(Some(obj_index), name_stack, lex)?;
-                    name_stack.pop();
-
-                    self.o[obj_index].num_direct_childs = childs.len() as u32;
-                    self.o[obj_index].num_all_childs = self.f.len() - 1 - field_index.numeric();
-                    if let FieldType::Object(ref mut chl) = self.dat[field_index].tipe {
-                        *chl = childs;
-                    } else {
-                        unreachable!("pushed obj earlier");
-                    }
-                }
-            }
-            _ => {
-                let f = FieldType::try_from_json(lex, &name_stack, name.as_ref())?;
-                self.dat.create_data(name, parent, f);
-            }
-        };
-        Ok(field_index)
-    }
-
-    /// Write this [`File`] as JSON.
-    pub fn write_to_json<T: AsRef<str>, W: Write>(
-        &self,
-        writer: &'_ mut W,
-        allow_dupes: bool,
-        unhash: &Unhasher<T>,
-    ) -> std::io::Result<()> {
-        self.write_to_json_priv(writer, &mut vec![], allow_dupes, unhash)
-    }
-
-    fn write_to_json_priv<T: AsRef<str>, W: Write>(
-        &self,
-        mut writer: &'_ mut W,
-        indent: &mut Vec<u8>,
-        allow_dupes: bool,
-        unhash: &Unhasher<T>,
-    ) -> std::io::Result<()> {
-        writer.write_all(b"{\n")?;
-        writer.write_all(&indent)?;
-        writer.write_all(b"    ")?;
-        writer.write_all(b"\"")?;
-        writer.write_all(Self::BUILTIN_VERSION_FIELD.as_bytes())?;
-        writer.write_all(b"\": ")?;
-        itoa::write(&mut writer, self.h.version())?;
-        writer.write_all(b",\n")?;
-        if let Some(root) = self.o.iter().find(|o| o.parent.is_none()) {
-            indent.extend_from_slice(b"    ");
-            self.write_field(root.field, writer, indent, false, allow_dupes, unhash)?;
-            indent.truncate(indent.len() - 4);
-        }
-        writer.write_all(&indent)?;
-        writer.write_all(b"}")?;
-        Ok(())
-    }
-
-    fn write_object<T: AsRef<str>, W: Write>(
-        &self,
-        field_idx: FieldIdx,
-        writer: &'_ mut W,
-        indent: &mut Vec<u8>,
-        comma: bool,
-        allow_dupes: bool,
-        unhash: &Unhasher<T>,
-    ) -> std::io::Result<()> {
-        let dat = &self.dat[field_idx];
-        if let FieldType::Object(ref c) = dat.tipe {
-            if c.is_empty() {
-                if comma {
-                    writer.write_all(b"{},\n")?;
-                } else {
-                    writer.write_all(b"{}\n")?;
-                }
-            } else {
-                writer.write_all(b"{\n")?;
-                let mut emitted_fields = if allow_dupes {
-                    None
-                } else {
-                    Some(std::collections::HashSet::new())
-                };
-                for (idx, &child) in c.iter().enumerate() {
-                    if let Some(ref mut emitted_fields) = emitted_fields {
-                        if !emitted_fields.insert(&self.dat[child].name) {
-                            continue;
-                        }
-                    }
-                    indent.extend_from_slice(b"    ");
-                    self.write_field(
-                        child,
-                        writer,
-                        indent,
-                        idx != c.len() - 1,
-                        allow_dupes,
-                        unhash,
-                    )?;
-                    indent.truncate(indent.len() - 4);
-                }
-                writer.write_all(&indent)?;
-                if comma {
-                    writer.write_all(b"},\n")?;
-                } else {
-                    writer.write_all(b"}\n")?;
-                }
-            }
-        } else {
-            unreachable!("is object")
-        }
-        Ok(())
-    }
-
-    fn write_field<T: AsRef<str>, W: Write>(
-        &self,
-        field_idx: FieldIdx,
-        mut writer: &'_ mut W,
-        indent: &mut Vec<u8>,
-        comma: bool,
-        allow_dupes: bool,
-        unhash: &Unhasher<T>,
-    ) -> std::io::Result<()> {
-        use FieldType::*;
-        let dat = &self.dat[field_idx];
-        writer.write_all(&indent)?;
-        writer.write_all(b"\"")?;
-        writer.write_all(dat.name.as_bytes())?;
-        writer.write_all(b"\" : ")?;
-        match &dat.tipe {
-            Bool(b) => writer.write_all(if *b { b"true" } else { b"false" })?,
-            TwoBool(b1, b2) => {
-                writer.write_all(b"[")?;
-                writer.write_all(if *b1 { b"true" } else { b"false" })?;
-                writer.write_all(b", ")?;
-                writer.write_all(if *b2 { b"true" } else { b"false" })?;
-                writer.write_all(b"]")?;
-            }
-            Int(i) => match unhash.unhash(*i) {
-                Some(s) => {
-                    writer.write_all(b"\"")?;
-                    writer.write_all(b"###")?;
-                    writer.write_all(escape(s).as_bytes())?;
-                    writer.write_all(b"\"")?;
-                }
-                None => {
-                    itoa::write(&mut writer, *i)?;
-                }
-            },
-            Float(f) => {
-                dtoa::write(&mut writer, *f)?;
-            }
-            Char(c) => {
-                writer.write_all(b"\"")?;
-                let buf = [*c as u8];
-                writer.write_all(&buf)?;
-                writer.write_all(b"\"")?;
-            }
-            String(s) => {
-                writer.write_all(b"\"")?;
-                writer.write_all(escape(s).as_bytes())?;
-                writer.write_all(b"\"")?;
-            }
-            IntVector(ref v) => {
-                writer.write_all(b"[")?;
-                for (idx, i) in v.iter().enumerate() {
-                    match unhash.unhash(*i) {
-                        Some(s) => {
-                            writer.write_all(b"\"")?;
-                            writer.write_all(b"###")?;
-                            writer.write_all(escape(s).as_bytes())?;
-                            writer.write_all(b"\"")?;
-                        }
-                        None => {
-                            itoa::write(&mut writer, *i)?;
-                        }
-                    }
-                    if idx != v.len() - 1 {
-                        writer.write_all(b", ")?;
-                    }
-                }
-                writer.write_all(b"]")?;
-            }
-            StringVector(ref v) => {
-                writer.write_all(b"[")?;
-                for (idx, s) in v.iter().enumerate() {
-                    writer.write_all(b"\"")?;
-                    writer.write_all(escape(s).as_bytes())?;
-                    writer.write_all(b"\"")?;
-                    if idx != v.len() - 1 {
-                        writer.write_all(b", ")?;
-                    }
-                }
-                writer.write_all(b"]")?;
-            }
-            FloatArray(ref v) => {
-                writer.write_all(b"[")?;
-                for (idx, f) in v.iter().enumerate() {
-                    dtoa::write(&mut writer, *f)?;
-                    if idx != v.len() - 1 {
-                        writer.write_all(b", ")?;
-                    }
-                }
-                writer.write_all(b"]")?;
-            }
-            TwoInt(i1, i2) => {
-                writer.write_all(b"[")?;
-                itoa::write(&mut writer, *i1)?;
-                writer.write_all(b", ")?;
-                itoa::write(&mut writer, *i2)?;
-                writer.write_all(b"]")?;
-            }
-            File(ref obf) => {
-                let fil = obf.as_ref().unwrap();
-                fil.write_to_json_priv(writer, indent, allow_dupes, unhash)?;
-            }
-            Object(_) => {
-                self.write_object(field_idx, writer, indent, comma, allow_dupes, unhash)?;
-            }
-        };
-
-        if let Object(_) = dat.tipe {
-        } else if comma {
-            writer.write_all(b",\n")?;
-        } else {
-            writer.write_all(b"\n")?;
-        }
-
-        Ok(())
-    }
-
-    fn calc_bin_size(&self) -> usize {
-        let meta_size = self.h.calc_bin_size() + self.o.calc_bin_size() + self.f.calc_bin_size();
-        let mut existing_size = 0;
-        for f in self.dat.iter() {
-            existing_size = f.add_bin_size(existing_size);
-        }
-        meta_size + existing_size
-    }
-
     fn fixup_offsets(&mut self) -> Result<u32, std::num::TryFromIntError> {
         let mut offset = 0;
         for (idx, f) in self.f.iter_mut() {
@@ -466,16 +84,393 @@ impl File {
         }
         Ok(u32::try_from(offset)?)
     }
+}
 
-    /// Write this [`File`] as Binary.
-    pub fn write_to_bin<W: Write>(&self, writer: &'_ mut W) -> std::io::Result<()> {
-        self.h.write_to_bin(writer)?;
-        self.o.write_to_bin(writer)?;
-        self.f.write_to_bin(writer)?;
-        let mut off = 0;
-        for f in self.dat.iter() {
-            off = f.write_to_bin(writer, off)?;
-        }
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Header {
+    pub magic: [u8; 4],
+    //version: [u8; 4],
+    pub version: u32,
+    pub header_len: u32,
+    //zeroes1: [u8; 4],
+    pub objects_size: u32,
+    pub objects_num: u32,
+    pub objects_offset: u32,
+    //zeroes2: [u8; 16],
+    pub fields_num: u32,
+    pub fields_offset: u32,
+    //zeroes3: [u32; 4],
+    pub data_size: u32,
+    pub data_offset: u32,
+}
+
+impl Header {
+    pub const BIN_SIZE: usize = 64;
+    pub const MAGIC_NUMBER: [u8; 4] = [0x01, 0xB1, 0x00, 0x00];
+
+    pub fn fixup_header(
+        &mut self,
+        num_objects: u32,
+        num_fields: u32,
+        version: u32,
+        data_size: u32,
+    ) -> Result<(), std::num::TryFromIntError> {
+        self.magic = Self::MAGIC_NUMBER;
+        self.version = version;
+        self.header_len = u32::try_from(Header::BIN_SIZE).unwrap();
+        self.objects_num = num_objects;
+        self.objects_size = self.objects_num * 16; // TODO
+        self.objects_offset = self.header_len;
+        self.fields_num = num_fields;
+        self.fields_offset = self.objects_offset + self.objects_size; // TODO
+        self.data_offset = self.fields_offset + self.fields_num * 12; // TODO
+        self.data_size = data_size;
         Ok(())
+    }
+
+    pub fn version(&self) -> u32 {
+        self.version
+    }
+
+    pub fn calc_bin_size(&self) -> usize {
+        Header::BIN_SIZE
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectInfo {
+    pub parent: Option<ObjIdx>,
+    pub field: FieldIdx,
+    pub num_direct_childs: u32,
+    pub num_all_childs: u32,
+}
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Objects {
+    pub objs: Vec<ObjectInfo>,
+}
+
+impl Objects {
+    pub fn iter(&self) -> impl Iterator<Item = &ObjectInfo> {
+        self.objs.iter()
+    }
+
+    // Parent Object indices are i32 because a -1 indicates no parent
+    pub fn len(&self) -> u32 {
+        self.objs.len() as u32
+    }
+
+    pub fn create_object(
+        &mut self,
+        f: FieldIdx,
+        p: Option<ObjIdx>,
+        nc: u32,
+        ndc: u32,
+    ) -> Option<ObjIdx> {
+        if self.len() == u32::try_from(std::i32::MAX).unwrap() {
+            None
+        } else {
+            let idx = self.len();
+            self.objs.push(ObjectInfo {
+                field: f,
+                parent: p,
+                num_all_childs: nc,
+                num_direct_childs: ndc,
+            });
+            Some(ObjIdx(idx))
+        }
+    }
+}
+
+impl Index<ObjIdx> for Objects {
+    type Output = ObjectInfo;
+    #[inline]
+    fn index(&self, index: ObjIdx) -> &Self::Output {
+        &self.objs[index.0 as usize]
+    }
+}
+
+impl IndexMut<ObjIdx> for Objects {
+    #[inline]
+    fn index_mut(&mut self, index: ObjIdx) -> &mut Self::Output {
+        &mut self.objs[index.0 as usize]
+    }
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Fields {
+    fields: Vec<FieldInfo>,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FieldInfo {
+    pub name_hash: i32,
+    pub offset: u32,
+    pub field_info: u32,
+}
+
+/// Represents the object index. Always less than `i32::MAX`.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct ObjIdx(u32);
+
+impl ObjIdx {
+    /// Returns the numeric value of this object index
+    pub fn numeric(self) -> u32 {
+        self.0 as u32
+    }
+}
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct FieldIdx(u32);
+
+impl FieldIdx {
+    /// Returns the numeric value of this field index
+    pub fn numeric(self) -> u32 {
+        self.0
+    }
+}
+
+impl Fields {
+    #[allow(unused)]
+    pub fn iter(&self) -> impl Iterator<Item = (FieldIdx, &FieldInfo)> {
+        self.fields
+            .iter()
+            .enumerate()
+            .map(|(f, a)| (FieldIdx(f as u32), a))
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (FieldIdx, &mut FieldInfo)> {
+        self.fields
+            .iter_mut()
+            .enumerate()
+            .map(|(f, a)| (FieldIdx(f as u32), a))
+    }
+
+    pub fn create_field(&mut self, name: &str) -> Option<FieldIdx> {
+        if self.len() == std::u32::MAX {
+            None
+        } else {
+            let idx = self.len();
+            self.fields.push(FieldInfo {
+                name_hash: name_hash(name),
+                field_info: {
+                    let len = u32::try_from(name.len() + 1).ok()?;
+                    (len & FieldInfo::NAME_LEN_BITS) << 2
+                },
+                offset: 0,
+            });
+            Some(FieldIdx(idx))
+        }
+    }
+
+    pub fn len(&self) -> u32 {
+        self.fields.len() as u32
+    }
+}
+
+impl FieldInfo {
+    pub const NAME_LEN_BITS: u32 = 0b1_1111_1111;
+    pub const OBJ_IDX_BITS: u32 = 0b1111_1111_1111_1111_1111;
+
+    pub fn is_object(&self) -> bool {
+        (self.field_info & 0b1) == 1
+    }
+
+    pub fn name_length(&self) -> u32 {
+        (self.field_info >> 2) & Self::NAME_LEN_BITS
+    }
+
+    pub fn object_index(&self) -> Option<ObjIdx> {
+        if self.is_object() {
+            Some(ObjIdx((self.field_info >> 11) & Self::OBJ_IDX_BITS))
+        } else {
+            None
+        }
+    }
+
+    /*
+    fn unknown_bit(&self) -> bool {
+        (self.field_info & 0x8000_0000) != 0
+    }
+
+    fn unused_bit2(&self) -> bool {
+        (self.field_info & 0b10) != 0
+    }
+    */
+}
+
+impl Index<FieldIdx> for Fields {
+    type Output = FieldInfo;
+    #[inline]
+    fn index(&self, index: FieldIdx) -> &Self::Output {
+        &self.fields[index.0 as usize]
+    }
+}
+
+impl IndexMut<FieldIdx> for Fields {
+    #[inline]
+    fn index_mut(&mut self, index: FieldIdx) -> &mut Self::Output {
+        &mut self.fields[index.0 as usize]
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Field {
+    pub name: Atom<EmptyStaticAtomSet>,
+    pub parent: Option<ObjIdx>,
+    pub tipe: FieldType,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Data {
+    dat: Vec<Field>,
+}
+
+impl Index<FieldIdx> for Data {
+    type Output = Field;
+    #[inline]
+    fn index(&self, index: FieldIdx) -> &Self::Output {
+        &self.dat[index.0 as usize]
+    }
+}
+
+impl IndexMut<FieldIdx> for Data {
+    #[inline]
+    fn index_mut(&mut self, index: FieldIdx) -> &mut Self::Output {
+        &mut self.dat[index.0 as usize]
+    }
+}
+
+impl Data {
+    pub fn iter(&self) -> impl Iterator<Item = &Field> {
+        self.dat.iter()
+    }
+
+    pub fn create_data(
+        &mut self,
+        name: Atom<EmptyStaticAtomSet>,
+        parent: Option<ObjIdx>,
+        tipe: FieldType,
+    ) {
+        self.dat.push(Field { name, parent, tipe });
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum FieldType {
+    Bool(bool),
+    TwoBool(bool, bool),
+    Int(i32),
+    Float(f32),
+    Char(char),
+    String(String),
+    IntVector(Vec<i32>),
+    StringVector(Vec<String>),
+    FloatArray(Vec<f32>),
+    TwoInt(i32, i32),
+    File(Option<Box<File>>),
+    Object(Vec<FieldIdx>),
+}
+
+macro_rules! types {
+    ($types:ident, $([$e:ident, $($i:literal),+]), + $(,)*) => {
+        const $types: &[(&FieldType, &[&str])] = &[$((types!($e), &[$($i,)+]),)+];
+    };
+    (Float) => {&FieldType::Float(0.0)};
+    (Char) => {&FieldType::Char('\0')};
+    (IntVector) => {&FieldType::IntVector(std::vec::Vec::new())};
+    (StringVector) => {&FieldType::StringVector(std::vec::Vec::new())};
+    (FloatArray) => {&FieldType::FloatArray(std::vec::Vec::new())};
+    (TwoInt) => {&FieldType::TwoInt(0, 0)};
+    (TwoBool) => {&FieldType::TwoBool(false, false)};
+}
+
+#[rustfmt::skip]
+types!(TYPES,
+    [Char, "requirement_code"],
+
+    [Float, "current_hp"],
+    [Float, "m_Stress"],
+    [Float, "actor", "buff_group", "*", "amount"],
+    [Float, "chapters", "*", "*", "percent"],
+    [Float, "non_rolled_additional_chances", "*", "chance"],
+    [Float, "rarity_table", "*", "chance"],
+    [Float, "chance_of_loot"],
+    [Float, "shard_consume_percent"],
+    [Float, "chances", "*"],
+    [Float, "chance_sum"],
+
+    [IntVector, "read_page_indexes"],
+    [IntVector, "raid_read_page_indexes"],
+    [IntVector, "raid_unread_page_indexes"],
+    [IntVector, "dungeons_unlocked"],
+    [IntVector, "played_video_list"],
+    [IntVector, "trinket_retention_ids"],
+    [IntVector, "last_party_guids"],
+    [IntVector, "dungeon_history"],
+    [IntVector, "buff_group_guids"],
+    [IntVector, "result_event_history"],
+    [IntVector, "additional_mash_disabled_infestation_monster_class_ids"],
+    [IntVector, "party", "heroes"],
+    [IntVector, "skill_cooldown_keys"],
+    [IntVector, "skill_cooldown_values"],
+    [IntVector, "bufferedSpawningSlotsAvailable"],
+    [IntVector, "curioGroups", "*", "curios"],
+    [IntVector, "curioGroups", "*", "curio_table_entries"],
+    [IntVector, "narration_audio_event_queue_tags"],
+    [IntVector, "dispatched_events"],
+
+    [StringVector, "goal_ids"],
+    [StringVector, "roaming_dungeon_2_ids", "*", "s"],
+    [StringVector, "quirk_group"],
+    [StringVector, "backgroundNames"],
+    [StringVector, "backgroundGroups", "*", "backgrounds"],
+    [StringVector, "backgroundGroups", "*", "background_table_entries"],
+
+    [FloatArray, "map", "bounds"],
+    [FloatArray, "areas", "*", "bounds"],
+    [FloatArray, "areas", "*", "tiles", "*", "mappos"],
+    [FloatArray, "areas", "*", "tiles", "*", "sidepos"],
+
+    [TwoInt, "killRange"],
+
+    [TwoBool, "profile_options", "values", "quest_select_warnings"],
+    [TwoBool, "profile_options", "values", "provision_warnings"],
+    [TwoBool, "profile_options", "values", "deck_based_stage_coach"],
+    [TwoBool, "profile_options", "values", "curio_tracker"],
+    [TwoBool, "profile_options", "values", "dd_mode"],
+    [TwoBool, "profile_options", "values", "corpses"],
+    [TwoBool, "profile_options", "values", "stall_penalty"],
+    [TwoBool, "profile_options", "values", "deaths_door_recovery_debuffs"],
+    [TwoBool, "profile_options", "values", "retreats_can_fail"],
+    [TwoBool, "profile_options", "values", "multiplied_enemy_crits"],
+);
+
+pub fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Option<FieldType> {
+    use once_cell::sync::OnceCell;
+    type PathTypeList<'a> = Vec<(&'a [&'a str], &'a FieldType)>;
+    static TYPES_MAP: OnceCell<HashMap<&str, PathTypeList>> = OnceCell::new();
+    if let Some(candidates) = TYPES_MAP
+        .get_or_init(|| {
+            let mut map = HashMap::new();
+            TYPES.iter().for_each(|(tip, trace)| {
+                map.entry(*trace.last().unwrap())
+                    .or_insert_with(Vec::new)
+                    .push((&trace[0..trace.len() - 1], *tip));
+            });
+            map
+        })
+        .get(name.as_ref())
+    {
+        candidates.iter().find_map(|(path, t)| {
+            if parents.len() >= path.len()
+                && path
+                    .iter()
+                    .rev()
+                    .zip(parents.iter().rev())
+                    .all(|(&tst, name_frag)| tst == "*" || tst == name_frag.as_ref())
+            {
+                Some((*t).clone())
+            } else {
+                None
+            }
+        })
+    } else {
+        None
     }
 }

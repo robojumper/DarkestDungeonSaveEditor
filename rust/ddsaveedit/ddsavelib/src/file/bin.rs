@@ -4,45 +4,53 @@ use std::{
     convert::TryFrom,
     ffi::CStr,
     io::{Read, Write},
-    ops::{Index, IndexMut},
 };
 
-use crate::{
-    err::*,
-    file::{
-        json::{ExpectExt, Token, TokenType},
-        File,
-    },
-    util::name_hash,
+use super::{
+    hardcoded_type, Data, Field, FieldIdx, FieldInfo, FieldType, Fields, File, Header, ObjIdx,
+    ObjectInfo, Objects,
 };
+use crate::{err::*, util::name_hash};
 
 use string_cache::{Atom, EmptyStaticAtomSet};
 
-pub const HEADER_MAGIC_NUMBER: [u8; 4] = [0x01, 0xB1, 0x00, 0x00];
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Header {
-    magic: [u8; 4],
-    //version: [u8; 4],
-    version: u32,
-    header_len: u32,
-    //zeroes1: [u8; 4],
-    objects_size: u32,
-    objects_num: u32,
-    objects_offset: u32,
-    //zeroes2: [u8; 16],
-    fields_num: u32,
-    fields_offset: u32,
-    //zeroes3: [u32; 4],
-    data_size: u32,
-    data_offset: u32,
+impl File {
+    /// Attempt create a Darkest Dungeon save [`File`] from a [`Read`] representing
+    /// a binary encoded file.
+    pub fn try_from_bin<R: Read>(reader: &'_ mut R) -> Result<Self, FromBinError> {
+        let h = Header::try_from_bin(reader)?;
+        let o: Objects = Objects::try_from_bin(reader, &h)?;
+        let mut f = Fields::try_from_bin(reader, &h)?;
+        let dat = decode_fields_bin(reader, &mut f, &o, &h)?;
+        Ok(File { h, o, f, dat })
+    }
+
+    fn calc_bin_size(&self) -> usize {
+        let meta_size = self.h.calc_bin_size() + self.o.calc_bin_size() + self.f.calc_bin_size();
+        let mut existing_size = 0;
+        for f in self.dat.iter() {
+            existing_size = f.add_bin_size(existing_size);
+        }
+        meta_size + existing_size
+    }
+
+    /// Write this [`File`] as Binary.
+    pub fn write_to_bin<W: Write>(&self, writer: &'_ mut W) -> std::io::Result<()> {
+        self.h.write_to_bin(writer)?;
+        self.o.write_to_bin(writer)?;
+        self.f.write_to_bin(writer)?;
+        let mut off = 0;
+        for f in self.dat.iter() {
+            off = f.write_to_bin(writer, off)?;
+        }
+        Ok(())
+    }
 }
 
 impl Header {
-    pub const SIZE: usize = 64;
-
     pub fn try_from_bin<R: Read>(reader: &'_ mut R) -> Result<Self, FromBinError> {
         // Reading all 64 header bytes upfront elides all the checks in later unwraps/?s.
-        let buf = &mut [0u8; Header::SIZE];
+        let buf = &mut [0u8; Header::BIN_SIZE];
         reader
             .read_exact(buf)
             .map_err(|_| FromBinError::NotBinFile)?;
@@ -54,15 +62,15 @@ impl Header {
             *tmp
         };
 
-        if magic != HEADER_MAGIC_NUMBER {
+        if magic != Header::MAGIC_NUMBER {
             return Err(FromBinError::NotBinFile);
         }
 
         let version = reader.read_u32::<LittleEndian>().unwrap();
         let header_len = reader.read_u32::<LittleEndian>().unwrap();
-        if header_len != u32::try_from(Header::SIZE).unwrap() {
+        if header_len != u32::try_from(Header::BIN_SIZE).unwrap() {
             return Err(FromBinError::OffsetMismatch {
-                exp: u64::try_from(Header::SIZE).unwrap(),
+                exp: u64::try_from(Header::BIN_SIZE).unwrap(),
                 is: header_len.into(),
             });
         }
@@ -113,7 +121,7 @@ impl Header {
     }
 
     pub fn write_to_bin<W: Write>(&self, inwriter: &'_ mut W) -> std::io::Result<()> {
-        let buf = &mut [0u8; Header::SIZE];
+        let buf = &mut [0u8; Header::BIN_SIZE];
         let mut writer: &mut [u8] = buf;
 
         writer.write_all(&self.magic)?;
@@ -138,52 +146,9 @@ impl Header {
         inwriter.write_all(buf)?;
         Ok(())
     }
-
-    pub fn fixup_header(
-        &mut self,
-        num_objects: u32,
-        num_fields: u32,
-        version: u32,
-        data_size: u32,
-    ) -> Result<(), std::num::TryFromIntError> {
-        self.magic = HEADER_MAGIC_NUMBER;
-        self.version = version;
-        self.header_len = u32::try_from(Header::SIZE).unwrap();
-        self.objects_num = num_objects;
-        self.objects_size = self.objects_num * 16; // TODO
-        self.objects_offset = self.header_len;
-        self.fields_num = num_fields;
-        self.fields_offset = self.objects_offset + self.objects_size; // TODO
-        self.data_offset = self.fields_offset + self.fields_num * 12; // TODO
-        self.data_size = data_size;
-        Ok(())
-    }
-
-    pub fn version(&self) -> u32 {
-        self.version
-    }
-
-    pub fn calc_bin_size(&self) -> usize {
-        Header::SIZE
-    }
-}
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ObjectInfo {
-    pub parent: Option<ObjIdx>,
-    pub field: FieldIdx,
-    pub num_direct_childs: u32,
-    pub num_all_childs: u32,
-}
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct Objects {
-    objs: Vec<ObjectInfo>,
 }
 
 impl Objects {
-    pub fn iter(&self) -> impl Iterator<Item = &ObjectInfo> {
-        self.objs.iter()
-    }
-
     pub fn try_from_bin<R: Read>(reader: &'_ mut R, header: &Header) -> Result<Self, FromBinError> {
         let mut o = Objects {
             objs: {
@@ -219,9 +184,9 @@ impl Objects {
         for o in &self.objs {
             let mut writer: &mut [u8] = &mut buf;
             writer
-                .write_i32::<LittleEndian>(o.parent.map(|i| i.0 as i32).unwrap_or(-1))
+                .write_i32::<LittleEndian>(o.parent.map(|i| i.numeric() as i32).unwrap_or(-1))
                 .unwrap();
-            writer.write_u32::<LittleEndian>(o.field.0).unwrap();
+            writer.write_u32::<LittleEndian>(o.field.numeric()).unwrap();
             writer
                 .write_u32::<LittleEndian>(o.num_direct_childs)
                 .unwrap();
@@ -234,95 +199,9 @@ impl Objects {
     pub fn calc_bin_size(&self) -> usize {
         4 * 4 * self.objs.len()
     }
-
-    // Parent Object indices are i32 because a -1 indicates no parent
-    pub fn len(&self) -> u32 {
-        self.objs.len() as u32
-    }
-
-    pub fn create_object(
-        &mut self,
-        f: FieldIdx,
-        p: Option<ObjIdx>,
-        nc: u32,
-        ndc: u32,
-    ) -> Option<ObjIdx> {
-        if self.len() == u32::try_from(std::i32::MAX).unwrap() {
-            None
-        } else {
-            let idx = self.len();
-            self.objs.push(ObjectInfo {
-                field: f,
-                parent: p,
-                num_all_childs: nc,
-                num_direct_childs: ndc,
-            });
-            Some(ObjIdx(idx))
-        }
-    }
-}
-
-impl Index<ObjIdx> for Objects {
-    type Output = ObjectInfo;
-    #[inline]
-    fn index(&self, index: ObjIdx) -> &Self::Output {
-        &self.objs[index.0 as usize]
-    }
-}
-
-impl IndexMut<ObjIdx> for Objects {
-    #[inline]
-    fn index_mut(&mut self, index: ObjIdx) -> &mut Self::Output {
-        &mut self.objs[index.0 as usize]
-    }
-}
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Fields {
-    fields: Vec<FieldInfo>,
-}
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct FieldInfo {
-    pub name_hash: i32,
-    pub offset: u32,
-    pub field_info: u32,
-}
-
-/// Represents the object index. Always less than `i32::MAX`.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct ObjIdx(u32);
-
-impl ObjIdx {
-    /// Returns the numeric value of this object index
-    pub fn numeric(self) -> u32 {
-        self.0 as u32
-    }
-}
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct FieldIdx(u32);
-
-impl FieldIdx {
-    /// Returns the numeric value of this field index
-    pub fn numeric(self) -> u32 {
-        self.0
-    }
 }
 
 impl Fields {
-    #[allow(unused)]
-    pub fn iter(&self) -> impl Iterator<Item = (FieldIdx, &FieldInfo)> {
-        self.fields
-            .iter()
-            .enumerate()
-            .map(|(f, a)| (FieldIdx(f as u32), a))
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (FieldIdx, &mut FieldInfo)> {
-        self.fields
-            .iter_mut()
-            .enumerate()
-            .map(|(f, a)| (FieldIdx(f as u32), a))
-    }
-
     pub fn try_from_bin<R: Read>(reader: &'_ mut R, header: &Header) -> Result<Self, FromBinError> {
         let mut f = Fields {
             fields: {
@@ -360,83 +239,9 @@ impl Fields {
         Ok(())
     }
 
-    pub fn create_field(&mut self, name: &str) -> Option<FieldIdx> {
-        if self.len() == std::u32::MAX {
-            None
-        } else {
-            let idx = self.len();
-            self.fields.push(FieldInfo {
-                name_hash: name_hash(name),
-                field_info: {
-                    let len = u32::try_from(name.len() + 1).ok()?;
-                    (len & FieldInfo::NAME_LEN_BITS) << 2
-                },
-                offset: 0,
-            });
-            Some(FieldIdx(idx))
-        }
-    }
-
-    pub fn len(&self) -> u32 {
-        self.fields.len() as u32
-    }
-
     pub fn calc_bin_size(&self) -> usize {
         4 * 3 * self.fields.len()
     }
-}
-
-impl FieldInfo {
-    pub const NAME_LEN_BITS: u32 = 0b1_1111_1111;
-    pub const OBJ_IDX_BITS: u32 = 0b1111_1111_1111_1111_1111;
-
-    pub fn is_object(&self) -> bool {
-        (self.field_info & 0b1) == 1
-    }
-
-    pub fn name_length(&self) -> u32 {
-        (self.field_info >> 2) & Self::NAME_LEN_BITS
-    }
-
-    pub fn object_index(&self) -> Option<ObjIdx> {
-        if self.is_object() {
-            Some(ObjIdx((self.field_info >> 11) & Self::OBJ_IDX_BITS))
-        } else {
-            None
-        }
-    }
-
-    /*
-    fn unknown_bit(&self) -> bool {
-        (self.field_info & 0x8000_0000) != 0
-    }
-
-    fn unused_bit2(&self) -> bool {
-        (self.field_info & 0b10) != 0
-    }
-    */
-}
-
-impl Index<FieldIdx> for Fields {
-    type Output = FieldInfo;
-    #[inline]
-    fn index(&self, index: FieldIdx) -> &Self::Output {
-        &self.fields[index.0 as usize]
-    }
-}
-
-impl IndexMut<FieldIdx> for Fields {
-    #[inline]
-    fn index_mut(&mut self, index: FieldIdx) -> &mut Self::Output {
-        &mut self.fields[index.0 as usize]
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Field {
-    pub name: Atom<EmptyStaticAtomSet>,
-    pub parent: Option<ObjIdx>,
-    pub tipe: FieldType,
 }
 
 impl Field {
@@ -573,176 +378,13 @@ impl Field {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Data {
-    dat: Vec<Field>,
-}
-
-impl Index<FieldIdx> for Data {
-    type Output = Field;
-    #[inline]
-    fn index(&self, index: FieldIdx) -> &Self::Output {
-        &self.dat[index.0 as usize]
-    }
-}
-
-impl IndexMut<FieldIdx> for Data {
-    #[inline]
-    fn index_mut(&mut self, index: FieldIdx) -> &mut Self::Output {
-        &mut self.dat[index.0 as usize]
-    }
-}
-
-impl Data {
-    pub fn iter(&self) -> impl Iterator<Item = &Field> {
-        self.dat.iter()
-    }
-
-    pub fn create_data(
-        &mut self,
-        name: Atom<EmptyStaticAtomSet>,
-        parent: Option<ObjIdx>,
-        tipe: FieldType,
-    ) {
-        self.dat.push(Field {
-            name,
-            parent,
-            tipe,
-        });
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum FieldType {
-    Bool(bool),
-    TwoBool(bool, bool),
-    Int(i32),
-    Float(f32),
-    Char(char),
-    String(String),
-    IntVector(Vec<i32>),
-    StringVector(Vec<String>),
-    FloatArray(Vec<f32>),
-    TwoInt(i32, i32),
-    File(Option<Box<File>>),
-    Object(Vec<FieldIdx>),
-}
-
-macro_rules! types {
-    ($types:ident, $([$e:ident, $($i:literal),+]), + $(,)*) => {
-        const $types: &[(&FieldType, &[&str])] = &[$((types!($e), &[$($i,)+]),)+];
-    };
-    (Float) => {&FieldType::Float(0.0)};
-    (Char) => {&FieldType::Char('\0')};
-    (IntVector) => {&FieldType::IntVector(std::vec::Vec::new())};
-    (StringVector) => {&FieldType::StringVector(std::vec::Vec::new())};
-    (FloatArray) => {&FieldType::FloatArray(std::vec::Vec::new())};
-    (TwoInt) => {&FieldType::TwoInt(0, 0)};
-    (TwoBool) => {&FieldType::TwoBool(false, false)};
-}
-
-#[rustfmt::skip]
-types!(TYPES,
-    [Char, "requirement_code"],
-
-    [Float, "current_hp"],
-    [Float, "m_Stress"],
-    [Float, "actor", "buff_group", "*", "amount"],
-    [Float, "chapters", "*", "*", "percent"],
-    [Float, "non_rolled_additional_chances", "*", "chance"],
-    [Float, "rarity_table", "*", "chance"],
-    [Float, "chance_of_loot"],
-    [Float, "shard_consume_percent"],
-    [Float, "chances", "*"],
-    [Float, "chance_sum"],
-
-    [IntVector, "read_page_indexes"],
-    [IntVector, "raid_read_page_indexes"],
-    [IntVector, "raid_unread_page_indexes"],
-    [IntVector, "dungeons_unlocked"],
-    [IntVector, "played_video_list"],
-    [IntVector, "trinket_retention_ids"],
-    [IntVector, "last_party_guids"],
-    [IntVector, "dungeon_history"],
-    [IntVector, "buff_group_guids"],
-    [IntVector, "result_event_history"],
-    [IntVector, "additional_mash_disabled_infestation_monster_class_ids"],
-    [IntVector, "party", "heroes"],
-    [IntVector, "skill_cooldown_keys"],
-    [IntVector, "skill_cooldown_values"],
-    [IntVector, "bufferedSpawningSlotsAvailable"],
-    [IntVector, "curioGroups", "*", "curios"],
-    [IntVector, "curioGroups", "*", "curio_table_entries"],
-    [IntVector, "narration_audio_event_queue_tags"],
-    [IntVector, "dispatched_events"],
-
-    [StringVector, "goal_ids"],
-    [StringVector, "roaming_dungeon_2_ids", "*", "s"],
-    [StringVector, "quirk_group"],
-    [StringVector, "backgroundNames"],
-    [StringVector, "backgroundGroups", "*", "backgrounds"],
-    [StringVector, "backgroundGroups", "*", "background_table_entries"],
-
-    [FloatArray, "map", "bounds"],
-    [FloatArray, "areas", "*", "bounds"],
-    [FloatArray, "areas", "*", "tiles", "*", "mappos"],
-    [FloatArray, "areas", "*", "tiles", "*", "sidepos"],
-
-    [TwoInt, "killRange"],
-
-    [TwoBool, "profile_options", "values", "quest_select_warnings"],
-    [TwoBool, "profile_options", "values", "provision_warnings"],
-    [TwoBool, "profile_options", "values", "deck_based_stage_coach"],
-    [TwoBool, "profile_options", "values", "curio_tracker"],
-    [TwoBool, "profile_options", "values", "dd_mode"],
-    [TwoBool, "profile_options", "values", "corpses"],
-    [TwoBool, "profile_options", "values", "stall_penalty"],
-    [TwoBool, "profile_options", "values", "deaths_door_recovery_debuffs"],
-    [TwoBool, "profile_options", "values", "retreats_can_fail"],
-    [TwoBool, "profile_options", "values", "multiplied_enemy_crits"],
-);
-
-pub fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Option<FieldType> {
-    use once_cell::sync::OnceCell;
-    type PathTypeList<'a> = Vec<(&'a [&'a str], &'a FieldType)>;
-    static TYPES_MAP: OnceCell<HashMap<&str, PathTypeList>> = OnceCell::new();
-    if let Some(candidates) = TYPES_MAP
-        .get_or_init(|| {
-            let mut map = HashMap::new();
-            TYPES.iter().for_each(|(tip, trace)| {
-                map.entry(*trace.last().unwrap())
-                    .or_insert_with(Vec::new)
-                    .push((&trace[0..trace.len() - 1], *tip));
-            });
-            map
-        })
-        .get(name.as_ref())
-    {
-        candidates.iter().find_map(|(path, t)| {
-            if parents.len() >= path.len()
-                && path
-                    .iter()
-                    .rev()
-                    .zip(parents.iter().rev())
-                    .all(|(&tst, name_frag)| tst == "*" || tst == name_frag.as_ref())
-            {
-                Some((*t).clone())
-            } else {
-                None
-            }
-        })
-    } else {
-        None
-    }
-}
-
 macro_rules! skip {
     ($r:expr, $num:expr) => {
         std::io::copy(&mut $r.by_ref().take($num as u64), &mut std::io::sink())?;
     };
 }
 
-pub fn decode_fields<R: Read>(
+pub fn decode_fields_bin<R: Read>(
     reader: &'_ mut R,
     f: &'_ mut Fields,
     o: &'_ Objects,
@@ -851,163 +493,6 @@ pub fn decode_fields<R: Read>(
 }
 
 impl FieldType {
-    pub(crate) fn try_from_json<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
-        lex: &mut T,
-        name_stack: &'_ [impl AsRef<str>],
-        name: impl AsRef<str>,
-    ) -> Result<Self, FromJsonError> {
-        macro_rules! parse_prim {
-            ($tok:expr, $t:ty, $err:expr) => {{
-                let tok = $tok;
-                tok.dat.parse::<$t>().map_err(|_| {
-                    FromJsonError::LiteralFormat($err.to_owned(), tok.span.first, tok.span.end)
-                })?
-            }};
-        }
-
-        if let Some(mut val) = hardcoded_type(name_stack, name) {
-            match &mut val {
-                FieldType::Float(ref mut f) => {
-                    let tok = lex.expect(TokenType::Number)?;
-                    *f = parse_prim!(tok, f32, "float");
-                }
-                FieldType::IntVector(ref mut v) => {
-                    lex.expect(TokenType::BeginArray)?;
-                    loop {
-                        let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
-                        match tok.kind {
-                            TokenType::EndArray => break,
-                            TokenType::Number => {
-                                v.push(parse_prim!(tok, i32, "integer"));
-                            }
-                            TokenType::String if tok.dat.starts_with("###") => {
-                                v.push(name_hash(&tok.dat[3..]));
-                            }
-                            _ => {
-                                return Err(FromJsonError::Expected(
-                                    "string or ]".to_owned(),
-                                    tok.span.first,
-                                    tok.span.end,
-                                ))
-                            }
-                        }
-                    }
-                }
-                FieldType::StringVector(ref mut v) => {
-                    lex.expect(TokenType::BeginArray)?;
-                    loop {
-                        let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
-                        match tok.kind {
-                            TokenType::EndArray => break,
-                            TokenType::String => {
-                                v.push(tok.dat.into_owned());
-                            }
-                            _ => {
-                                return Err(FromJsonError::Expected(
-                                    "string or ]".to_owned(),
-                                    tok.span.first,
-                                    tok.span.end,
-                                ))
-                            }
-                        }
-                    }
-                }
-                FieldType::FloatArray(ref mut v) => {
-                    lex.expect(TokenType::BeginArray)?;
-                    loop {
-                        let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
-                        match tok.kind {
-                            TokenType::EndArray => break,
-                            TokenType::Number => {
-                                v.push(parse_prim!(tok, f32, "float"));
-                            }
-                            _ => {
-                                return Err(FromJsonError::Expected(
-                                    "string or ]".to_owned(),
-                                    tok.span.first,
-                                    tok.span.end,
-                                ))
-                            }
-                        }
-                    }
-                }
-                FieldType::TwoInt(ref mut i1, ref mut i2) => {
-                    lex.expect(TokenType::BeginArray)?;
-                    let t1 = lex.expect(TokenType::Number)?;
-                    *i1 = parse_prim!(t1, i32, "integer");
-                    let t2 = lex.expect(TokenType::Number)?;
-                    *i2 = parse_prim!(t2, i32, "integer");
-                    lex.expect(TokenType::EndArray)?;
-                }
-                FieldType::TwoBool(ref mut b1, ref mut b2) => {
-                    lex.expect(TokenType::BeginArray)?;
-                    let tok1 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
-                    *b1 = if tok1.kind == TokenType::BoolTrue {
-                        true
-                    } else if tok1.kind == TokenType::BoolFalse {
-                        false
-                    } else {
-                        return Err(FromJsonError::Expected(
-                            "bool".to_owned(),
-                            tok1.span.first,
-                            tok1.span.end,
-                        ));
-                    };
-                    let tok2 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
-                    *b2 = if tok2.kind == TokenType::BoolTrue {
-                        true
-                    } else if tok2.kind == TokenType::BoolFalse {
-                        false
-                    } else {
-                        return Err(FromJsonError::Expected(
-                            "bool".to_owned(),
-                            tok2.span.first,
-                            tok2.span.end,
-                        ));
-                    };
-                    lex.expect(TokenType::EndArray)?;
-                }
-                FieldType::Char(ref mut c) => {
-                    let tok = lex.expect(TokenType::String)?;
-                    let bytes = tok.dat.as_bytes();
-                    if bytes.len() == 1 && bytes[0].is_ascii() {
-                        *c = bytes[0] as char;
-                    } else {
-                        return Err(FromJsonError::LiteralFormat(
-                            "exactly one ascii char".to_owned(),
-                            tok.span.first,
-                            tok.span.end,
-                        ));
-                    }
-                }
-                _ => unreachable!("unhandled hardcoded field while from json"),
-            }
-            Ok(val)
-        } else {
-            // Decode heuristic
-            let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
-            Ok(match tok.kind {
-                TokenType::Number => FieldType::Int(parse_prim!(tok, i32, "integer")),
-                TokenType::String => {
-                    if tok.dat.starts_with("###") {
-                        FieldType::Int(name_hash(&tok.dat[3..]))
-                    } else {
-                        FieldType::String(tok.dat.into_owned())
-                    }
-                }
-                TokenType::BoolTrue => FieldType::Bool(true),
-                TokenType::BoolFalse => FieldType::Bool(false),
-                _ => {
-                    return Err(FromJsonError::LiteralFormat(
-                        "unknown field".to_owned(),
-                        tok.span.first,
-                        tok.span.end,
-                    ))
-                }
-            })
-        }
-    }
-
     pub fn try_from_bin<R: Read>(
         reader: &'_ mut R,
         to_skip_if_aligned: usize,
@@ -1099,7 +584,7 @@ impl FieldType {
                         let mut buf = vec![0u8; len];
                         reader.read_exact(&mut buf)?;
                         let mut buf: &[u8] = &buf;
-                        if len >= 4 && buf[0..4] == HEADER_MAGIC_NUMBER {
+                        if len >= 4 && buf[0..4] == Header::MAGIC_NUMBER {
                             Ok(File(Some(Box::new(self::File::try_from_bin(&mut buf)?))))
                         } else {
                             let string = {
