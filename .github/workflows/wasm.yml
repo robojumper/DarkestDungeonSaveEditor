@@ -20,6 +20,9 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: '10.x'
+    - name: Install wasm-pack
+      run: |
+        curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
     - name: Build site
       run: |
         cd rust/ddsaveedit/wasm-ddsaveedit
