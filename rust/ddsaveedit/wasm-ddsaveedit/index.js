@@ -1,13 +1,20 @@
 const rust = import('./pkg');
 import names from './names_cache.txt';
 
+var fname = "persist.unnamed.json";
+
+// Check browser support
+if (typeof TextEncoder === 'undefined' || typeof TextDecoder === 'undefined' || typeof Uint8Array === 'undefined') {
+	var upload = document.getElementById('editor');
+	upload.textContent = "Your browser does not support the necessary features. Use Firefox, Chrome, or a new (79+) Edge version."
+	throw new Error("Bad browser support");
+}
+
 rust.then(wasm => {
 
-	function dragEnter(evt) {
-		const isFile = event.dataTransfer.types.includes("Files");
-		if (isFile) {
-			event.preventDefault();
-		}
+	function stopEvent(e) {
+		e.stopPropagation();
+		e.preventDefault();
 	}
 
 	function handleUpload(file) {
@@ -26,7 +33,7 @@ rust.then(wasm => {
 					throw result;
 				}
 				console.log('ok');
-				dropstyle(file.name, "green");
+				fname = file.name;
 				var editor = ace.edit("editor");
 				editor.setValue(result);
 			} catch (e) {
@@ -35,7 +42,6 @@ rust.then(wasm => {
 					editor.setValue(e);
 				}
 				console.log(e);
-				dropstyle("failed to decode", "red");
 			}
 		}
 		reader.readAsArrayBuffer(file);
@@ -49,7 +55,6 @@ rust.then(wasm => {
 			var file = curFiles[0];
 			handleUpload(file);
 		} else {
-			dropstyle("expected exactly one file", "red");
 			return;
 		}
 	}
@@ -57,14 +62,13 @@ rust.then(wasm => {
 	function dropHandler(ev) {
 		// Thanks MDN
 		// Prevent default behavior (Prevent file from being opened)
-		ev.preventDefault();
+		stopEvent(ev);
 		var file = null;
 		if (ev.dataTransfer.items) {
 			if (ev.dataTransfer.items.length === 1 && ev.dataTransfer.items[0].kind === 'file') {
 				// Use DataTransferItemList interface to access the file
 				file = ev.dataTransfer.items[0].getAsFile();
 			} else {
-				dropstyle("expected exactly one file", "red");
 				return;
 			}
 		} else {
@@ -72,20 +76,12 @@ rust.then(wasm => {
 			if (ev.dataTransfer.files.length === 1) {
 				file = ev.dataTransfer.files[0];
 			} else {
-				dropstyle("expected exactly one file", "red");
 				return;
 			}
 		}
 		console.log('file.name = ' + file.name);
 
 		handleUpload(file);
-	}
-
-	function dropstyle(err, col) {
-		var dragarea = document.getElementById('droparea');
-		dragarea.style.borderColor = col;
-		var errmsg = document.getElementById('errmsg');
-		errmsg.textContent = err;
 	}
 
 	function onChange(ev) {
@@ -108,12 +104,12 @@ rust.then(wasm => {
 			var Range = ace.Range;
 			editor.session.addMarker(new Range(annot.line, annot.col, annot.eline, annot.ecol), "aceerror", annot.err);
 			var download = document.getElementById('downloadlink');
-			download.className = "link-disabled";
+			download.className = "button button-disabled";
 			download.removeAttribute('href');
 		} else {
 			editor.session.clearAnnotations();
 			var download = document.getElementById('downloadlink');
-			download.className = "";
+			download.className = "button button-enabled";
 			download.setAttribute('href', "");
 		}
 	}
@@ -145,12 +141,21 @@ rust.then(wasm => {
 		var editor = ace.edit("editor");
 		var text = editor.getValue();
 		let result = wasm.encode(text);
-		if (result === 'undefined') {
-			ev.preventDefault();
-		} else {
-			if (downloadFile(document.getElementById('errmsg').textContent, result)) {
-				ev.preventDefault();
+		if (typeof result !== 'undefined') {
+			if (downloadFile(fname, result)) {
+				stopEvent(ev);
 			}
+			return;
+		} else {
+			// Assume there was an error in user text, scroll there
+			var editor = ace.edit("editor");
+			var annots = editor.session.getAnnotations();
+			if (annots.length >= 1) {
+				editor.resize(true);
+				editor.scrollToLine(annots[0].row, true, true, function () {});
+				editor.gotoLine(annots[0].row, annots[0].column, true);
+			}
+			stopEvent(ev);
 		}
 	}
 
@@ -165,11 +170,6 @@ rust.then(wasm => {
 	oReq.open("GET", names);
 	oReq.send();
 
-	var area = document.getElementById('droparea');
-	area.addEventListener('drop', dropHandler);
-	area.addEventListener('dragenter', dragEnter);
-	area.addEventListener('dragover', dragEnter);
-
 	var download = document.getElementById('downloadlink');
 	download.addEventListener('click', onDownload);
 
@@ -182,5 +182,7 @@ rust.then(wasm => {
 	editor.session.setMode("ace/mode/json");
 	editor.session.on('change', onChange);
 	editor.session.setOption("useWorker", false);
-	document.body.appendChild(editor.container);
+	editor.container.addEventListener("dragenter", stopEvent, false);
+	editor.container.addEventListener("dragover", stopEvent, false);
+	editor.container.addEventListener("drop", dropHandler, false);
 });

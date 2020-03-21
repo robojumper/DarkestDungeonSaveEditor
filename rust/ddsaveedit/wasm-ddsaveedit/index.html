@@ -5,60 +5,101 @@
   <meta charset="utf-8">
   <title>Darkest Dungeon Save Editor</title>
   <style type="text/css">
-    #editor {
-      height: 100%;
+    *,
+    ::before,
+    ::after {
+      box-sizing: inherit;
     }
 
-    html,
+    html {
+      box-sizing: border-box;
+    }
+
     body {
-      overflow: hidden;
-      height: 100%;
+      background-color: darkgray;
+      padding: 0 1em;
       margin: 0;
     }
 
-    .column {
-      float: left;
+    #main {
+      display: flex;
+      height: 100vh;
+      flex-direction: column;
+      padding-bottom: 1em;
+    }
+
+    #mainarea {
       height: 100%;
     }
 
-    .left {
-      width: 15%;
-      background-color: grey;
+    #maineditor {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      border: 4px solid #bbb;
+      border-radius: 4px;
     }
 
-    .right {
-      width: 85%;
+    #editor {
+      width: 100%;
+      height: 100%;
     }
 
-    .part {
-      height: 50%;
+    #header {
+      display: flex;
+      padding: 1.25em 0;
     }
 
-    .area {
-      text-align: center;
-      overflow: clip;
-      overflow-wrap: break-word;
-      border-style: dashed;
-      border-radius: 5px;
-      height: 90%;
-      margin: 4px;
+    .button {
+      margin-left: 0.25em;
+      margin-right: 0.25em;
+      border: 1px solid #241d13;
+      display: inline-block;
+      font-family: Arial;
+      font-size: 15px;
+      font-weight: bold;
+      padding: 9px 23px;
+      text-decoration: none;
     }
 
-    .interact:-moz-drag-over {
-      border-color: green;
-      margin: 6px;
+    .button-enabled {
+      cursor: pointer;
+      fill: white;
+      color: white;
+      background-color: #a73f2d;
+      box-shadow: inset 0px 34px 0px -15px #b54b3a;
+      text-shadow: 0px -1px 0px #7a2a1d;
     }
 
-    .interact * {
-      pointer-events: none;
+    .button-disabled {
+      fill: black;
+      color: black;
+      background-color: #d4d4d4;
+      box-shadow: inset 0px 34px 0px -15px #e0e0e0;
     }
 
-    #filepick {
-      pointer-events: auto;
+    .button-enabled:hover {
+      background-color: #b34332;
     }
 
-    .link-disabled {
-      color: lightgray;
+    .button-enabled:active {
+      position: relative;
+      top: 1px;
+    }
+
+    .buttoncontent {
+      align-content: center;
+      display: flex;
+      flex-direction: row;
+      margin: 0 -15px;
+    }
+
+    svg {
+      margin: 2px;
+    }
+
+    .spacer {
+      flex-grow: 1;
     }
 
     .aceerror {
@@ -72,23 +113,59 @@
 
 <body>
   <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
-  <div class="column left">
-    <div class="part" id="dropouter">
-      <div id="droparea" class="area interact">
-        <p id="errmsg">drop file here...</p>
-        <input type="file" id="filepick" accept=".json" title=" ">
+  <div>
+    <div id="main">
+      <div id="header">
+        <label id="uploadbutton" class="button button-enabled" title="Upload">
+          <div class="buttoncontent">
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="16" viewBox="0 0 10 16">
+              <path fill-rule="evenodd" d="M5 3L0 9h3v4h4V9h3L5 3z"></path>
+            </svg>
+            <span>upload</span>
+          </div>
+          <input id="filepick" type="file" style="display: none;" />
+        </label>
+        <a id="downloadlink" class="button button-disabled" title="Download">
+          <div class="buttoncontent">
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="16" viewBox="0 0 10 16">
+              <path fill-rule="evenodd" d="M7 7V3H3v4H0l5 6 5-6H7z"></path>
+            </svg>
+            <span>download</span>
+          </div>
+        </a>
+        <div class="spacer"></div>
+
+        <a class="button button-enabled" title="Crash Loop Fix Guide" target="_blank"
+          href="https://gist.github.com/robojumper/4a84975d66d5b7c4d94e06b6aabd1f56">
+          <div class="buttoncontent">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="16" viewBox="0 0 14 16">
+              <path fill-rule="evenodd"
+                d="M6.3 5.69a.942.942 0 01-.28-.7c0-.28.09-.52.28-.7.19-.18.42-.28.7-.28.28 0 .52.09.7.28.18.19.28.42.28.7 0 .28-.09.52-.28.7a1 1 0 01-.7.3c-.28 0-.52-.11-.7-.3zM8 7.99c-.02-.25-.11-.48-.31-.69-.2-.19-.42-.3-.69-.31H6c-.27.02-.48.13-.69.31-.2.2-.3.44-.31.69h1v3c.02.27.11.5.31.69.2.2.42.31.69.31h1c.27 0 .48-.11.69-.31.2-.19.3-.42.31-.69H8V7.98v.01zM7 2.3c-3.14 0-5.7 2.54-5.7 5.68 0 3.14 2.56 5.7 5.7 5.7s5.7-2.55 5.7-5.7c0-3.15-2.56-5.69-5.7-5.69v.01zM7 .98c3.86 0 7 3.14 7 7s-3.14 7-7 7-7-3.12-7-7 3.14-7 7-7z">
+              </path>
+            </svg>
+            <span>Guide: crash loop fix</span>
+          </div>
+        </a>
+        <a class="button button-enabled" title="Visit GitHub repository" target="_blank"
+          href="https://github.com/robojumper/DarkestDungeonSaveEditor/tree/master/rust/ddsaveedit/wasm-ddsaveedit">
+          <div class="buttoncontent">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+              <path fill-rule="evenodd"
+                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
+              </path>
+            </svg>
+            <span>visit GitHub</span>
+          </div>
+        </a>
       </div>
-    </div>
-    <div class="part" id="downloadouter">
-      <div class="area">
-        <p><a id="downloadlink" class="link-disabled">download file</a></p>
+      <div id="mainarea">
+        <div id="maineditor">
+          <div id="editor">Upload file above, or drag file here.</div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="column right" id="editor"></div>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.7/ace.js" type="text/javascript" charset="utf-8"></script>
-  <!--<script src="./index.js"></script>-->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.8/ace.js" type="text/javascript" charset="utf-8"></script>
 </body>
 
 </html>
