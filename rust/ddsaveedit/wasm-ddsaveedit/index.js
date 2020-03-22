@@ -112,12 +112,12 @@ rust.then(wasm => {
 			var Range = ace.Range;
 			editor.session.addMarker(new Range(annot.line, annot.col, annot.eline, annot.ecol), "aceerror", annot.err);
 			var download = document.getElementById('downloadlink');
-			download.className = "button button-disabled";
+			download.className = "button button-disabled uitext";
 			download.removeAttribute('href');
 		} else {
 			editor.session.clearAnnotations();
 			var download = document.getElementById('downloadlink');
-			download.className = "button button-enabled";
+			download.className = "button button-enabled uitext";
 			download.setAttribute('href', "");
 		}
 	}
