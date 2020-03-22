@@ -44,6 +44,9 @@ public class DsonTypes {
                         { "curioGroups", "*", "curio_table_entries" }, // raid.json
                         { "narration_audio_event_queue_tags" }, // loading_screen.json
                         { "dispatched_events" }, // tutorial.json
+                        { "backer_heroes", "*", "combat_skills"},
+                        { "backer_heroes", "*", "camping_skills"},
+                        { "backer_heroes", "*", "quirks"},
                 }),
         // aligned, 4-byte int [count], then [count] string length + null-terminated
         // string

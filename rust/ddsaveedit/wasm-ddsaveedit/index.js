@@ -59,6 +59,14 @@ rust.then(wasm => {
 		}
 	}
 
+	function onChangeHash() {
+		var upload = document.getElementById('hashinput');
+		const val = upload.value;
+
+		var res = document.getElementById('hashoutput');
+		res.value = wasm.calc_hash(val);
+	}
+
 	function dropHandler(ev) {
 		// Thanks MDN
 		// Prevent default behavior (Prevent file from being opened)
@@ -176,6 +184,14 @@ rust.then(wasm => {
 	var upload = document.getElementById('filepick');
 	upload.value = "";
 	upload.addEventListener('change', onUpload);
+
+	var upload = document.getElementById('hashinput');
+	upload.addEventListener('change', onChangeHash);
+	upload.addEventListener('keypress', onChangeHash);
+	upload.addEventListener('paste', onChangeHash);
+	upload.addEventListener('input', onChangeHash);
+	upload.value = "jester";
+	onChangeHash();
 
 	var editor = ace.edit("editor");
 	editor.setTheme("ace/theme/monokai");

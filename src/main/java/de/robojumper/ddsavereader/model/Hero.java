@@ -101,7 +101,7 @@ public class Hero {
         @SerializedName("selected_combat_skills")
         Map<String, Integer> combatSkills = new LinkedTreeMap<>();
         @SerializedName("selected_camping_skills")
-        Map<String, Integer> campingSkills = new LinkedTreeMap<>();;
+        Map<String, Integer> campingSkills = new LinkedTreeMap<>();
     }
     
     @SerializedName("skills")

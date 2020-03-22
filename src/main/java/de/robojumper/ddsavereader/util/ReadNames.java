@@ -46,7 +46,16 @@ public class ReadNames {
 			@Override
 			public void parseFile(Path filePath, byte[] file, Set<String> names) {
 				addBaseName(filePath, names);
-				addSimpleJSONArrayEntryIDs(file, "trees", "id", names);
+                Set<String> ids = new HashSet<>();
+				addSimpleJSONArrayEntryIDs(file, "trees", "id", ids);
+                for (String id : ids) {
+                    names.add(id);
+                    // For backer file, strip class name
+                    String[] splits = id.split("\\.");
+                    if (splits.length == 2) {
+                        names.add(splits[1]);
+                    }
+                }
 			}
 		}));
 		
@@ -54,6 +63,7 @@ public class ReadNames {
 		// Camping skills do NOT have corresponding upgrade trees,
 		// even though they appear in persist.upgrades.json
 		// the actual saved hashed tree name is "soldierclass.skill", even though skills may be shared
+        // (Though the backer file has the skills in pure form???)
 		putParser(".camping_skills.json", (new Parser() {
 			@Override
 			public void parseFile(Path filePath, byte[] file, Set<String> names) {
@@ -64,6 +74,7 @@ public class ReadNames {
 				if (arrArray != null) {
 					for (int i = 0; i < arrArray.size(); i++) {
 						String id = arrArray.get(i).getAsJsonObject().get("id").getAsString();
+                        names.add(id);
 						JsonArray classes = arrArray.get(i).getAsJsonObject().get("hero_classes").getAsJsonArray();
 						if (classes != null) {
 							for (JsonElement elem : classes) {
@@ -89,6 +100,14 @@ public class ReadNames {
 			public void parseFile(Path filePath, byte[] file, Set<String> names) {
 				addSimpleJSONArrayEntryIDs(file, "types", "id", names);
 				addSimpleJSONArrayEntryIDs(file, "goals", "id", names);
+			}
+		}));
+
+		// Quirks
+		putParser("quirk_library.json", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file, Set<String> names) {
+				addSimpleJSONArrayEntryIDs(file, "quirks", "id", names);
 			}
 		}));
 		

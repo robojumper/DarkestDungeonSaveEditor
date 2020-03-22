@@ -25,7 +25,6 @@
       display: flex;
       height: 100vh;
       flex-direction: column;
-      padding-bottom: 1em;
     }
 
     #mainarea {
@@ -50,15 +49,29 @@
       padding: 1.25em 0;
     }
 
+    #footer {
+      display: flex;
+      padding: 1.25em 0;
+    }
+
     .button {
       margin-left: 0.25em;
       margin-right: 0.25em;
       border: 1px solid #241d13;
       display: inline-block;
+      padding: 9px 23px;
+      white-space: nowrap;
+    }
+
+    .beforeform {
+      padding: 10px 0px;
+      align-content: center;
+    }
+
+    .uitext {
       font-family: Arial;
       font-size: 15px;
       font-weight: bold;
-      padding: 9px 23px;
       text-decoration: none;
     }
 
@@ -95,11 +108,16 @@
     }
 
     svg {
+      flex-shrink: 0;
       margin: 2px;
     }
 
     .spacer {
       flex-grow: 1;
+    }
+
+    .smallspacer {
+      flex-grow: 0.1;
     }
 
     .aceerror {
@@ -116,7 +134,7 @@
   <div>
     <div id="main">
       <div id="header">
-        <label id="uploadbutton" class="button button-enabled" title="Upload">
+        <label id="uploadbutton" class="button button-enabled uitext" title="Upload">
           <div class="buttoncontent">
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="16" viewBox="0 0 10 16">
               <path fill-rule="evenodd" d="M5 3L0 9h3v4h4V9h3L5 3z"></path>
@@ -125,7 +143,7 @@
           </div>
           <input id="filepick" type="file" style="display: none;" />
         </label>
-        <a id="downloadlink" class="button button-disabled" title="Download">
+        <a id="downloadlink" class="button button-disabled uitext" title="Download">
           <div class="buttoncontent">
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="16" viewBox="0 0 10 16">
               <path fill-rule="evenodd" d="M7 7V3H3v4H0l5 6 5-6H7z"></path>
@@ -135,7 +153,7 @@
         </a>
         <div class="spacer"></div>
 
-        <a class="button button-enabled" title="Crash Loop Fix Guide" target="_blank" rel="noopener"
+        <a class="button button-enabled uitext" title="Crash Loop Fix Guide" target="_blank" rel="noopener"
           href="https://gist.github.com/robojumper/4a84975d66d5b7c4d94e06b6aabd1f56">
           <div class="buttoncontent">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="16" viewBox="0 0 14 16">
@@ -146,7 +164,7 @@
             <span>Guide: crash loop fix</span>
           </div>
         </a>
-        <a class="button button-enabled" title="Visit GitHub repository" target="_blank" rel="noopener"
+        <a class="button button-enabled uitext" title="Visit GitHub repository" target="_blank" rel="noopener"
           href="https://github.com/robojumper/DarkestDungeonSaveEditor/tree/master/rust/ddsaveedit/wasm-ddsaveedit">
           <div class="buttoncontent">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
@@ -162,6 +180,21 @@
         <div id="maineditor">
           <div id="editor">Upload file above, or drag file here.</div>
         </div>
+      </div>
+      <div id="footer">
+        <a class="button button-disabled uitext" title='Darkest Dungeon save files usually contain integers that are hashes of strings.
+If possible, they are reversed and displayed with a "###". This utility can help calculate string hashes.'>
+          <div class="buttoncontent">
+            <span>hash utility</span>
+          </div>
+        </a>
+        <div class="smallspacer"></div>
+        <div class="beforeform uitext"><span>###</span></div>
+        <input type="text" id="hashinput" class="uitext" />
+        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="16" viewBox="0 0 10 16"
+          style="transform: translate(0px,10px);">
+          <path fill-rule="evenodd" d="M10 8L4 3v3H0v4h4v3l6-5z" /></svg>
+        <input type="text" readonly id="hashoutput" class="uitext" />
       </div>
     </div>
   </div>

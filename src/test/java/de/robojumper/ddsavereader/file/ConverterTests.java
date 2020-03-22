@@ -122,6 +122,7 @@ public class ConverterTests {
         testCorrectConversion("backgroundNames");
         testCorrectConversion("skillCooldownValues");
         testCorrectConversion("nonAsciiField");
+        testCorrectConversion("backerHeroes");
     }
 
     private List<String> getResourceFiles(String path) throws IOException {

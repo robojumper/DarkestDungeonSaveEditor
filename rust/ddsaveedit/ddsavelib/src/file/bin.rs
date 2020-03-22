@@ -515,7 +515,7 @@ impl FieldType {
                 )?))))
             } else {
                 Err(FromBinError::UnknownField(
-                    (*name_trace.last().unwrap()).as_ref().to_owned(),
+                    name.to_owned(),
                 ))
             }
         } else if let Some(mut val) = hardcoded_type(name_trace, name) {
@@ -594,7 +594,7 @@ impl FieldType {
                 skip!(reader, to_skip_if_aligned);
                 if aligned_max_len == 4 {
                     Ok(Int(reader.read_i32::<LittleEndian>()?))
-                } else {
+                } else if aligned_max_len > 4 {
                     let len = reader.read_i32::<LittleEndian>()? as usize;
                     if len.checked_add(4).ok_or(FromBinError::FormatErr)? == aligned_max_len {
                         let mut buf = vec![0u8; len];
@@ -609,9 +609,13 @@ impl FieldType {
                         Ok(String(string))
                     } else {
                         Err(FromBinError::UnknownField(
-                            (*name_trace.last().unwrap()).as_ref().to_owned(),
+                            name.to_owned(),
                         ))
                     }
+                } else {
+                    Err(FromBinError::UnknownField(
+                        name.to_owned(),
+                    ))
                 }
             }
         }

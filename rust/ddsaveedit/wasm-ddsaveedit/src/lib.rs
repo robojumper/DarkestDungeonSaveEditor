@@ -136,9 +136,16 @@ pub fn decode(mut input: &[u8]) -> String {
         }
         Err(err) => match err {
             FromBinError::NotBinFile => "Error: File does not appear to be a save file".to_owned(),
-            _ => "Error: error decoding, please file a GitHub issue at 
-                \"https://github.com/robojumper/DarkestDungeonSaveEditor/issues\""
-                .to_owned(),
+            _ => format!("Error: {:?} -- error decoding, please file a GitHub issue at 
+            \"https://github.com/robojumper/DarkestDungeonSaveEditor/issues\"", err),
         },
     }
+}
+
+#[wasm_bindgen]
+pub fn calc_hash(mut s: &str) -> i32 {
+    if s.starts_with("###") {
+        s = &s[3..];
+    }
+    ddsavelib::name_hash(s)
 }
