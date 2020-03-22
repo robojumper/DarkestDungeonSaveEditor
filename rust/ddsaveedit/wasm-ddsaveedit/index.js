@@ -151,9 +151,9 @@ rust.then(wasm => {
 			var editor = ace.edit("editor");
 			var annots = editor.session.getAnnotations();
 			if (annots.length >= 1) {
-				editor.resize(true);
+				editor.focus();
 				editor.scrollToLine(annots[0].row, true, true, function () {});
-				editor.gotoLine(annots[0].row, annots[0].column, true);
+				editor.gotoLine(annots[0].row + 1, annots[0].column, true);
 			}
 			stopEvent(ev);
 		}

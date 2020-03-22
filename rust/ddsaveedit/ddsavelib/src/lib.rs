@@ -1,4 +1,5 @@
 #![feature(try_reserve)]
+#![feature(or_patterns)]
 #![feature(generators)]
 #![feature(generator_trait)]
 

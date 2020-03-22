@@ -502,7 +502,23 @@ impl FieldType {
     ) -> Result<Self, FromBinError> {
         use FieldType::*;
 
-        if let Some(mut val) = hardcoded_type(name_trace, name) {
+        // This could be detected heuristically, but chances are we'll incorrectly re-encode
+        // them because they'll look like plain objects to the JSON decoder.
+        // Also, this doesn't use `hardcoded_type` because we'd have to pay for that lookup
+        // on every object when decoding from JSON.
+        if name == "raw_data" || name == "static_save" {
+            skip!(reader, to_skip_if_aligned);
+            let len = reader.read_i32::<LittleEndian>()? as usize;
+            if len.checked_add(4).ok_or(FromBinError::FormatErr)? == max_len - to_skip_if_aligned {
+                Ok(FieldType::File(Some(Box::new(self::File::try_from_bin(
+                    reader.by_ref(),
+                )?))))
+            } else {
+                Err(FromBinError::UnknownField(
+                    (*name_trace.last().unwrap()).as_ref().to_owned(),
+                ))
+            }
+        } else if let Some(mut val) = hardcoded_type(name_trace, name) {
             match &mut val {
                 Float(ref mut f) => {
                     skip!(reader, to_skip_if_aligned);
@@ -583,19 +599,14 @@ impl FieldType {
                     if len.checked_add(4).ok_or(FromBinError::FormatErr)? == aligned_max_len {
                         let mut buf = vec![0u8; len];
                         reader.read_exact(&mut buf)?;
-                        let mut buf: &[u8] = &buf;
-                        if len >= 4 && buf[0..4] == Header::MAGIC_NUMBER {
-                            Ok(File(Some(Box::new(self::File::try_from_bin(&mut buf)?))))
-                        } else {
-                            let string = {
-                                let cs = CStr::from_bytes_with_nul(&buf)?.to_str()?;
-                                let mut n = std::string::String::new();
-                                n.try_reserve_exact(cs.len())?;
-                                n.push_str(cs);
-                                n
-                            };
-                            Ok(String(string))
-                        }
+                        let string = {
+                            let cs = CStr::from_bytes_with_nul(&buf)?.to_str()?;
+                            let mut n = std::string::String::new();
+                            n.try_reserve_exact(cs.len())?;
+                            n.push_str(cs);
+                            n
+                        };
+                        Ok(String(string))
                     } else {
                         Err(FromBinError::UnknownField(
                             (*name_trace.last().unwrap()).as_ref().to_owned(),

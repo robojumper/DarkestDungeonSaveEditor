@@ -24,7 +24,7 @@ impl File {
         let slic = std::str::from_utf8(&x)?;
 
         let lex = &mut Parser::new(slic).peekable();
-        Self::try_from_json_parser(lex)
+        Self::try_from_json_parser(lex, false)
     }
 
     fn read_version_field<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
@@ -46,6 +46,7 @@ impl File {
 
     fn try_from_json_parser<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
         lex: &mut std::iter::Peekable<T>,
+        inner: bool,
     ) -> Result<Self, FromJsonError> {
         let mut s = Self {
             h: Default::default(),
@@ -77,6 +78,19 @@ impl File {
         };
 
         lex.expect(TokenType::EndObject)?;
+
+        if !inner {
+            let next = lex.next();
+            if let Some(Ok(Token { span, .. })) = next {
+                return Err(FromJsonError::Expected(
+                    "end of file".to_owned(),
+                    span.first,
+                    span.end,
+                ));
+            } else if let Some(Err(e)) = next {
+                return Err(e.into());
+            }
+        }
 
         let data_size = s.fixup_offsets()?;
         s.h.fixup_header(s.o.len(), s.f.len(), vers_num, data_size)?;
@@ -129,7 +143,7 @@ impl File {
         match lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?.kind {
             TokenType::BeginObject => {
                 if &name == "raw_data" || &name == "static_save" {
-                    let inner = File::try_from_json_parser(lex)?;
+                    let inner = File::try_from_json_parser(lex, true)?;
                     self.dat
                         .create_data(name, parent, FieldType::File(Some(Box::new(inner))));
                 } else {

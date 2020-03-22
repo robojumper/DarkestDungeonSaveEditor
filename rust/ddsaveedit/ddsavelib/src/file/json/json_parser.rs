@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    iter::Peekable,
+    iter::{FusedIterator, Peekable},
     ops::{Generator, GeneratorState},
     pin::Pin,
 };
@@ -77,9 +77,18 @@ impl<'a> Lexer<'a> {
     }
 }
 
+macro_rules! repeatedly_matches {
+    ($e:expr, $($p:pat),+ $(,)*) => {
+        ($(matches!($e, Some((_, $p))) && )+ true)
+    };
+}
+
 impl<'a> Iterator for Lexer<'a> {
     type Item = LexerToken;
     fn next(&mut self) -> Option<Self::Item> {
+        // Notes on matches!: on EOF, the match will fail and we'll likely bail out
+        // with a `TokenType::Invalid`. Because `CharIndices` is fused, subsequent calls will simply
+        // simply return `None` here.
         let mut tup;
         // Skip whitespace
         while {
@@ -95,8 +104,7 @@ impl<'a> Iterator for Lexer<'a> {
             ',' => TokenType::Comma,
             't' => {
                 // Attempt `true`
-                if self.it.next()?.1 == 'r' && self.it.next()?.1 == 'u' && self.it.next()?.1 == 'e'
-                {
+                if repeatedly_matches!(self.it.next(), 'r', 'u', 'e') {
                     TokenType::BoolTrue
                 } else {
                     TokenType::Invalid
@@ -104,11 +112,7 @@ impl<'a> Iterator for Lexer<'a> {
             }
             'f' => {
                 // Attempt `false`
-                if self.it.next()?.1 == 'a'
-                    && self.it.next()?.1 == 'l'
-                    && self.it.next()?.1 == 's'
-                    && self.it.next()?.1 == 'e'
-                {
+                if repeatedly_matches!(self.it.next(), 'a', 'l', 's', 'e') {
                     TokenType::BoolFalse
                 } else {
                     TokenType::Invalid
@@ -116,8 +120,7 @@ impl<'a> Iterator for Lexer<'a> {
             }
             'n' => {
                 // Attempt `null`
-                if self.it.next()?.1 == 'u' && self.it.next()?.1 == 'l' && self.it.next()?.1 == 'l'
-                {
+                if repeatedly_matches!(self.it.next(), 'u', 'l', 'l') {
                     TokenType::Null
                 } else {
                     TokenType::Invalid
@@ -142,7 +145,10 @@ impl<'a> Iterator for Lexer<'a> {
             }
             '0'..='9' | '-' | '+' | '.' | 'E' | 'e' => {
                 // Attempt number
-                while matches!(self.it.peek()?.1, '0'..='9' | '-' | '+' | '.' | 'E' | 'e') {
+                while matches!(
+                    self.it.peek(),
+                    Some((_, '0'..='9' | '-' | '+' | '.' | 'E' | 'e'))
+                ) {
                     self.it.next();
                 }
                 TokenType::Number
@@ -162,6 +168,9 @@ impl<'a> Iterator for Lexer<'a> {
         })
     }
 }
+
+// CharIndices is Fused, we are Fused as well.
+impl<'a> FusedIterator for Lexer<'a> {}
 
 #[derive(Copy, Clone, Debug)]
 pub struct Span {
