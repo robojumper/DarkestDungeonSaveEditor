@@ -136,8 +136,11 @@ pub fn decode(mut input: &[u8]) -> String {
         }
         Err(err) => match err {
             FromBinError::NotBinFile => "Error: File does not appear to be a save file".to_owned(),
-            _ => format!("Error: {:?} -- error decoding, please file a GitHub issue at 
-            \"https://github.com/robojumper/DarkestDungeonSaveEditor/issues\"", err),
+            _ => format!(
+                "Error: {:?} -- error decoding, please file a GitHub issue at 
+            \"https://github.com/robojumper/DarkestDungeonSaveEditor/issues\"",
+                err
+            ),
         },
     }
 }

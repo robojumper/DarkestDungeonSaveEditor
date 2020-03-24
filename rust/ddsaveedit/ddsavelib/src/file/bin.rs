@@ -260,7 +260,7 @@ impl Field {
             IntVector(ref v) => align + 4 + v.len() * 4,
             StringVector(ref v) => {
                 let mut tmp_size = 4;
-                for s in v {
+                for s in v.iter() {
                     tmp_size = (tmp_size + 3) & !0b11;
                     tmp_size += 4;
                     tmp_size += s.len() + 1;
@@ -327,7 +327,7 @@ impl Field {
             IntVector(ref v) => {
                 inwriter.write_all(align_zeros)?;
                 inwriter.write_u32::<LittleEndian>(v.len() as u32)?;
-                for &i in v {
+                for &i in v.iter() {
                     inwriter.write_i32::<LittleEndian>(i)?;
                 }
                 align + 4 + v.len() * 4
@@ -337,7 +337,7 @@ impl Field {
                 inwriter.write_u32::<LittleEndian>(v.len() as u32)?;
                 let mut tmp_size = 4;
                 let any_zeroes = &[0u8; 4];
-                for s in v {
+                for s in v.iter() {
                     let additional_align = ((tmp_size + 3) & !0b11) - tmp_size;
                     inwriter.write_all(&any_zeroes[0..additional_align])?;
                     inwriter.write_u32::<LittleEndian>(s.len() as u32 + 1)?;
@@ -351,7 +351,7 @@ impl Field {
             }
             FloatArray(ref v) => {
                 inwriter.write_all(align_zeros)?;
-                for &f in v {
+                for &f in v.iter() {
                     inwriter.write_f32::<LittleEndian>(f)?;
                 }
                 align + 4 * v.len()
@@ -431,7 +431,8 @@ pub fn decode_fields_bin<R: Read>(
         let data_begin = off + len;
         let data_end = off + offset_sizes[&(field.offset as usize)]; // exclusive
         let field_type = if field.is_object() {
-            FieldType::Object(vec![])
+            let num_childs = o[field.object_index().unwrap()].num_direct_childs;
+            FieldType::Object(vec![FieldIdx::dangling(); num_childs as usize].into_boxed_slice())
         } else {
             if data_end <= data_begin {
                 return Err(FromBinError::FormatErr);
@@ -463,7 +464,7 @@ pub fn decode_fields_bin<R: Read>(
             }
         } else {
             if let FieldType::Object(ref mut v) = data[o[*obj_stack.last().unwrap()].field].tipe {
-                v.push(FieldIdx(idx as u32))
+                v[*obj_nums.last_mut().unwrap() as usize] = FieldIdx(idx as u32);
             } else {
                 return Err(FromBinError::FormatErr);
             }
@@ -514,9 +515,7 @@ impl FieldType {
                     reader.by_ref(),
                 )?))))
             } else {
-                Err(FromBinError::UnknownField(
-                    name.to_owned(),
-                ))
+                Err(FromBinError::UnknownField(name.to_owned()))
             }
         } else if let Some(mut val) = hardcoded_type(name_trace, name) {
             match &mut val {
@@ -527,15 +526,18 @@ impl FieldType {
                 IntVector(ref mut v) => {
                     skip!(reader, to_skip_if_aligned);
                     let num = reader.read_u32::<LittleEndian>()? as usize;
-                    v.try_reserve_exact(num)?;
+                    let mut tmp_vec = vec![];
+                    tmp_vec.try_reserve_exact(num)?;
                     for _ in 0..num {
-                        v.push(reader.read_i32::<LittleEndian>()?);
+                        tmp_vec.push(reader.read_i32::<LittleEndian>()?);
                     }
+                    *v = tmp_vec.into_boxed_slice();
                 }
                 StringVector(ref mut v) => {
                     skip!(reader, to_skip_if_aligned);
                     let num = reader.read_u32::<LittleEndian>()? as usize;
-                    v.try_reserve_exact(num)?;
+                    let mut tmp_vec = vec![];
+                    tmp_vec.try_reserve_exact(num)?;
                     let mut to_skip = 0;
                     for _ in 0..num {
                         skip!(reader, to_skip);
@@ -549,17 +551,20 @@ impl FieldType {
                             n.push_str(cs);
                             n
                         };
-                        v.push(string);
+                        tmp_vec.push(string);
                         to_skip = ((len + 3) & !0b11) - len;
                     }
+                    *v = tmp_vec.into_boxed_slice();
                 }
                 FloatArray(ref mut v) => {
                     skip!(reader, to_skip_if_aligned);
                     let num = (max_len - to_skip_if_aligned) / 4;
-                    v.try_reserve_exact(num)?;
+                    let mut tmp_vec = vec![];
+                    tmp_vec.try_reserve_exact(num)?;
                     for _ in 0..num {
-                        v.push(reader.read_f32::<LittleEndian>()?);
+                        tmp_vec.push(reader.read_f32::<LittleEndian>()?);
                     }
+                    *v = tmp_vec.into_boxed_slice();
                 }
                 TwoInt(ref mut i1, ref mut i2) => {
                     skip!(reader, to_skip_if_aligned);
@@ -606,16 +611,12 @@ impl FieldType {
                             n.push_str(cs);
                             n
                         };
-                        Ok(String(string))
+                        Ok(String(string.into_boxed_str()))
                     } else {
-                        Err(FromBinError::UnknownField(
-                            name.to_owned(),
-                        ))
+                        Err(FromBinError::UnknownField(name.to_owned()))
                     }
                 } else {
-                    Err(FromBinError::UnknownField(
-                        name.to_owned(),
-                    ))
+                    Err(FromBinError::UnknownField(name.to_owned()))
                 }
             }
         }

@@ -149,7 +149,7 @@ impl File {
                 } else {
                     lex.next();
                     self.dat
-                        .create_data(name.clone(), parent, FieldType::Object(vec![]));
+                        .create_data(name.clone(), parent, FieldType::Object(Box::new([])));
                     let obj_index = self
                         .o
                         .create_object(field_index, parent, 0, 0)
@@ -166,7 +166,7 @@ impl File {
                     self.o[obj_index].num_direct_childs = childs.len() as u32;
                     self.o[obj_index].num_all_childs = self.f.len() - 1 - field_index.numeric();
                     if let FieldType::Object(ref mut chl) = self.dat[field_index].tipe {
-                        *chl = childs;
+                        *chl = childs.into_boxed_slice();
                     } else {
                         unreachable!("pushed obj earlier");
                     }
@@ -410,15 +410,16 @@ impl FieldType {
                 }
                 FieldType::IntVector(ref mut v) => {
                     lex.expect(TokenType::BeginArray)?;
+                    let mut tmp_vec = vec![];
                     loop {
                         let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
                         match tok.kind {
                             TokenType::EndArray => break,
                             TokenType::Number => {
-                                v.push(parse_prim!(tok, i32, "integer"));
+                                tmp_vec.push(parse_prim!(tok, i32, "integer"));
                             }
                             TokenType::String if tok.dat.starts_with("###") => {
-                                v.push(name_hash(&tok.dat[3..]));
+                                tmp_vec.push(name_hash(&tok.dat[3..]));
                             }
                             _ => {
                                 return Err(FromJsonError::Expected(
@@ -429,15 +430,17 @@ impl FieldType {
                             }
                         }
                     }
+                    *v = tmp_vec.into_boxed_slice();
                 }
                 FieldType::StringVector(ref mut v) => {
                     lex.expect(TokenType::BeginArray)?;
+                    let mut tmp_vec = vec![];
                     loop {
                         let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
                         match tok.kind {
                             TokenType::EndArray => break,
                             TokenType::String => {
-                                v.push(tok.dat.into_owned());
+                                tmp_vec.push(tok.dat.into_owned());
                             }
                             _ => {
                                 return Err(FromJsonError::Expected(
@@ -448,15 +451,17 @@ impl FieldType {
                             }
                         }
                     }
+                    *v = tmp_vec.into_boxed_slice();
                 }
                 FieldType::FloatArray(ref mut v) => {
                     lex.expect(TokenType::BeginArray)?;
+                    let mut tmp_vec = vec![];
                     loop {
                         let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
                         match tok.kind {
                             TokenType::EndArray => break,
                             TokenType::Number => {
-                                v.push(parse_prim!(tok, f32, "float"));
+                                tmp_vec.push(parse_prim!(tok, f32, "float"));
                             }
                             _ => {
                                 return Err(FromJsonError::Expected(
@@ -467,6 +472,7 @@ impl FieldType {
                             }
                         }
                     }
+                    *v = tmp_vec.into_boxed_slice();
                 }
                 FieldType::TwoInt(ref mut i1, ref mut i2) => {
                     lex.expect(TokenType::BeginArray)?;
@@ -529,7 +535,7 @@ impl FieldType {
                     if tok.dat.starts_with("###") {
                         FieldType::Int(name_hash(&tok.dat[3..]))
                     } else {
-                        FieldType::String(tok.dat.into_owned())
+                        FieldType::String(tok.dat.into_owned().into_boxed_str())
                     }
                 }
                 TokenType::BoolTrue => FieldType::Bool(true),

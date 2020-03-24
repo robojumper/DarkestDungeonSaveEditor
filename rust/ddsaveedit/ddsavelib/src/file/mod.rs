@@ -223,6 +223,11 @@ impl FieldIdx {
     pub fn numeric(self) -> u32 {
         self.0
     }
+
+    /// Create a dangling field index, to be replaced later
+    pub fn dangling() -> Self {
+        Self(0)
+    }
 }
 
 impl Fields {
@@ -358,30 +363,45 @@ pub enum FieldType {
     Int(i32),
     Float(f32),
     Char(char),
-    String(String),
-    IntVector(Vec<i32>),
-    StringVector(Vec<String>),
-    FloatArray(Vec<f32>),
+    String(Box<str>),
+    IntVector(Box<[i32]>),
+    StringVector(Box<[String]>),
+    FloatArray(Box<[f32]>),
     TwoInt(i32, i32),
     File(Option<Box<File>>),
-    Object(Vec<FieldIdx>),
+    Object(Box<[FieldIdx]>),
 }
 
 macro_rules! types {
-    ($types:ident, $([$e:ident, $($i:literal),+]), + $(,)*) => {
-        const $types: &[(&FieldType, &[&str])] = &[$((types!($e), &[$($i,)+]),)+];
+    ($insert:expr, $([$e:ident, $($i:literal),+]), + $(,)*) => {
+        $(
+            $insert((types!($e), &[$($i,)+]));
+        )+
     };
-    (Float) => {&FieldType::Float(0.0)};
-    (Char) => {&FieldType::Char('\0')};
-    (IntVector) => {&FieldType::IntVector(std::vec::Vec::new())};
-    (StringVector) => {&FieldType::StringVector(std::vec::Vec::new())};
-    (FloatArray) => {&FieldType::FloatArray(std::vec::Vec::new())};
-    (TwoInt) => {&FieldType::TwoInt(0, 0)};
-    (TwoBool) => {&FieldType::TwoBool(false, false)};
+    (Float) => {FieldType::Float(0.0)};
+    (Char) => {FieldType::Char('\0')};
+    (IntVector) => {FieldType::IntVector(Box::new([]))};
+    (StringVector) => {FieldType::StringVector(Box::new([]))};
+    (FloatArray) => {FieldType::FloatArray(Box::new([]))};
+    (TwoInt) => {FieldType::TwoInt(0, 0)};
+    (TwoBool) => {FieldType::TwoBool(false, false)};
 }
 
-#[rustfmt::skip]
-types!(TYPES,
+pub fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Option<FieldType> {
+    use once_cell::sync::OnceCell;
+    type PathTypeList<'a> = Vec<(&'a [&'a str], FieldType)>;
+    static TYPES_MAP: OnceCell<HashMap<&str, PathTypeList>> = OnceCell::new();
+    if let Some(candidates) = TYPES_MAP
+        .get_or_init(|| {
+            let mut map = HashMap::new();
+            let mut insert = |(tip, trace): (FieldType, &'static [&'static str])| {
+                map.entry(*trace.last().unwrap())
+                    .or_insert_with(Vec::new)
+                    .push((&trace[0..trace.len() - 1], tip));
+            };
+
+            #[rustfmt::skip]
+types!(insert,
     [Char, "requirement_code"],
 
     [Float, "current_hp"],
@@ -444,18 +464,6 @@ types!(TYPES,
     [TwoBool, "profile_options", "values", "multiplied_enemy_crits"],
 );
 
-pub fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Option<FieldType> {
-    use once_cell::sync::OnceCell;
-    type PathTypeList<'a> = Vec<(&'a [&'a str], &'a FieldType)>;
-    static TYPES_MAP: OnceCell<HashMap<&str, PathTypeList>> = OnceCell::new();
-    if let Some(candidates) = TYPES_MAP
-        .get_or_init(|| {
-            let mut map = HashMap::new();
-            TYPES.iter().for_each(|(tip, trace)| {
-                map.entry(*trace.last().unwrap())
-                    .or_insert_with(Vec::new)
-                    .push((&trace[0..trace.len() - 1], *tip));
-            });
             map
         })
         .get(name.as_ref())
