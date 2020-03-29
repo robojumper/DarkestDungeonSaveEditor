@@ -9,7 +9,7 @@ use crate::{
     err::*,
     util::{escape, name_hash},
 };
-use json_parser::{ExpectExt, Parser, Token, TokenType};
+use json_parser::{ExpectExt, JsonError, Parser, Token, TokenType};
 use string_cache::{Atom, EmptyStaticAtomSet};
 
 mod json_parser;
@@ -388,7 +388,7 @@ impl File {
 }
 
 impl FieldType {
-    pub(crate) fn try_from_json<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
+    fn try_from_json<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
         lex: &mut T,
         name_stack: &'_ [impl AsRef<str>],
         name: impl AsRef<str>,

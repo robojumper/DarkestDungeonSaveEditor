@@ -95,28 +95,6 @@ impl std::fmt::Display for FromJsonError {
     }
 }
 
-impl From<JsonError> for FromJsonError {
-    fn from(err: JsonError) -> Self {
-        <&JsonError as Into<FromJsonError>>::into(&err)
-    }
-}
-
-impl<'a> From<&'a JsonError> for FromJsonError {
-    fn from(err: &'a JsonError) -> Self {
-        match err {
-            JsonError::EOF => FromJsonError::UnexpEOF,
-            JsonError::ExpectedValue(b, c) => FromJsonError::JsonErr(*b, *c),
-            JsonError::BareControl(b, c) => {
-                FromJsonError::LiteralFormat("bare control character".to_owned(), *b, *c)
-            }
-            JsonError::BadNumber(b, c) => {
-                FromJsonError::LiteralFormat("bad number format".to_owned(), *b, *c)
-            }
-            JsonError::Expected(a, b, c) => FromJsonError::Expected(a.clone(), *b, *c),
-        }
-    }
-}
-
 impl From<std::num::TryFromIntError> for FromJsonError {
     fn from(_: std::num::TryFromIntError) -> Self {
         Self::IntegerErr
@@ -138,20 +116,3 @@ impl From<std::io::Error> for FromJsonError {
 }
 
 impl std::error::Error for FromJsonError {}
-
-#[derive(Debug, Clone)]
-pub(crate) enum JsonError {
-    EOF,
-    ExpectedValue(usize, usize),
-    Expected(String, usize, usize),
-    BareControl(usize, usize),
-    BadNumber(usize, usize),
-}
-
-impl std::fmt::Display for JsonError {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        std::fmt::Debug::fmt(self, fmt)
-    }
-}
-
-impl std::error::Error for JsonError {}

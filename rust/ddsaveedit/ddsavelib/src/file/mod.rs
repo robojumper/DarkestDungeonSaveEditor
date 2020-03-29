@@ -75,40 +75,29 @@ pub struct File {
     dat: Data,
 }
 
-impl File {
-    fn fixup_offsets(&mut self) -> Result<u32, std::num::TryFromIntError> {
-        let mut offset = 0;
-        for (idx, f) in self.f.iter_mut() {
-            f.offset = u32::try_from(offset)?;
-            offset = self.dat[idx].add_bin_size(offset);
-        }
-        Ok(u32::try_from(offset)?)
-    }
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Header {
-    pub magic: [u8; 4],
+struct Header {
+    magic: [u8; 4],
     //version: [u8; 4],
-    pub version: u32,
-    pub header_len: u32,
+    version: u32,
+    header_len: u32,
     //zeroes1: [u8; 4],
-    pub objects_size: u32,
-    pub objects_num: u32,
-    pub objects_offset: u32,
+    objects_size: u32,
+    objects_num: u32,
+    objects_offset: u32,
     //zeroes2: [u8; 16],
-    pub fields_num: u32,
-    pub fields_offset: u32,
+    fields_num: u32,
+    fields_offset: u32,
     //zeroes3: [u32; 4],
-    pub data_size: u32,
-    pub data_offset: u32,
+    data_size: u32,
+    data_offset: u32,
 }
 
 impl Header {
-    pub const BIN_SIZE: usize = 64;
-    pub const MAGIC_NUMBER: [u8; 4] = [0x01, 0xB1, 0x00, 0x00];
+    const BIN_SIZE: usize = 64;
+    const MAGIC_NUMBER: [u8; 4] = [0x01, 0xB1, 0x00, 0x00];
 
-    pub fn fixup_header(
+    fn fixup_header(
         &mut self,
         num_objects: u32,
         num_fields: u32,
@@ -128,37 +117,33 @@ impl Header {
         Ok(())
     }
 
-    pub fn version(&self) -> u32 {
+    fn version(&self) -> u32 {
         self.version
-    }
-
-    pub fn calc_bin_size(&self) -> usize {
-        Header::BIN_SIZE
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ObjectInfo {
-    pub parent: Option<ObjIdx>,
-    pub field: FieldIdx,
-    pub num_direct_childs: u32,
-    pub num_all_childs: u32,
+struct ObjectInfo {
+    parent: Option<ObjIdx>,
+    field: FieldIdx,
+    num_direct_childs: u32,
+    num_all_childs: u32,
 }
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct Objects {
-    pub objs: Vec<ObjectInfo>,
+struct Objects {
+    objs: Vec<ObjectInfo>,
 }
 
 impl Objects {
-    pub fn iter(&self) -> impl Iterator<Item = &ObjectInfo> {
+    fn iter(&self) -> impl Iterator<Item = &ObjectInfo> {
         self.objs.iter()
     }
 
     // Parent Object indices are i32 because a -1 indicates no parent
-    pub fn len(&self) -> u32 {
+    fn len(&self) -> u32 {
         self.objs.len() as u32
     }
 
-    pub fn create_object(
+    fn create_object(
         &mut self,
         f: FieldIdx,
         p: Option<ObjIdx>,
@@ -195,58 +180,58 @@ impl IndexMut<ObjIdx> for Objects {
     }
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Fields {
+struct Fields {
     fields: Vec<FieldInfo>,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct FieldInfo {
-    pub name_hash: i32,
-    pub offset: u32,
-    pub field_info: u32,
+struct FieldInfo {
+    name_hash: i32,
+    offset: u32,
+    field_info: u32,
 }
 
 /// Represents the object index. Always less than `i32::MAX`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct ObjIdx(u32);
+struct ObjIdx(u32);
 
 impl ObjIdx {
     /// Returns the numeric value of this object index
-    pub fn numeric(self) -> u32 {
+    fn numeric(self) -> u32 {
         self.0 as u32
     }
 }
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct FieldIdx(u32);
+struct FieldIdx(u32);
 
 impl FieldIdx {
     /// Returns the numeric value of this field index
-    pub fn numeric(self) -> u32 {
+    fn numeric(self) -> u32 {
         self.0
     }
 
     /// Create a dangling field index, to be replaced later
-    pub fn dangling() -> Self {
+    fn dangling() -> Self {
         Self(0)
     }
 }
 
 impl Fields {
     #[allow(unused)]
-    pub fn iter(&self) -> impl Iterator<Item = (FieldIdx, &FieldInfo)> {
+    fn iter(&self) -> impl Iterator<Item = (FieldIdx, &FieldInfo)> {
         self.fields
             .iter()
             .enumerate()
             .map(|(f, a)| (FieldIdx(f as u32), a))
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (FieldIdx, &mut FieldInfo)> {
+    fn iter_mut(&mut self) -> impl Iterator<Item = (FieldIdx, &mut FieldInfo)> {
         self.fields
             .iter_mut()
             .enumerate()
             .map(|(f, a)| (FieldIdx(f as u32), a))
     }
 
-    pub fn create_field(&mut self, name: &str) -> Option<FieldIdx> {
+    fn create_field(&mut self, name: &str) -> Option<FieldIdx> {
         if self.len() == std::u32::MAX {
             None
         } else {
@@ -263,24 +248,24 @@ impl Fields {
         }
     }
 
-    pub fn len(&self) -> u32 {
+    fn len(&self) -> u32 {
         self.fields.len() as u32
     }
 }
 
 impl FieldInfo {
-    pub const NAME_LEN_BITS: u32 = 0b1_1111_1111;
-    pub const OBJ_IDX_BITS: u32 = 0b1111_1111_1111_1111_1111;
+    const NAME_LEN_BITS: u32 = 0b1_1111_1111;
+    const OBJ_IDX_BITS: u32 = 0b1111_1111_1111_1111_1111;
 
-    pub fn is_object(&self) -> bool {
+    fn is_object(&self) -> bool {
         (self.field_info & 0b1) == 1
     }
 
-    pub fn name_length(&self) -> u32 {
+    fn name_length(&self) -> u32 {
         (self.field_info >> 2) & Self::NAME_LEN_BITS
     }
 
-    pub fn object_index(&self) -> Option<ObjIdx> {
+    fn object_index(&self) -> Option<ObjIdx> {
         if self.is_object() {
             Some(ObjIdx((self.field_info >> 11) & Self::OBJ_IDX_BITS))
         } else {
@@ -315,14 +300,14 @@ impl IndexMut<FieldIdx> for Fields {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Field {
-    pub name: Atom<EmptyStaticAtomSet>,
-    pub parent: Option<ObjIdx>,
-    pub tipe: FieldType,
+struct Field {
+    name: Atom<EmptyStaticAtomSet>,
+    parent: Option<ObjIdx>,
+    tipe: FieldType,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Data {
+struct Data {
     dat: Vec<Field>,
 }
 
@@ -342,11 +327,11 @@ impl IndexMut<FieldIdx> for Data {
 }
 
 impl Data {
-    pub fn iter(&self) -> impl Iterator<Item = &Field> {
+    fn iter(&self) -> impl Iterator<Item = &Field> {
         self.dat.iter()
     }
 
-    pub fn create_data(
+    fn create_data(
         &mut self,
         name: Atom<EmptyStaticAtomSet>,
         parent: Option<ObjIdx>,
@@ -357,7 +342,7 @@ impl Data {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum FieldType {
+enum FieldType {
     Bool(bool),
     TwoBool(bool, bool),
     Int(i32),
@@ -387,7 +372,7 @@ macro_rules! types {
     (TwoBool) => {FieldType::TwoBool(false, false)};
 }
 
-pub fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Option<FieldType> {
+fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Option<FieldType> {
     use once_cell::sync::OnceCell;
     type PathTypeList<'a> = Vec<(&'a [&'a str], FieldType)>;
     static TYPES_MAP: OnceCell<HashMap<&str, PathTypeList>> = OnceCell::new();

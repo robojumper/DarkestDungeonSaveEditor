@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    err::JsonError,
+    err::FromJsonError,
     util::{is_whitespace, unescape},
 };
 
@@ -226,7 +226,46 @@ macro_rules! maybe_ungen {
     }};
 }
 
-pub(crate) struct Parser<'a> {
+#[derive(Debug, Clone)]
+pub enum JsonError {
+    EOF,
+    ExpectedValue(usize, usize),
+    Expected(String, usize, usize),
+    BareControl(usize, usize),
+    BadNumber(usize, usize),
+}
+
+impl std::fmt::Display for JsonError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        std::fmt::Debug::fmt(self, fmt)
+    }
+}
+
+impl std::error::Error for JsonError {}
+
+impl From<JsonError> for FromJsonError {
+    fn from(err: JsonError) -> Self {
+        <&JsonError as Into<FromJsonError>>::into(&err)
+    }
+}
+
+impl<'a> From<&'a JsonError> for FromJsonError {
+    fn from(err: &'a JsonError) -> Self {
+        match err {
+            JsonError::EOF => FromJsonError::UnexpEOF,
+            JsonError::ExpectedValue(b, c) => FromJsonError::JsonErr(*b, *c),
+            JsonError::BareControl(b, c) => {
+                FromJsonError::LiteralFormat("bare control character".to_owned(), *b, *c)
+            }
+            JsonError::BadNumber(b, c) => {
+                FromJsonError::LiteralFormat("bad number format".to_owned(), *b, *c)
+            }
+            JsonError::Expected(a, b, c) => FromJsonError::Expected(a.clone(), *b, *c),
+        }
+    }
+}
+
+pub struct Parser<'a> {
     gen: Pin<Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + 'a>>,
 }
 

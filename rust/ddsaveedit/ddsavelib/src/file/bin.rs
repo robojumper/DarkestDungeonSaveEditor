@@ -45,6 +45,15 @@ impl File {
         }
         Ok(())
     }
+
+    pub fn fixup_offsets(&mut self) -> Result<u32, std::num::TryFromIntError> {
+        let mut offset = 0;
+        for (idx, f) in self.f.iter_mut() {
+            f.offset = u32::try_from(offset)?;
+            offset = self.dat[idx].add_bin_size(offset);
+        }
+        Ok(u32::try_from(offset)?)
+    }
 }
 
 impl Header {
@@ -146,6 +155,10 @@ impl Header {
         inwriter.write_all(buf)?;
         Ok(())
     }
+
+    fn calc_bin_size(&self) -> usize {
+        Header::BIN_SIZE
+    }
 }
 
 impl Objects {
@@ -196,13 +209,13 @@ impl Objects {
         Ok(())
     }
 
-    pub fn calc_bin_size(&self) -> usize {
+    fn calc_bin_size(&self) -> usize {
         4 * 4 * self.objs.len()
     }
 }
 
 impl Fields {
-    pub fn try_from_bin<R: Read>(reader: &'_ mut R, header: &Header) -> Result<Self, FromBinError> {
+    fn try_from_bin<R: Read>(reader: &'_ mut R, header: &Header) -> Result<Self, FromBinError> {
         let mut f = Fields {
             fields: {
                 let mut v = vec![];
@@ -227,7 +240,7 @@ impl Fields {
         Ok(f)
     }
 
-    pub fn write_to_bin<W: Write>(&self, inwriter: &'_ mut W) -> std::io::Result<()> {
+    fn write_to_bin<W: Write>(&self, inwriter: &'_ mut W) -> std::io::Result<()> {
         let mut buf = vec![0u8; 3 * 4];
         for o in &self.fields {
             let mut writer: &mut [u8] = &mut buf;
@@ -239,13 +252,13 @@ impl Fields {
         Ok(())
     }
 
-    pub fn calc_bin_size(&self) -> usize {
+    fn calc_bin_size(&self) -> usize {
         4 * 3 * self.fields.len()
     }
 }
 
 impl Field {
-    pub fn add_bin_size(&self, mut existing_size: usize) -> usize {
+    fn add_bin_size(&self, mut existing_size: usize) -> usize {
         use FieldType::*;
 
         existing_size += self.name.len() + 1;
@@ -278,7 +291,7 @@ impl Field {
     }
 
     /// Add bytes written
-    pub fn write_to_bin<W: Write>(
+    fn write_to_bin<W: Write>(
         &self,
         inwriter: &'_ mut W,
         mut existing_offset: usize,
@@ -384,7 +397,7 @@ macro_rules! skip {
     };
 }
 
-pub fn decode_fields_bin<R: Read>(
+fn decode_fields_bin<R: Read>(
     reader: &'_ mut R,
     f: &'_ mut Fields,
     o: &'_ Objects,
@@ -494,7 +507,7 @@ pub fn decode_fields_bin<R: Read>(
 }
 
 impl FieldType {
-    pub fn try_from_bin<R: Read>(
+    fn try_from_bin<R: Read>(
         reader: &'_ mut R,
         to_skip_if_aligned: usize,
         max_len: usize,
@@ -597,26 +610,26 @@ impl FieldType {
             } else {
                 let aligned_max_len = max_len - to_skip_if_aligned;
                 skip!(reader, to_skip_if_aligned);
-                if aligned_max_len == 4 {
-                    Ok(Int(reader.read_i32::<LittleEndian>()?))
-                } else if aligned_max_len > 4 {
-                    let len = reader.read_i32::<LittleEndian>()? as usize;
-                    if len.checked_add(4).ok_or(FromBinError::FormatErr)? == aligned_max_len {
-                        let mut buf = vec![0u8; len];
-                        reader.read_exact(&mut buf)?;
-                        let string = {
-                            let cs = CStr::from_bytes_with_nul(&buf)?.to_str()?;
-                            let mut n = std::string::String::new();
-                            n.try_reserve_exact(cs.len())?;
-                            n.push_str(cs);
-                            n
-                        };
-                        Ok(String(string.into_boxed_str()))
-                    } else {
-                        Err(FromBinError::UnknownField(name.to_owned()))
+                match aligned_max_len {
+                    4 => Ok(Int(reader.read_i32::<LittleEndian>()?)),
+                    5..=usize::MAX => {
+                        let len = reader.read_i32::<LittleEndian>()? as usize;
+                        if len.checked_add(4).ok_or(FromBinError::FormatErr)? == aligned_max_len {
+                            let mut buf = vec![0u8; len];
+                            reader.read_exact(&mut buf)?;
+                            let string = {
+                                let cs = CStr::from_bytes_with_nul(&buf)?.to_str()?;
+                                let mut n = std::string::String::new();
+                                n.try_reserve_exact(cs.len())?;
+                                n.push_str(cs);
+                                n
+                            };
+                            Ok(String(string.into_boxed_str()))
+                        } else {
+                            Err(FromBinError::UnknownField(name.to_owned()))
+                        }
                     }
-                } else {
-                    Err(FromBinError::UnknownField(name.to_owned()))
+                    _ => Err(FromBinError::UnknownField(name.to_owned())),
                 }
             }
         }
