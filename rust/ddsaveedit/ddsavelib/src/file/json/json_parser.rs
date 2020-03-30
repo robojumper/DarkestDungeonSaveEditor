@@ -1,9 +1,4 @@
-use std::{
-    borrow::Cow,
-    iter::{FusedIterator, Peekable},
-    ops::{Generator, GeneratorState},
-    pin::Pin,
-};
+use std::{borrow::Cow, iter::FusedIterator};
 
 use crate::{
     err::FromJsonError,
@@ -190,42 +185,6 @@ pub struct Token<'a> {
     pub span: Span,
 }
 
-macro_rules! ungen {
-    ($f:ident, $data:expr, $l:ident) => {
-        ungen!($f($data, $l).into(), $l)
-    };
-    ($e:expr, $l:ident) => {{
-        let mut gen: Pin<Box<_>> = $e;
-        loop {
-            let res = gen.as_mut().resume(());
-            match res {
-                GeneratorState::Yielded(tok) => yield tok,
-                GeneratorState::Complete(r) => match r {
-                    Ok(l) => {
-                        $l = l;
-                        break;
-                    }
-                    Err(er) => return Err(er),
-                },
-            }
-        }
-    }};
-}
-
-macro_rules! maybe_ungen {
-    ($f:ident, $data:expr, $l:ident) => {{
-        let res = $f($data, $l);
-        match res {
-            OrMore::Zero(e) => return Err(e),
-            OrMore::One(tok, l) => {
-                $l = l;
-                yield tok;
-            }
-            OrMore::More(gen) => ungen!(gen.into(), $l),
-        }
-    }};
-}
-
 #[derive(Debug, Clone)]
 pub enum JsonError {
     EOF,
@@ -265,14 +224,147 @@ impl<'a> From<&'a JsonError> for FromJsonError {
     }
 }
 
+enum ParserBlock {
+    Value { need_colon: bool },
+    Object { need_comma: bool },
+    Array { need_comma: bool },
+}
+
 pub struct Parser<'a> {
-    gen: Pin<Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + 'a>>,
+    lexer: Lexer<'a>,
+    data: &'a str,
+    block_stack: Vec<ParserBlock>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(data: &'a str) -> Self {
+    pub fn new(src: &'a str) -> Self {
         Self {
-            gen: parse(data).into(),
+            lexer: Lexer::new(src),
+            data: src,
+            block_stack: vec![ParserBlock::Value { need_colon: false }],
+        }
+    }
+
+    fn parse_value(&mut self, next_tok: LexerToken) -> <Self as Iterator>::Item {
+        match next_tok.kind {
+            TokenType::BeginObject => {
+                self.block_stack
+                    .push(ParserBlock::Object { need_comma: false });
+                json_to_token(self.data, next_tok)
+            }
+            TokenType::BeginArray => {
+                self.block_stack
+                    .push(ParserBlock::Array { need_comma: false });
+                json_to_token(self.data, next_tok)
+            }
+            TokenType::Number
+            | TokenType::BoolTrue
+            | TokenType::BoolFalse
+            | TokenType::String
+            | TokenType::Null => {
+                assert!(matches!(
+                    self.block_stack.pop(),
+                    Some(ParserBlock::Value { .. })
+                )); // Leave value
+                json_to_token(self.data, next_tok)
+            }
+            _ => Err(JsonError::ExpectedValue(
+                next_tok.span.first,
+                next_tok.span.end,
+            )),
+        }
+    }
+
+    fn next_inner(&mut self) -> <Self as Iterator>::Item {
+        let block = self.block_stack.last_mut().unwrap();
+        match block {
+            ParserBlock::Value { need_colon } => {
+                let mut next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                if *need_colon {
+                    if next_tok.kind != TokenType::Colon {
+                        return Err(JsonError::Expected(
+                            TokenType::Colon.as_ref().to_owned(),
+                            next_tok.span.first,
+                            next_tok.span.end,
+                        ));
+                    }
+                    next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                }
+                *need_colon = false;
+                self.parse_value(next_tok)
+            }
+            ParserBlock::Object { need_comma } => {
+                let mut next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                match next_tok.kind {
+                    TokenType::EndObject => {
+                        self.block_stack.pop();
+                        assert!(matches!(
+                            self.block_stack.pop(),
+                            Some(ParserBlock::Value { .. })
+                        )); // Terminate value
+                        json_to_token(self.data, next_tok)
+                    }
+                    _ => {
+                        if *need_comma {
+                            if next_tok.kind != TokenType::Comma {
+                                return Err(JsonError::Expected(
+                                    TokenType::Comma.as_ref().to_owned(),
+                                    next_tok.span.first,
+                                    next_tok.span.end,
+                                ));
+                            }
+                            next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                        }
+                        *need_comma = true;
+                        match next_tok.kind {
+                            TokenType::String => {
+                                self.block_stack
+                                    .push(ParserBlock::Value { need_colon: true });
+                                json_to_token(self.data, next_tok).and_then(|mut t| {
+                                    t.kind = TokenType::FieldName;
+                                    Ok(t)
+                                })
+                            }
+                            _ => {
+                                Err(JsonError::Expected(
+                                    TokenType::FieldName.as_ref().to_owned(),
+                                    next_tok.span.first,
+                                    next_tok.span.end,
+                                ))
+                            }
+                        }
+                    }
+                }
+            }
+            ParserBlock::Array { need_comma } => {
+                let mut next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                match next_tok.kind {
+                    TokenType::EndArray => {
+                        self.block_stack.pop(); // Leave the array
+                        assert!(matches!(
+                            self.block_stack.pop(),
+                            Some(ParserBlock::Value { .. })
+                        )); // Terminate value
+                        json_to_token(self.data, next_tok)
+                    }
+                    _ => {
+                        if *need_comma {
+                            if next_tok.kind != TokenType::Comma {
+                                return Err(JsonError::Expected(
+                                    TokenType::Comma.as_ref().to_owned(),
+                                    next_tok.span.first,
+                                    next_tok.span.end,
+                                ));
+                            }
+                            next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                        }
+                        *need_comma = true;
+                        self.block_stack
+                            .push(ParserBlock::Value { need_colon: false });
+                        self.parse_value(next_tok)
+                    }
+                }
+            }
         }
     }
 }
@@ -280,199 +372,10 @@ impl<'a> Parser<'a> {
 impl<'a> Iterator for Parser<'a> {
     type Item = Result<Token<'a>, JsonError>;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.gen.as_mut().resume(()) {
-            GeneratorState::Yielded(tok) => Some(Ok(tok)),
-            GeneratorState::Complete(err) => match err {
-                Ok(_) => None,
-                Err(e) => Some(Err(e)),
-            },
+        match self.block_stack.is_empty() {
+            true => None,
+            false => Some(self.next_inner()),
         }
-    }
-}
-
-pub(crate) fn parse<'a>(
-    data: &'a str,
-) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<(), JsonError>> + 'a> {
-    Box::new(move || {
-        let mut lex = Lexer::new(data).peekable();
-        if lex.peek().is_some() {
-            maybe_ungen!(parse_value, data, lex)
-        }
-        while lex.peek().is_some() {
-            expect_control(TokenType::Comma, &mut lex)?;
-            maybe_ungen!(parse_value, data, lex)
-        }
-        Ok(())
-    })
-}
-
-fn eat<'b, 'a, T: Iterator<Item = LexerToken>>(
-    data: &'a str,
-    exp: TokenType,
-    lex: &'b mut Peekable<T>,
-) -> Result<Token<'a>, JsonError> {
-    if lex.peek().is_some() {
-        let tok = parse_single(data, lex)?;
-        if tok.kind == exp {
-            return Ok(tok);
-        } else {
-            return Err(JsonError::Expected(
-                exp.as_ref().to_owned(),
-                tok.span.first,
-                tok.span.end,
-            ));
-        }
-    }
-    Err(JsonError::EOF)
-}
-
-// E0626: This takes and returns ownership of the lexer because calling functions
-// can't hold onto `lex` while yielding our items
-fn parse_object<'a, T: Iterator<Item = LexerToken> + 'a>(
-    data: &'a str,
-    mut lex: Peekable<T>,
-) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<Peekable<T>, JsonError>> + 'a> {
-    Box::new(move || {
-        yield eat(data, TokenType::BeginObject, &mut lex)?;
-
-        loop {
-            let tok = lex.peek().ok_or(JsonError::EOF)?;
-            match tok.kind {
-                TokenType::EndObject => {
-                    yield json_to_token(data, lex.next().unwrap())?;
-                    break;
-                }
-                _ => {
-                    let mut name = eat(data, TokenType::String, &mut lex)?;
-                    name.kind = TokenType::FieldName;
-                    yield name;
-                    expect_control(TokenType::Colon, &mut lex)?;
-                    maybe_ungen!(parse_value, data, lex);
-                    let tok2 = lex.next().ok_or(JsonError::EOF)?;
-                    match tok2.kind {
-                        TokenType::EndObject => {
-                            yield json_to_token(data, tok2)?;
-                            break;
-                        }
-                        TokenType::Comma => {
-                            continue;
-                        }
-                        _ => {
-                            return Err(JsonError::Expected(
-                                ", (comma) or } (closing brace)".to_owned(),
-                                tok2.span.first,
-                                tok2.span.end,
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(lex)
-    })
-}
-
-fn parse_array<'a, T: Iterator<Item = LexerToken> + 'a>(
-    data: &'a str,
-    mut lex: Peekable<T>,
-) -> Box<dyn Generator<Yield = Token<'a>, Return = Result<Peekable<T>, JsonError>> + 'a> {
-    Box::new(move || {
-        yield eat(data, TokenType::BeginArray, &mut lex)?;
-
-        loop {
-            let tok = lex.peek().ok_or(JsonError::EOF)?;
-            match tok.kind {
-                TokenType::EndArray => {
-                    yield json_to_token(data, lex.next().unwrap())?;
-                    break;
-                }
-                _ => {
-                    maybe_ungen!(parse_value, data, lex);
-                    let tok2 = lex.next().ok_or(JsonError::EOF)?;
-                    match tok2.kind {
-                        TokenType::EndArray => {
-                            yield json_to_token(data, tok2)?;
-                            break;
-                        }
-                        TokenType::Comma => {
-                            continue;
-                        }
-                        _ => {
-                            return Err(JsonError::Expected(
-                                ", (comma) or ] (closing bracket)".to_owned(),
-                                tok2.span.first,
-                                tok2.span.end,
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(lex)
-    })
-}
-
-enum OrMore<'a, Y, O, E> {
-    Zero(E),
-    One(Y, O),
-    More(Box<dyn Generator<Yield = Y, Return = Result<O, E>> + 'a>),
-}
-
-fn parse_value<'a, T: Iterator<Item = LexerToken> + 'a>(
-    data: &'a str,
-    mut lex: Peekable<T>,
-) -> OrMore<Token<'a>, Peekable<T>, JsonError> {
-    let tok = match lex.peek().ok_or(JsonError::EOF) {
-        Ok(tok) => tok,
-        Err(e) => return OrMore::Zero(e),
-    };
-    match tok.kind {
-        TokenType::BeginObject => OrMore::More(Box::new(move || {
-            ungen!(parse_object, data, lex);
-            Ok(lex)
-        })),
-        TokenType::BeginArray => OrMore::More(Box::new(move || {
-            ungen!(parse_array, data, lex);
-            Ok(lex)
-        })),
-        TokenType::Number
-        | TokenType::BoolTrue
-        | TokenType::BoolFalse
-        | TokenType::String
-        | TokenType::Null => {
-            let maybe_tok = parse_single(data, &mut lex);
-            match maybe_tok {
-                Ok(tok) => OrMore::One(tok, lex),
-                Err(err) => OrMore::Zero(err),
-            }
-        }
-        _ => OrMore::Zero(JsonError::ExpectedValue(tok.span.first, tok.span.end)),
-    }
-}
-
-fn parse_single<'b, 'a: 'b, T: Iterator<Item = LexerToken>>(
-    data: &'a str,
-    lex: &'b mut T,
-) -> Result<Token<'a>, JsonError> {
-    let tok = lex.next().ok_or(JsonError::EOF)?;
-    json_to_token(data, tok)
-}
-
-fn expect_control<T: Iterator<Item = LexerToken>>(
-    exp: TokenType,
-    lex: &mut T,
-) -> Result<(), JsonError> {
-    let tok = lex.next().ok_or(JsonError::EOF)?;
-    if tok.kind == exp {
-        Ok(())
-    } else {
-        Err(JsonError::Expected(
-            exp.as_ref().to_owned(),
-            tok.span.first,
-            tok.span.end,
-        ))
     }
 }
 
