@@ -53,6 +53,7 @@ impl AsRef<str> for TokenType {
 
 struct Lexer<'a> {
     src: &'a str,
+    last_span: Span,
     it: std::iter::Peekable<std::str::CharIndices<'a>>,
 }
 
@@ -60,8 +61,13 @@ impl<'a> Lexer<'a> {
     fn new(src: &'a str) -> Self {
         Self {
             src,
+            last_span: Span { first: 0, end: 0 },
             it: src.char_indices().peekable(),
         }
+    }
+
+    fn last_span(&self) -> &Span {
+        &self.last_span
     }
 
     fn cur_pos(&mut self) -> usize {
@@ -154,13 +160,12 @@ impl<'a> Iterator for Lexer<'a> {
             }
         };
 
-        Some(LexerToken {
-            kind,
-            span: Span {
-                first: tup.0,
-                end: self.cur_pos(),
-            },
-        })
+        self.last_span = Span {
+            first: tup.0,
+            end: self.cur_pos(),
+        };
+
+        Some(LexerToken { kind })
     }
 }
 
@@ -175,14 +180,12 @@ pub struct Span {
 
 struct LexerToken {
     pub kind: TokenType,
-    pub span: Span,
 }
 
 #[derive(Clone, Debug)]
 pub struct Token<'a> {
     pub kind: TokenType,
     pub dat: Cow<'a, str>,
-    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -233,6 +236,7 @@ enum ParserBlock {
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     data: &'a str,
+    peeked: Option<<Self as Iterator>::Item>,
     block_stack: Vec<ParserBlock>,
 }
 
@@ -241,8 +245,36 @@ impl<'a> Parser<'a> {
         Self {
             lexer: Lexer::new(src),
             data: src,
+            peeked: None,
             block_stack: vec![ParserBlock::Value { need_colon: false }],
         }
+    }
+
+    pub fn span(&self) -> &Span {
+        self.lexer.last_span()
+    }
+
+    pub fn peek(&mut self) -> Option<&<Self as Iterator>::Item> {
+        if let None = self.peeked {
+            self.peeked = if self.block_stack.is_empty() {
+                None
+            } else {
+                Some(self.next_inner())
+            }
+        }
+        self.peeked.as_ref()
+    }
+
+    pub fn expect(&mut self, exp: TokenType) -> Result<Token<'a>, JsonError> {
+        let tok = self.next().ok_or(JsonError::EOF)??;
+        if tok.kind != exp {
+            return Err(JsonError::Expected(
+                exp.as_ref().to_owned(),
+                self.span().first,
+                self.span().end,
+            ));
+        }
+        Ok(tok)
     }
 
     fn parse_value(&mut self, next_tok: LexerToken) -> <Self as Iterator>::Item {
@@ -250,12 +282,12 @@ impl<'a> Parser<'a> {
             TokenType::BeginObject => {
                 self.block_stack
                     .push(ParserBlock::Object { need_comma: false });
-                json_to_token(self.data, next_tok)
+                self.json_to_token(next_tok)
             }
             TokenType::BeginArray => {
                 self.block_stack
                     .push(ParserBlock::Array { need_comma: false });
-                json_to_token(self.data, next_tok)
+                self.json_to_token(next_tok)
             }
             TokenType::Number
             | TokenType::BoolTrue
@@ -266,11 +298,11 @@ impl<'a> Parser<'a> {
                     self.block_stack.pop(),
                     Some(ParserBlock::Value { .. })
                 )); // Leave value
-                json_to_token(self.data, next_tok)
+                self.json_to_token(next_tok)
             }
             _ => Err(JsonError::ExpectedValue(
-                next_tok.span.first,
-                next_tok.span.end,
+                self.lexer.last_span().first,
+                self.lexer.last_span().end,
             )),
         }
     }
@@ -282,11 +314,7 @@ impl<'a> Parser<'a> {
                 let mut next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
                 if *need_colon {
                     if next_tok.kind != TokenType::Colon {
-                        return Err(JsonError::Expected(
-                            TokenType::Colon.as_ref().to_owned(),
-                            next_tok.span.first,
-                            next_tok.span.end,
-                        ));
+                        return self.err_expected(TokenType::Colon);
                     }
                     next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
                 }
@@ -302,16 +330,12 @@ impl<'a> Parser<'a> {
                             self.block_stack.pop(),
                             Some(ParserBlock::Value { .. })
                         )); // Terminate value
-                        json_to_token(self.data, next_tok)
+                        self.json_to_token(next_tok)
                     }
                     _ => {
                         if *need_comma {
                             if next_tok.kind != TokenType::Comma {
-                                return Err(JsonError::Expected(
-                                    TokenType::Comma.as_ref().to_owned(),
-                                    next_tok.span.first,
-                                    next_tok.span.end,
-                                ));
+                                return self.err_expected(TokenType::Comma);
                             }
                             next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
                         }
@@ -320,17 +344,13 @@ impl<'a> Parser<'a> {
                             TokenType::String => {
                                 self.block_stack
                                     .push(ParserBlock::Value { need_colon: true });
-                                json_to_token(self.data, next_tok).and_then(|mut t| {
+                                self.json_to_token(next_tok).and_then(|mut t| {
                                     t.kind = TokenType::FieldName;
                                     Ok(t)
                                 })
                             }
                             _ => {
-                                Err(JsonError::Expected(
-                                    TokenType::FieldName.as_ref().to_owned(),
-                                    next_tok.span.first,
-                                    next_tok.span.end,
-                                ))
+                                return self.err_expected(TokenType::FieldName);
                             }
                         }
                     }
@@ -345,16 +365,12 @@ impl<'a> Parser<'a> {
                             self.block_stack.pop(),
                             Some(ParserBlock::Value { .. })
                         )); // Terminate value
-                        json_to_token(self.data, next_tok)
+                        self.json_to_token(next_tok)
                     }
                     _ => {
                         if *need_comma {
                             if next_tok.kind != TokenType::Comma {
-                                return Err(JsonError::Expected(
-                                    TokenType::Comma.as_ref().to_owned(),
-                                    next_tok.span.first,
-                                    next_tok.span.end,
-                                ));
+                                return self.err_expected(TokenType::Comma);
                             }
                             next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
                         }
@@ -367,57 +383,52 @@ impl<'a> Parser<'a> {
             }
         }
     }
+
+    fn json_to_token(&self, tok: LexerToken) -> Result<Token<'a>, JsonError> {
+        let span = self.lexer.last_span();
+        let str_data = Cow::from(&self.data[span.first as usize..span.end as usize]);
+
+        let str_data = match tok.kind {
+            TokenType::String => {
+                let st = &self.data[span.first as usize + 1..span.end as usize - 1];
+                unescape(&st).ok_or(JsonError::BareControl(span.first, span.end))?
+            }
+            TokenType::Number => {
+                if str_data.parse::<i32>().is_err() && str_data.parse::<f32>().is_err() {
+                    return Err(JsonError::BadNumber(span.first, span.end));
+                }
+                str_data
+            }
+            _ => str_data,
+        };
+
+        Ok(Token {
+            kind: tok.kind,
+            dat: str_data,
+        })
+    }
+
+    fn err_expected(&self, exp: TokenType) -> Result<Token<'a>, JsonError> {
+        let span = self.lexer.last_span();
+        return Err(JsonError::Expected(
+            exp.as_ref().to_owned(),
+            span.first,
+            span.end,
+        ));
+    }
 }
 
 impl<'a> Iterator for Parser<'a> {
     type Item = Result<Token<'a>, JsonError>;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.block_stack.is_empty() {
-            true => None,
-            false => Some(self.next_inner()),
+        match std::mem::replace(&mut self.peeked, None) {
+            tok @ Some(_) => return tok,
+            _ => {}
         }
-    }
-}
-
-fn json_to_token(data: &str, tok: LexerToken) -> Result<Token<'_>, JsonError> {
-    let span = tok.span;
-    let str_data = Cow::from(&data[span.first as usize..span.end as usize]);
-
-    let str_data = match tok.kind {
-        TokenType::String => {
-            let st = &data[span.first as usize + 1..span.end as usize - 1];
-            unescape(&st).ok_or(JsonError::BareControl(span.first, span.end))?
+        if self.block_stack.is_empty() {
+            None
+        } else {
+            Some(self.next_inner())
         }
-        TokenType::Number => {
-            if str_data.parse::<i32>().is_err() && str_data.parse::<f32>().is_err() {
-                return Err(JsonError::BadNumber(span.first, span.end));
-            }
-            str_data
-        }
-        _ => str_data,
-    };
-
-    Ok(Token {
-        kind: tok.kind,
-        dat: str_data,
-        span,
-    })
-}
-
-pub(crate) trait ExpectExt<'a> {
-    fn expect(&mut self, exp: TokenType) -> Result<Token<'a>, JsonError>;
-}
-
-impl<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>> ExpectExt<'a> for T {
-    fn expect(&mut self, exp: TokenType) -> Result<Token<'a>, JsonError> {
-        let tok = self.next().ok_or(JsonError::EOF)??;
-        if tok.kind != exp {
-            return Err(JsonError::Expected(
-                exp.as_ref().to_owned(),
-                tok.span.first,
-                tok.span.end,
-            ));
-        }
-        Ok(tok)
     }
 }

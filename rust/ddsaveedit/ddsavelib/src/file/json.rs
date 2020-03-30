@@ -9,7 +9,7 @@ use crate::{
     err::*,
     util::{escape, name_hash},
 };
-use json_parser::{ExpectExt, JsonError, Parser, Token, TokenType};
+use json_parser::{JsonError, Parser, TokenType};
 use string_cache::{Atom, EmptyStaticAtomSet};
 
 mod json_parser;
@@ -23,31 +23,26 @@ impl File {
         reader.read_to_end(&mut x)?;
         let slic = std::str::from_utf8(&x)?;
 
-        let lex = &mut Parser::new(slic).peekable();
+        let lex = &mut Parser::new(slic);
         Self::try_from_json_parser(lex, false)
     }
 
-    fn read_version_field<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
-        lex: &mut std::iter::Peekable<T>,
-    ) -> Result<u32, FromJsonError> {
+    fn read_version_field<'a>(lex: &mut Parser<'a>) -> Result<u32, FromJsonError> {
         let vers_field_tok = lex.expect(TokenType::FieldName)?;
         if vers_field_tok.dat != Self::BUILTIN_VERSION_FIELD {
             return Err(FromJsonError::Expected(
                 Self::BUILTIN_VERSION_FIELD.to_owned(),
-                vers_field_tok.span.first,
-                vers_field_tok.span.end,
+                lex.span().first,
+                lex.span().end,
             ));
         }
         let vers = lex.expect(TokenType::Number)?;
         vers.dat.parse::<u32>().map_err(|_| {
-            FromJsonError::Expected("Integer".to_owned(), vers.span.first, vers.span.end)
+            FromJsonError::Expected("Integer".to_owned(), lex.span().first, lex.span().end)
         })
     }
 
-    fn try_from_json_parser<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
-        lex: &mut std::iter::Peekable<T>,
-        inner: bool,
-    ) -> Result<Self, FromJsonError> {
+    fn try_from_json_parser<'a>(lex: &mut Parser<'a>, inner: bool) -> Result<Self, FromJsonError> {
         let mut s = Self {
             h: Default::default(),
             o: Default::default(),
@@ -81,11 +76,11 @@ impl File {
 
         if !inner {
             let next = lex.next();
-            if let Some(Ok(Token { span, .. })) = next {
+            if let Some(Ok(_)) = next {
                 return Err(FromJsonError::Expected(
                     "end of file".to_owned(),
-                    span.first,
-                    span.end,
+                    lex.span().first,
+                    lex.span().end,
                 ));
             } else if let Some(Err(e)) = next {
                 return Err(e.into());
@@ -97,11 +92,11 @@ impl File {
         Ok(s)
     }
 
-    fn read_child_fields<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
+    fn read_child_fields<'a>(
         &mut self,
         parent: Option<ObjIdx>,
         name_stack: &mut Vec<Atom<EmptyStaticAtomSet>>,
-        lex: &mut std::iter::Peekable<T>,
+        lex: &mut Parser<'a>,
     ) -> Result<Vec<FieldIdx>, FromJsonError> {
         let mut child_fields = vec![];
 
@@ -117,8 +112,8 @@ impl File {
                 _ => {
                     return Err(FromJsonError::Expected(
                         "name or }".to_owned(),
-                        tok.span.first,
-                        tok.span.end,
+                        lex.span().first,
+                        lex.span().end,
                     ))
                 }
             }
@@ -127,12 +122,12 @@ impl File {
         Ok(child_fields)
     }
 
-    fn read_field<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
+    fn read_field<'a>(
         &mut self,
         name: Cow<'a, str>,
         parent: Option<ObjIdx>,
         name_stack: &mut Vec<Atom<EmptyStaticAtomSet>>,
-        lex: &mut std::iter::Peekable<T>,
+        lex: &mut Parser<'a>,
     ) -> Result<FieldIdx, FromJsonError> {
         let name = Atom::from(name.as_ref());
         let field_index = self
@@ -388,8 +383,8 @@ impl File {
 }
 
 impl FieldType {
-    fn try_from_json<'a, T: Iterator<Item = Result<Token<'a>, JsonError>>>(
-        lex: &mut T,
+    fn try_from_json<'a>(
+        lex: &mut Parser<'a>,
         name_stack: &'_ [impl AsRef<str>],
         name: impl AsRef<str>,
     ) -> Result<Self, FromJsonError> {
@@ -397,7 +392,7 @@ impl FieldType {
             ($tok:expr, $t:ty, $err:expr) => {{
                 let tok = $tok;
                 tok.dat.parse::<$t>().map_err(|_| {
-                    FromJsonError::LiteralFormat($err.to_owned(), tok.span.first, tok.span.end)
+                    FromJsonError::LiteralFormat($err.to_owned(), lex.span().first, lex.span().end)
                 })?
             }};
         }
@@ -424,8 +419,8 @@ impl FieldType {
                             _ => {
                                 return Err(FromJsonError::Expected(
                                     "string or ]".to_owned(),
-                                    tok.span.first,
-                                    tok.span.end,
+                                    lex.span().first,
+                                    lex.span().end,
                                 ))
                             }
                         }
@@ -445,8 +440,8 @@ impl FieldType {
                             _ => {
                                 return Err(FromJsonError::Expected(
                                     "string or ]".to_owned(),
-                                    tok.span.first,
-                                    tok.span.end,
+                                    lex.span().first,
+                                    lex.span().end,
                                 ))
                             }
                         }
@@ -466,8 +461,8 @@ impl FieldType {
                             _ => {
                                 return Err(FromJsonError::Expected(
                                     "string or ]".to_owned(),
-                                    tok.span.first,
-                                    tok.span.end,
+                                    lex.span().first,
+                                    lex.span().end,
                                 ))
                             }
                         }
@@ -492,8 +487,8 @@ impl FieldType {
                     } else {
                         return Err(FromJsonError::Expected(
                             "bool".to_owned(),
-                            tok1.span.first,
-                            tok1.span.end,
+                            lex.span().first,
+                            lex.span().end,
                         ));
                     };
                     let tok2 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
@@ -504,8 +499,8 @@ impl FieldType {
                     } else {
                         return Err(FromJsonError::Expected(
                             "bool".to_owned(),
-                            tok2.span.first,
-                            tok2.span.end,
+                            lex.span().first,
+                            lex.span().end,
                         ));
                     };
                     lex.expect(TokenType::EndArray)?;
@@ -518,8 +513,8 @@ impl FieldType {
                     } else {
                         return Err(FromJsonError::LiteralFormat(
                             "exactly one ascii char".to_owned(),
-                            tok.span.first,
-                            tok.span.end,
+                            lex.span().first,
+                            lex.span().end,
                         ));
                     }
                 }
@@ -543,8 +538,8 @@ impl FieldType {
                 _ => {
                     return Err(FromJsonError::LiteralFormat(
                         "unknown field".to_owned(),
-                        tok.span.first,
-                        tok.span.end,
+                        lex.span().first,
+                        lex.span().end,
                     ))
                 }
             })
