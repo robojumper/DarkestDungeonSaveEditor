@@ -82,8 +82,9 @@ fn test_from_json(c: &mut Criterion) {
     }
 }
 
-criterion_group!(frombinbenches, test_from_bin);
-criterion_group!(fromjsonbenches, test_from_json);
-criterion_group!(tojsonbenches, test_to_json);
-criterion_group!(tobinbenches, test_to_bin);
-criterion_main!(frombinbenches, fromjsonbenches, tojsonbenches, tobinbenches);
+criterion_group!{
+    name = benches;
+    config = Criterion::default().sample_size(10);
+    targets = test_from_bin, test_from_json, test_to_json, test_to_bin
+}
+criterion_main!(benches);
