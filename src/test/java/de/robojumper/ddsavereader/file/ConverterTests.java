@@ -123,6 +123,7 @@ public class ConverterTests {
         testCorrectConversion("skillCooldownValues");
         testCorrectConversion("nonAsciiField");
         testCorrectConversion("backerHeroes");
+        testCorrectConversion("quirk_monster_class_ids");
     }
 
     private List<String> getResourceFiles(String path) throws IOException {

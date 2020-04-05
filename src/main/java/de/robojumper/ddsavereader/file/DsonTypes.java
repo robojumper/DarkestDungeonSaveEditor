@@ -42,6 +42,7 @@ public class DsonTypes {
                         { "bufferedSpawningSlotsAvailable" }, // raid.json
                         { "curioGroups", "*", "curios" }, // raid.json
                         { "curioGroups", "*", "curio_table_entries" }, // raid.json
+                        { "raid_finish_quirk_monster_class_ids" }, // raid.json
                         { "narration_audio_event_queue_tags" }, // loading_screen.json
                         { "dispatched_events" }, // tutorial.json
                         { "backer_heroes", "*", "combat_skills"},

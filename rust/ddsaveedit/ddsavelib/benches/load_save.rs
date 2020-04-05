@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use ddsavelib::{File, Unhasher};
 use std::{fs, path::PathBuf};
 
-const INTERESTING_FILES: &'static str = "../../../src/test/resources/otherFiles";
+const INTERESTING_FILES: &str = "../../../src/test/resources/otherFiles";
 
 fn get_paths() -> Vec<PathBuf> {
     let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -82,7 +82,7 @@ fn test_from_json(c: &mut Criterion) {
     }
 }
 
-criterion_group!{
+criterion_group! {
     name = benches;
     config = Criterion::default().sample_size(10);
     targets = test_from_bin, test_from_json, test_to_json, test_to_bin
