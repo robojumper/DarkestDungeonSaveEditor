@@ -29,15 +29,15 @@ public class DsonWriter {
     Deque<String> nameStack;
     ArrayList<Meta2BlockEntry> meta2Entries;
 
-    public DsonWriter(String jsonData) throws IOException, ParseException {
+    public DsonWriter(String jsonData) throws IOException, ParseException, InterruptedException {
         this(new JsonFactory().createParser(jsonData));
     }
 
-    public DsonWriter(byte[] data) throws IOException, ParseException {
+    public DsonWriter(byte[] data) throws IOException, ParseException, InterruptedException {
         this(new JsonFactory().createParser(data));
     }
 
-    private DsonWriter(JsonParser reader) throws IOException, ParseException {
+    private DsonWriter(JsonParser reader) throws IOException, ParseException, InterruptedException {
         header = new HeaderBlock();
         data = new ByteArrayOutputStream();
 
@@ -82,10 +82,14 @@ public class DsonWriter {
         parentIdxStack.pop();
     }
 
-    private void writeField(String name, JsonParser reader) throws IOException, ParseException {
+    private void writeField(String name, JsonParser reader) throws IOException, ParseException, InterruptedException {
+        if (Thread.interrupted()) {
+            throw new InterruptedException();
+        }
+
         Meta2BlockEntry e2 = new Meta2BlockEntry();
         e2.nameHash = DsonTypes.stringHash(name);
-        byte[] nameb = name.getBytes(StandardCharsets.UTF_8); 
+        byte[] nameb = name.getBytes(StandardCharsets.UTF_8);
         e2.fieldInfo = ((nameb.length + 1) & 0b111111111) << 2;
         meta2Entries.add(e2);
 

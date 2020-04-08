@@ -29,7 +29,7 @@ import com.google.gson.JsonParser;
 // No output file, just pipe it to the output file
 public class ReadNames {
 
-    static final Set<String> HARDCODED_NAMES = new HashSet<>(); 
+	static final Set<String> HARDCODED_NAMES = new HashSet<>();
 	static final Map<String, List<Parser>> PARSERS = new HashMap<>();
 	
 	static {
@@ -46,16 +46,16 @@ public class ReadNames {
 			@Override
 			public void parseFile(Path filePath, byte[] file, Set<String> names) {
 				addBaseName(filePath, names);
-                Set<String> ids = new HashSet<>();
+				Set<String> ids = new HashSet<>();
 				addSimpleJSONArrayEntryIDs(file, "trees", "id", ids);
-                for (String id : ids) {
-                    names.add(id);
-                    // For backer file, strip class name
-                    String[] splits = id.split("\\.");
-                    if (splits.length == 2) {
-                        names.add(splits[1]);
-                    }
-                }
+				for (String id : ids) {
+					names.add(id);
+					// For backer file, strip class name
+					String[] splits = id.split("\\.");
+					if (splits.length == 2) {
+						names.add(splits[1]);
+					}
+				}
 			}
 		}));
 		
@@ -63,7 +63,7 @@ public class ReadNames {
 		// Camping skills do NOT have corresponding upgrade trees,
 		// even though they appear in persist.upgrades.json
 		// the actual saved hashed tree name is "soldierclass.skill", even though skills may be shared
-        // (Though the backer file has the skills in pure form???)
+		// (Though the backer file has the skills in pure form???)
 		putParser(".camping_skills.json", (new Parser() {
 			@Override
 			public void parseFile(Path filePath, byte[] file, Set<String> names) {
@@ -74,7 +74,7 @@ public class ReadNames {
 				if (arrArray != null) {
 					for (int i = 0; i < arrArray.size(); i++) {
 						String id = arrArray.get(i).getAsJsonObject().get("id").getAsString();
-                        names.add(id);
+						names.add(id);
 						JsonArray classes = arrArray.get(i).getAsJsonObject().get("hero_classes").getAsJsonArray();
 						if (classes != null) {
 							for (JsonElement elem : classes) {
@@ -124,7 +124,7 @@ public class ReadNames {
 					JsonArray activitiesArray = dataObject.getAsJsonArray("activities");
 					if (activitiesArray != null) {
 						for (JsonElement elem : activitiesArray) {
-						    names.add(elem.getAsJsonObject().get("id").getAsString());
+							names.add(elem.getAsJsonObject().get("id").getAsString());
 						}
 					}
 				}
@@ -156,7 +156,7 @@ public class ReadNames {
 						for (int i = 1; i <= m.groupCount(); i++) {
 							String group = m.group(i);
 							if (!group.equals("")) {
-							    names.add(group);
+								names.add(group);
 							}
 						}
 					}
@@ -184,7 +184,7 @@ public class ReadNames {
 				for (String str : lines) {
 					String propName = str.substring(0, str.indexOf(","));
 					if (!propName.equals("")) {
-					    names.add(propName);
+						names.add(propName);
 					}
 				}
 			}
@@ -198,46 +198,46 @@ public class ReadNames {
 			}
 		}));
 		
-	    // Obstacles 
-        putParser("quest.plot_quests.json", (new Parser() {
-            @Override
-            public void parseFile(Path filePath, byte[] file, Set<String> names) {
-                addSimpleJSONArrayEntryIDs(file, "plot_quests", "id", names);
-            }
-        }));
+		// Obstacles 
+		putParser("quest.plot_quests.json", (new Parser() {
+			@Override
+			public void parseFile(Path filePath, byte[] file, Set<String> names) {
+				addSimpleJSONArrayEntryIDs(file, "plot_quests", "id", names);
+			}
+		}));
 
-        // Tutorial event 
-        putParser(".png", (new Parser() {
-            final Pattern PATHPATTERN = Pattern.compile(".*tutorial_popup\\.([a-z_]*)\\.png");
-            @Override
-            public void parseFile(Path filePath, Set<String> names) {
-                Matcher m = PATHPATTERN.matcher(filePath.toString());
-                if (m.matches()) {
-                    // zero is the entire string, not included in groupCount
-                    for (int i = 1; i <= m.groupCount(); i++) {
-                        String group = m.group(i);
-                        if (!group.equals("")) {
-                            names.add(group);
-                        }
-                    }
-                }
-            }
-            @Override
-            public void parseFile(Path filePath, byte[] file, Set<String> names) {
-            }
-        }));
+		// Tutorial event 
+		putParser(".png", (new Parser() {
+			final Pattern PATHPATTERN = Pattern.compile(".*tutorial_popup\\.([a-z_]*)\\.png");
+			@Override
+			public void parseFile(Path filePath, Set<String> names) {
+				Matcher m = PATHPATTERN.matcher(filePath.toString());
+				if (m.matches()) {
+					// zero is the entire string, not included in groupCount
+					for (int i = 1; i <= m.groupCount(); i++) {
+						String group = m.group(i);
+						if (!group.equals("")) {
+							names.add(group);
+						}
+					}
+				}
+			}
+			@Override
+			public void parseFile(Path filePath, byte[] file, Set<String> names) {
+			}
+		}));
 
 		// Stat database, hardcoded
-        HARDCODED_NAMES.add("MONSTER_ENCOUNTERED");
-        HARDCODED_NAMES.add("AMBUSHED");
-        HARDCODED_NAMES.add("CURIO_INVESTIGATED");
-        HARDCODED_NAMES.add("TRAIT_APPLIED");
-        HARDCODED_NAMES.add("DEATHS_DOOR_APPLIED");
-        HARDCODED_NAMES.add("ROOM_VISITED");
-        HARDCODED_NAMES.add("BATTLE_COMPLETED");
-        HARDCODED_NAMES.add("HALLWAY_STEP_COMPLETED");
-        HARDCODED_NAMES.add("MONSTER_DEFEATED");
-        HARDCODED_NAMES.add("UNDEFINED");
+		HARDCODED_NAMES.add("MONSTER_ENCOUNTERED");
+		HARDCODED_NAMES.add("AMBUSHED");
+		HARDCODED_NAMES.add("CURIO_INVESTIGATED");
+		HARDCODED_NAMES.add("TRAIT_APPLIED");
+		HARDCODED_NAMES.add("DEATHS_DOOR_APPLIED");
+		HARDCODED_NAMES.add("ROOM_VISITED");
+		HARDCODED_NAMES.add("BATTLE_COMPLETED");
+		HARDCODED_NAMES.add("HALLWAY_STEP_COMPLETED");
+		HARDCODED_NAMES.add("MONSTER_DEFEATED");
+		HARDCODED_NAMES.add("UNDEFINED");
 	}
 	
 	static void putParser(String extension, Parser Parser) {
@@ -252,7 +252,7 @@ public class ReadNames {
 	
 	// args is a list of game or mod root directories
 	public static Set<String> collectNames(Collection<String> paths) {
-	    final Set<String> names = new HashSet<String>();
+		final Set<String> names = new HashSet<String>();
 		for (String path : paths) {
 			File rootDir = new File(path);
 			if (rootDir.isDirectory()) {
@@ -266,10 +266,10 @@ public class ReadNames {
 								if (filename.endsWith(entry.getKey())) {
 									try {
 										for (Parser parser : entry.getValue()) {
-										    parser.parseFile(file, names);
+											parser.parseFile(file, names);
 										}
 									} catch (Exception e) {
-									    System.err.println("Error opening/parsing " + filename.toString());
+										System.err.println("Error opening/parsing " + filename.toString());
 										e.printStackTrace();
 									}
 								}
@@ -287,32 +287,32 @@ public class ReadNames {
 	}
 	
 	public static void main(String[] args) {
-	    Set<String> names = collectNames(Arrays.asList(args));
-	    for (String str : names) {
-	        System.out.println(str);
-	    }
+		Set<String> names = collectNames(Arrays.asList(args));
+		for (String str : names) {
+			System.out.println(str);
+		}
 	}
 	
-    interface Parser {
-        default void parseFile(Path filePath, Set<String> names) throws IOException {
-            parseFile(filePath, Files.readAllBytes(filePath), names);
-        }
-        void parseFile(Path filePath, byte[] file, Set<String> names);
-    }
-    
-    // utility functions
-    static void addBaseName(Path filePath, Set<String> Set) {
-    	String FileName = filePath.toFile().getName();
+	interface Parser {
+		default void parseFile(Path filePath, Set<String> names) throws IOException {
+			parseFile(filePath, Files.readAllBytes(filePath), names);
+		}
+		void parseFile(Path filePath, byte[] file, Set<String> names);
+	}
+	
+	// utility functions
+	static void addBaseName(Path filePath, Set<String> Set) {
+		String FileName = filePath.toFile().getName();
 		if (FileName.indexOf(".") > 0) {
 			FileName = FileName.substring(0, FileName.indexOf("."));
 		}
 		Set.add(FileName);
-    }
-    
-    // assuming a JSON file where the root object has an array <arrayName> of objects each with a string variable <idString>
-    // add that ID string
-    static void addSimpleJSONArrayEntryIDs(byte[] data, String arrayName, String idString, Set<String> Set) {
-    	String JsonString = new String(data);
+	}
+	
+	// assuming a JSON file where the root object has an array <arrayName> of objects each with a string variable <idString>
+	// add that ID string
+	static void addSimpleJSONArrayEntryIDs(byte[] data, String arrayName, String idString, Set<String> Set) {
+		String JsonString = new String(data);
 		JsonParser parser = new JsonParser();
 		JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
 		JsonArray arrArray = rootObject.getAsJsonArray(arrayName);
@@ -322,5 +322,5 @@ public class ReadNames {
 				Set.add(id);
 			}
 		}
-    }
+	}
 }

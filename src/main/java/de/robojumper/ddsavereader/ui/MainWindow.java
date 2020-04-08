@@ -86,7 +86,7 @@ public class MainWindow {
                 try {
                     MainWindow window = new MainWindow();
 
-                    window.state.init();
+                    window.state.init(window::onStateChange);
                     window.initSettings();
                     window.frame.setVisible(true);
                 } catch (Exception e) {
@@ -101,6 +101,11 @@ public class MainWindow {
      */
     public MainWindow() {
         initialize();
+    }
+
+    private void onStateChange(String fname) {
+        updateSaveStatus();
+        updateTabStatus(fname);
     }
 
     private void initSettings() {
@@ -504,7 +509,7 @@ public class MainWindow {
         // tabbedPane.setIconAt(tabbedPane.indexOfComponent(t), iconFor(f));
         tabbedPane.setForegroundAt(tabbedPane.indexOfComponent(t), colorFor(f));
         t.area.getHighlighter().removeAllHighlights();
-        if (!f.canSave()) {
+        if (!f.canSave() && !state.isBusy()) {
             Highlighter.HighlightPainter redPainter = new DefaultHighlighter.DefaultHighlightPainter(
                     new Color(255, 127, 127));
             int[] errorLine = f.getErrorLine();
@@ -516,8 +521,21 @@ public class MainWindow {
         discardChangesButton.setEnabled(f.changed());
     }
 
-    private static Color colorFor(SaveFile f) {
-        if (f.changed()) {
+    private void updateTabStatus(String fname) {
+        int totalTabs = tabbedPane.getTabCount();
+        for (int i = 0; i < totalTabs; i++) {
+            Tab t = (Tab) tabbedPane.getComponentAt(i);
+            if (t.fileName.equals(fname)) {
+                tabbedPane.setForegroundAt(i, colorFor(state.getSaveFile(fname)));
+                updateFile(t);
+            }
+        }
+    }
+
+    private Color colorFor(SaveFile f) {
+        if (state.isBusy()) {
+            return Color.ORANGE;
+        } else if (f.changed()) {
             return f.canSave() ? new Color(50, 131, 50) : Color.RED;
         } else {
             return f.canSave() ? Color.BLACK : Color.ORANGE;
@@ -525,7 +543,8 @@ public class MainWindow {
     }
 
     private void updateSaveStatus() {
-        saveStatus.setIcon(state.anyChanges() ? (state.canSave() ? Status.OK.icon : Status.ERROR.icon) : null);
+        saveStatus.setIcon(
+                !state.isBusy() && state.anyChanges() ? (state.canSave() ? Status.OK.icon : Status.ERROR.icon) : null);
         saveButton.setEnabled(state.canSave());
         Component tab = tabbedPane.getSelectedComponent();
         if (tab != null) {

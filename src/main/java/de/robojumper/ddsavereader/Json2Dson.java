@@ -30,7 +30,8 @@ public class Json2Dson {
         if (i == args.length - 1) {
             infile = args[i++];
         } else {
-            System.err.println("Usage: java -jar " + BuildConfig.JAR_NAME + ".jar encode [--output, -o outfile] filename");
+            System.err.println(
+                    "Usage: java -jar " + BuildConfig.JAR_NAME + ".jar encode [--output, -o outfile] filename");
             System.exit(1);
         }
 
@@ -39,7 +40,7 @@ public class Json2Dson {
             byte[] FileData = Files.readAllBytes(Paths.get(infile));
             DsonWriter d = new DsonWriter(FileData);
             OutResult = d.bytes();
-        } catch (IOException | ParseException e) {
+        } catch (IOException | ParseException | InterruptedException e) {
             System.err.println("Could not read " + infile);
             System.err.println(e.getMessage());
             System.exit(1);
