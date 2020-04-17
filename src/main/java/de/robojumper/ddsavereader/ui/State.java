@@ -38,6 +38,9 @@ import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
 import de.robojumper.ddsavereader.file.DsonWriter;
 import de.robojumper.ddsavereader.util.Helpers;
 
+/* The UI State class. This class is not internally synchronized, and any 
+ * access must happen on the EDT (swing event dispatch thread).
+ */
 public class State {
 
     private static final File SETTINGS_FILE = new File(Helpers.DATA_DIR, "uisettings.properties");
@@ -170,8 +173,9 @@ public class State {
     public void loadFiles() {
         files.values().stream().forEach(s -> {
             if (s.worker != null) {
-                s.worker.cancel(true);
+                SwingWorker<CheckResult, Object> w = s.worker;
                 s.worker = null;
+                w.cancel(true);
             }
         });
         files.clear();
@@ -241,8 +245,9 @@ public class State {
 
         f.contents = contents;
         if (f.worker != null) {
-            f.worker.cancel(true);
+            SwingWorker<CheckResult, Object> w = f.worker;
             f.worker = null;
+            w.cancel(true);
         }
         if (f.changed()) {
             f.worker = new CheckInBackground(file, f.contents);
@@ -299,6 +304,14 @@ public class State {
 
         @Override
         protected void done() {
+            /*
+            * There are two ways for `done` to be called:
+            * 1) The computation completes, and Swing enqueues the `done` call onto the event dispatch queue.
+            *    Thus, the we are on the EDT now and there are no synchronization issues.
+            * 2) The `cancel` method is called. This can immediately call `done`. As a result,
+            *    `cancel` must only be called on the EDT. This corresponds to the requirement that
+            *    users of this class must only access this on the EDT.
+            */
             CheckResult result = null;
             try {
                 result = get();
