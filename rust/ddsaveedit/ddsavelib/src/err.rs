@@ -12,8 +12,8 @@ pub enum FromBinError {
     /// A field's type was not identified by looking up the hardcoded
     /// names or applying a heuristic.
     UnknownField(String),
-    /// Basically EOF
-    SizeMismatch { at: usize, exp: usize },
+    /// EOF
+    EOF,
     /// A section of the file was not at the location specified
     /// in the header
     OffsetMismatch { exp: u64, is: u64 },

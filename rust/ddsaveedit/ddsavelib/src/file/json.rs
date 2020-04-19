@@ -215,18 +215,13 @@ impl File {
         field_idx: FieldIdx,
         writer: &'_ mut W,
         indent: &mut Vec<u8>,
-        comma: bool,
         allow_dupes: bool,
         unhash: &Unhasher<T>,
     ) -> std::io::Result<()> {
         let dat = &self.dat[field_idx];
         if let FieldType::Object(ref c) = dat.tipe {
             if c.is_empty() {
-                if comma {
-                    writer.write_all(b"{},\n")?;
-                } else {
-                    writer.write_all(b"{}\n")?;
-                }
+                writer.write_all(b"{}")?;
             } else {
                 writer.write_all(b"{\n")?;
                 let mut emitted_fields = if allow_dupes {
@@ -252,11 +247,7 @@ impl File {
                     indent.truncate(indent.len() - 4);
                 }
                 writer.write_all(&indent)?;
-                if comma {
-                    writer.write_all(b"},\n")?;
-                } else {
-                    writer.write_all(b"}\n")?;
-                }
+                writer.write_all(b"}")?;
             }
         } else {
             unreachable!("is object")
@@ -367,12 +358,11 @@ impl File {
                 fil.write_to_json_priv(writer, indent, allow_dupes, unhash)?;
             }
             Object(_) => {
-                self.write_object(field_idx, writer, indent, comma, allow_dupes, unhash)?;
+                self.write_object(field_idx, writer, indent, allow_dupes, unhash)?;
             }
         };
 
-        if let Object(_) = dat.tipe {
-        } else if comma {
+        if comma {
             writer.write_all(b",\n")?;
         } else {
             writer.write_all(b"\n")?;
@@ -518,7 +508,7 @@ impl FieldType {
                         ));
                     }
                 }
-                _ => unreachable!("unhandled hardcoded field while from json"),
+                _ => unreachable!("unhandled hardcoded field while reading from json"),
             }
             Ok(val)
         } else {

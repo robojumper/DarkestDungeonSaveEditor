@@ -397,6 +397,21 @@ macro_rules! skip {
     };
 }
 
+/// Helper struct for decoding binary objects according to their
+/// number of direct children
+struct BinObjectFrame {
+    obj_idx: ObjIdx,
+    field_idx: FieldIdx,
+    num_childs: u32,
+    name: Atom<EmptyStaticAtomSet>,
+}
+
+impl AsRef<str> for BinObjectFrame {
+    fn as_ref(&self) -> &str {
+        self.name.as_ref()
+    }
+}
+
 fn decode_fields_bin<R: Read>(
     reader: &'_ mut R,
     f: &'_ mut Fields,
@@ -422,16 +437,12 @@ fn decode_fields_bin<R: Read>(
     }
 
     let mut data = Data { dat: vec![] };
-    let mut obj_stack = vec![];
-    let mut obj_nums = vec![];
-    let mut obj_names: Vec<Atom<EmptyStaticAtomSet>> = vec![];
+    let mut obj_stack: Vec<BinObjectFrame> = vec![];
     for (idx, field) in f.fields.iter().enumerate() {
         // Read name
         let off = field.offset as usize;
         let len = field.name_length() as usize;
-        let field_name = buf
-            .get(off..off + len)
-            .ok_or(FromBinError::SizeMismatch { at: off, exp: len })?;
+        let field_name = buf.get(off..off + len).ok_or(FromBinError::EOF)?;
         let name = {
             let cs = CStr::from_bytes_with_nul(&field_name)?.to_str()?;
             Atom::from(cs)
@@ -443,63 +454,60 @@ fn decode_fields_bin<R: Read>(
 
         let data_begin = off + len;
         let data_end = off + offset_sizes[&(field.offset as usize)]; // exclusive
-        let field_type = if field.is_object() {
-            let num_childs = o[field.object_index().unwrap()].num_direct_childs;
+        let field_type = if let Some(obj_idx) = field.object_index() {
+            let num_childs = o[obj_idx].num_direct_childs;
             FieldType::Object(vec![FieldIdx::dangling(); num_childs as usize].into_boxed_slice())
         } else {
             if data_end <= data_begin {
                 return Err(FromBinError::FormatErr);
             }
             let to_skip_if_aligned = ((data_begin + 3) & !0b11) - data_begin;
-            let mut field_data =
-                buf.get(data_begin..data_end)
-                    .ok_or(FromBinError::SizeMismatch {
-                        at: data_begin,
-                        exp: data_end - data_begin,
-                    })?;
+            let mut field_data = buf.get(data_begin..data_end).ok_or(FromBinError::EOF)?;
             FieldType::try_from_bin(
                 &mut field_data,
                 to_skip_if_aligned,
                 data_end - data_begin,
-                &obj_names,
+                &obj_stack,
                 &name,
             )?
         };
         data.dat.push(self::Field {
             name: name.clone(),
-            parent: obj_stack.last().copied(),
+            parent: obj_stack.last().map(|f| f.obj_idx),
             tipe: field_type,
         });
 
-        if obj_stack.is_empty() {
-            if !field.is_object() {
-                return Err(FromBinError::MissingRoot);
+        if let Some(frame) = obj_stack.last_mut() {
+            let childs = data[frame.field_idx].tipe.unwrap_object_mut();
+            childs[frame.num_childs as usize] = FieldIdx(idx as u32);
+            frame.num_childs += 1;
+        } else if !field.is_object() {
+            return Err(FromBinError::MissingRoot);
+        }
+
+        if let Some(obj_idx) = field.object_index() {
+            let field_idx = o[obj_idx].field;
+            match data.get(field_idx) {
+                Some(Field {
+                    tipe: FieldType::Object(_),
+                    ..
+                }) => {}
+                _ => return Err(FromBinError::FormatErr),
             }
-        } else {
-            if let FieldType::Object(ref mut v) = data[o[*obj_stack.last().unwrap()].field].tipe {
-                v[*obj_nums.last_mut().unwrap() as usize] = FieldIdx(idx as u32);
+            obj_stack.push(BinObjectFrame {
+                obj_idx,
+                field_idx,
+                num_childs: 0,
+                name: name.clone(),
+            });
+        }
+
+        while let Some(frame) = obj_stack.last() {
+            if frame.num_childs == o[frame.obj_idx].num_direct_childs {
+                obj_stack.pop();
             } else {
-                return Err(FromBinError::FormatErr);
+                break;
             }
-            *obj_nums.last_mut().unwrap() += 1;
-        }
-
-        if field.is_object() {
-            let idx = field.object_index().unwrap();
-            if idx.0 >= o.len() {
-                return Err(FromBinError::FormatErr);
-            }
-            obj_stack.push(field.object_index().unwrap());
-            obj_nums.push(0u32);
-            obj_names.push(name.clone());
-        }
-
-        while !obj_stack.is_empty()
-            && *obj_nums.last().unwrap() == o[*obj_stack.last().unwrap()].num_direct_childs
-        {
-            obj_stack.pop();
-            obj_nums.pop();
-            obj_names.pop();
         }
     }
 
@@ -523,7 +531,7 @@ impl FieldType {
         if name == "raw_data" || name == "static_save" {
             skip!(reader, to_skip_if_aligned);
             let len = reader.read_i32::<LittleEndian>()? as usize;
-            if len.checked_add(4).ok_or(FromBinError::FormatErr)? == max_len - to_skip_if_aligned {
+            if len.checked_add(4).ok_or(FromBinError::Arith)? == max_len - to_skip_if_aligned {
                 Ok(FieldType::File(Some(Box::new(self::File::try_from_bin(
                     reader.by_ref(),
                 )?))))
@@ -614,7 +622,7 @@ impl FieldType {
                     4 => Ok(Int(reader.read_i32::<LittleEndian>()?)),
                     5..=usize::MAX => {
                         let len = reader.read_i32::<LittleEndian>()? as usize;
-                        if len.checked_add(4).ok_or(FromBinError::FormatErr)? == aligned_max_len {
+                        if len.checked_add(4).ok_or(FromBinError::Arith)? == aligned_max_len {
                             let mut buf = vec![0u8; len];
                             reader.read_exact(&mut buf)?;
                             let string = {

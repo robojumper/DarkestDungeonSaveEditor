@@ -211,7 +211,7 @@ impl FieldIdx {
 
     /// Create a dangling field index, to be replaced later
     fn dangling() -> Self {
-        Self(0)
+        Self(u32::MAX)
     }
 }
 
@@ -329,6 +329,10 @@ impl IndexMut<FieldIdx> for Data {
 impl Data {
     fn iter(&self) -> impl Iterator<Item = &Field> {
         self.dat.iter()
+    }
+
+    fn get(&self, index: FieldIdx) -> Option<&<Self as Index<FieldIdx>>::Output> {
+        self.dat.get(index.0 as usize)
     }
 
     fn create_data(
@@ -469,5 +473,22 @@ types!(insert,
         })
     } else {
         None
+    }
+}
+
+impl FieldType {
+    #[allow(unused)]
+    fn unwrap_object(&self) -> &[FieldIdx] {
+        match self {
+            FieldType::Object(ref v) => v,
+            _ => panic!(),
+        }
+    }
+
+    fn unwrap_object_mut(&mut self) -> &mut [FieldIdx] {
+        match self {
+            FieldType::Object(ref mut v) => v,
+            _ => panic!(),
+        }
     }
 }
