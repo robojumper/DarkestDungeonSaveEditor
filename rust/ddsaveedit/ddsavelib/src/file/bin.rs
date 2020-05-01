@@ -8,11 +8,9 @@ use std::{
 
 use super::{
     hardcoded_type, Data, Field, FieldIdx, FieldInfo, FieldType, Fields, File, Header, ObjIdx,
-    ObjectInfo, Objects,
+    ObjectInfo, Objects, NameType,
 };
 use crate::{err::*, util::name_hash};
-
-use string_cache::{Atom, EmptyStaticAtomSet};
 
 impl File {
     /// Attempt create a Darkest Dungeon save [`File`] from a [`Read`] representing
@@ -46,7 +44,7 @@ impl File {
         Ok(())
     }
 
-    pub fn fixup_offsets(&mut self) -> Result<u32, std::num::TryFromIntError> {
+    pub(in super) fn fixup_offsets(&mut self) -> Result<u32, std::num::TryFromIntError> {
         let mut offset = 0;
         for (idx, f) in self.f.iter_mut() {
             f.offset = u32::try_from(offset)?;
@@ -403,7 +401,7 @@ struct BinObjectFrame {
     obj_idx: ObjIdx,
     field_idx: FieldIdx,
     num_childs: u32,
-    name: Atom<EmptyStaticAtomSet>,
+    name: NameType,
 }
 
 impl AsRef<str> for BinObjectFrame {
@@ -445,7 +443,7 @@ fn decode_fields_bin<R: Read>(
         let field_name = buf.get(off..off + len).ok_or(FromBinError::EOF)?;
         let name = {
             let cs = CStr::from_bytes_with_nul(&field_name)?.to_str()?;
-            Atom::from(cs)
+            NameType::from(cs)
         };
 
         if name_hash(&name) != field.name_hash {

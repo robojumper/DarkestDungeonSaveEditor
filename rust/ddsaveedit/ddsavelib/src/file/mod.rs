@@ -6,10 +6,16 @@ use std::{
 
 use crate::util::name_hash;
 
+#[cfg(feature = "string_cache")]
 use string_cache::{Atom, EmptyStaticAtomSet};
 
 mod bin;
 mod json;
+
+#[cfg(feature = "string_cache")]
+type NameType = Atom<EmptyStaticAtomSet>;
+#[cfg(not(feature = "string_cache"))]
+type NameType = String;
 
 /// A map from name hash -> name to make the JSON format more legible.
 ///
@@ -301,7 +307,7 @@ impl IndexMut<FieldIdx> for Fields {
 
 #[derive(Clone, Debug, PartialEq)]
 struct Field {
-    name: Atom<EmptyStaticAtomSet>,
+    name: NameType,
     parent: Option<ObjIdx>,
     tipe: FieldType,
 }
@@ -335,12 +341,7 @@ impl Data {
         self.dat.get(index.0 as usize)
     }
 
-    fn create_data(
-        &mut self,
-        name: Atom<EmptyStaticAtomSet>,
-        parent: Option<ObjIdx>,
-        tipe: FieldType,
-    ) {
+    fn create_data(&mut self, name: NameType, parent: Option<ObjIdx>, tipe: FieldType) {
         self.dat.push(Field { name, parent, tipe });
     }
 }

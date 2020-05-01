@@ -4,13 +4,12 @@ use std::{
     io::{Read, Write},
 };
 
-use super::{hardcoded_type, FieldIdx, FieldInfo, FieldType, File, ObjIdx, Unhasher};
+use super::{hardcoded_type, FieldIdx, FieldInfo, FieldType, File, ObjIdx, NameType, Unhasher};
 use crate::{
     err::*,
     util::{escape, name_hash},
 };
 use json_parser::{JsonError, Parser, TokenType};
-use string_cache::{Atom, EmptyStaticAtomSet};
 
 mod json_parser;
 
@@ -95,7 +94,7 @@ impl File {
     fn read_child_fields<'a>(
         &mut self,
         parent: Option<ObjIdx>,
-        name_stack: &mut Vec<Atom<EmptyStaticAtomSet>>,
+        name_stack: &mut Vec<NameType>,
         lex: &mut Parser<'a>,
     ) -> Result<Vec<FieldIdx>, FromJsonError> {
         let mut child_fields = vec![];
@@ -126,10 +125,10 @@ impl File {
         &mut self,
         name: Cow<'a, str>,
         parent: Option<ObjIdx>,
-        name_stack: &mut Vec<Atom<EmptyStaticAtomSet>>,
+        name_stack: &mut Vec<NameType>,
         lex: &mut Parser<'a>,
     ) -> Result<FieldIdx, FromJsonError> {
-        let name = Atom::from(name.as_ref());
+        let name = NameType::from(name.as_ref());
         let field_index = self
             .f
             .create_field(&name)
@@ -168,7 +167,11 @@ impl File {
                 }
             }
             _ => {
-                let f = FieldType::try_from_json(lex, &name_stack, name.as_ref())?;
+                let f = FieldType::try_from_json(
+                    lex,
+                    &name_stack,
+                    <NameType as AsRef<str>>::as_ref(&name),
+                )?;
                 self.dat.create_data(name, parent, f);
             }
         };

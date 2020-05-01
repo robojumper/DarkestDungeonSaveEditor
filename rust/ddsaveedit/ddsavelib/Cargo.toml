@@ -4,13 +4,15 @@ version = "0.1.0"
 authors = ["robojumper <robojumper@gmail.com>"]
 edition = "2018"
 
+[features]
+default = ["string_cache"]
 
 [dependencies]
 byteorder = "1.3.4"
 itoa = "0.4.5"
 dtoa = "0.4.5"
 once_cell = "1.3.1"
-string_cache = "0.8.0"
+string_cache = { version = "0.8.0", default-features = false, optional = true }
 
 [dev-dependencies]
 criterion = "0.3.1"
