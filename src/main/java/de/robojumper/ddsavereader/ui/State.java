@@ -20,13 +20,17 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.TreeMap;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
 import javax.swing.Icon;
+import javax.swing.SwingWorker;
 
 import de.fuerstenau.buildconfig.BuildConfig;
 import de.robojumper.ddsavereader.file.DsonFile;
@@ -34,13 +38,17 @@ import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
 import de.robojumper.ddsavereader.file.DsonWriter;
 import de.robojumper.ddsavereader.util.Helpers;
 
+/* The UI State class. This class is not internally synchronized, and any 
+ * access must happen on the EDT (swing event dispatch thread).
+ */
 public class State {
 
     private static final File SETTINGS_FILE = new File(Helpers.DATA_DIR, "uisettings.properties");
     private static final File BACKUP_DIR = new File(Helpers.DATA_DIR, "/backups");
 
     public enum Status {
-        OK(Resources.OK_ICON), WARNING(Resources.WARNING_ICON), ERROR(Resources.ERROR_ICON);
+        OK(Resources.OK_ICON), WARNING(Resources.WARNING_ICON), ERROR(Resources.ERROR_ICON),
+        PENDING(Resources.WARNING_ICON);
 
         public final Icon icon;
 
@@ -49,13 +57,17 @@ public class State {
         }
     };
 
+    public enum Saveability {
+        YES, NO, PENDING,
+    }
+
     public class SaveFile {
         boolean changed() {
             return !Objects.equals(contents, originalContents);
         }
 
         boolean canSave() {
-            return canSave;
+            return saveability == Saveability.YES;
         }
 
         int[] getErrorLine() {
@@ -81,7 +93,9 @@ public class State {
         int errorPos;
         String errorReason;
 
-        private boolean canSave = true;
+        SwingWorker<CheckResult, Object> worker;
+
+        private Saveability saveability = Saveability.YES;
     };
 
     private String saveDir = "", gameDir = "", modsDir = "";
@@ -93,7 +107,9 @@ public class State {
 
     private String lastSheetID = "";
 
-    public void init() {
+    private Consumer<String> saveStatusChangeCB;
+
+    public void init(Consumer<String> saveStatusChangeCB) {
         try {
             Properties prop = new Properties();
             if (!SETTINGS_FILE.exists()) {
@@ -106,6 +122,7 @@ public class State {
             setSaveDir((String) prop.getOrDefault("saveDir", ""));
             lastSheetID = (String) prop.getOrDefault("sheetId", "");
             sawGameDataPopup = Boolean.parseBoolean((String) prop.getOrDefault("sawGameDataPopup", ""));
+            this.saveStatusChangeCB = saveStatusChangeCB;
         } catch (IOException | ClassCastException e) {
             return;
         }
@@ -154,10 +171,17 @@ public class State {
     }
 
     public void loadFiles() {
-        File dir = new File(saveDir);
+        files.values().stream().forEach(s -> {
+            if (s.worker != null) {
+                SwingWorker<CheckResult, Object> w = s.worker;
+                s.worker = null;
+                w.cancel(true);
+            }
+        });
         files.clear();
         SimpleDateFormat fmt = new SimpleDateFormat("HH:mm:ss");
         System.err.println(fmt.format(new Date()) + " Start Loading Files");
+        File dir = new File(saveDir);
         Arrays.stream(dir.listFiles()).parallel().forEach(f -> {
             if (Helpers.isSaveFileName(f.getName())) {
                 String content;
@@ -191,6 +215,8 @@ public class State {
             } catch (ParseException e) {
                 System.err.println("ERROR!!! canSave() returns true but saving fails for " + f.getKey());
                 e.printStackTrace();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         });
         System.err.println(fmt.format(new Date()) + " End Saving Files");
@@ -213,25 +239,110 @@ public class State {
             throw new RuntimeException();
         }
         SaveFile f = files.get(file);
+        /*
+        * if (f.contents.equals(contents)) { return; }
+        */
+
         f.contents = contents;
+        if (f.worker != null) {
+            SwingWorker<CheckResult, Object> w = f.worker;
+            f.worker = null;
+            w.cancel(true);
+        }
         if (f.changed()) {
-            try {
-                new DsonWriter(f.contents).bytes();
-                f.canSave = true;
-            } catch (Exception e) {
-                if (e instanceof ParseException) {
-                    f.errorPos = ((ParseException) e).getErrorOffset();
-                }
-                f.errorReason = e.getMessage().split("\n")[0];
-                f.canSave = false;
-            }
+            f.worker = new CheckInBackground(file, f.contents);
+            f.worker.execute();
+            f.saveability = Saveability.PENDING;
         } else {
-            f.canSave = true;
+            f.saveability = Saveability.YES;
+        }
+        f.errorPos = 0;
+        f.errorReason = "";
+    }
+
+    static class CheckResult {
+        String file;
+        boolean success;
+        int errorPos;
+        String errorReason;
+
+        public CheckResult(String f, boolean s, int p, String r) {
+            this.file = f;
+            this.success = s;
+            this.errorPos = p;
+            this.errorReason = r;
+        }
+    }
+
+    class CheckInBackground extends SwingWorker<CheckResult, Object> {
+        String contents, file;
+
+        public CheckInBackground(String f, String c) {
+            this.file = f;
+            this.contents = c;
+        }
+
+        private CheckResult check() {
+            try {
+                new DsonWriter(contents).bytes();
+                return new CheckResult(file, true, 0, "");
+            } catch (InterruptedException e) {
+                return null;
+            } catch (Exception e) {
+                int errorPos = 0;
+                if (e instanceof ParseException) {
+                    errorPos = ((ParseException) e).getErrorOffset();
+                }
+                return new CheckResult(file, false, errorPos, e.getMessage().split("\n")[0]);
+            }
+        }
+
+        @Override
+        public CheckResult doInBackground() {
+            return check();
+        }
+
+        @Override
+        protected void done() {
+            /*
+            * There are two ways for `done` to be called:
+            * 1) The computation completes, and Swing enqueues the `done` call onto the event dispatch queue.
+            *    Thus, the we are on the EDT now and there are no synchronization issues.
+            * 2) The `cancel` method is called. This can immediately call `done`. As a result,
+            *    `cancel` must only be called on the EDT. This corresponds to the requirement that
+            *    users of this class must only access this on the EDT.
+            */
+            CheckResult result = null;
+            try {
+                result = get();
+            } catch (InterruptedException | ExecutionException | CancellationException e) {
+            }
+            if (result == null)
+                return;
+
+            SaveFile file = files.get(result.file);
+            if (file == null || file.worker != this)
+                return;
+
+            file.worker = null;
+            if (result.success) {
+                file.saveability = Saveability.YES;
+            } else {
+                file.saveability = Saveability.NO;
+                file.errorPos = result.errorPos;
+                file.errorReason = result.errorReason;
+            }
+
+            saveStatusChangeCB.accept(result.file);
         }
     }
 
     public boolean canSave() {
         return files.values().stream().filter(s -> s.changed() && !s.canSave()).count() == 0 && anyChanges();
+    }
+
+    public boolean isBusy() {
+        return files.values().stream().anyMatch(s -> s.saveability == Saveability.PENDING);
     }
 
     public boolean anyChanges() {

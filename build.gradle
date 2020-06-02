@@ -49,7 +49,7 @@ jar {
     if (!project.hasProperty("includeSecret")) {
         exclude 'client_secret.json'
     }
-    baseName = "$jarname"
+    archiveBaseName = "$jarname"
 }
 
 mainClassName = "de.robojumper.ddsavereader.Main"
@@ -61,8 +61,8 @@ task fatJar(type: Jar) {
                 'Implementation-Version': project.version,
                 'Main-Class': mainClassName
     }
-    baseName = "$jarname"
-    archiveName = "${jarname}.jar"
+    archiveBaseName = "$jarname"
+    archiveFileName = "${jarname}.jar"
     from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
     with jar
 }
