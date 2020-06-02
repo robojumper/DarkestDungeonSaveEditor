@@ -124,6 +124,7 @@ public class ConverterTests {
         testCorrectConversion("nonAsciiField");
         testCorrectConversion("backerHeroes");
         testCorrectConversion("quirk_monster_class_ids");
+        testCorrectConversion("networkFiles");
     }
 
     private List<String> getResourceFiles(String path) throws IOException {
