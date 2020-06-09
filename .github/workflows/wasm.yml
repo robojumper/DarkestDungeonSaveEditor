@@ -14,7 +14,7 @@ jobs:
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: nightly-2020-04-18
+        toolchain: nightly-2020-06-08
         override: true
         profile: minimal
     - name: Install Node

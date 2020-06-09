@@ -84,29 +84,23 @@ pub fn check(input: &str) -> Option<Annotation> {
                 FromJsonError::EncodingErr(display, a, b) => (display, a, b),
             };
 
-            let mut line = 0;
-            let mut col = 0;
-            for (idx, &b) in input.as_bytes().iter().take(first as usize).enumerate() {
-                if input.is_char_boundary(idx) {
-                    col += 1;
+            let calc_line_col = |i| {
+                let mut line = 0;
+                let mut col = 0;
+                for (idx, &b) in input.as_bytes().iter().take(i as usize).enumerate() {
+                    if input.is_char_boundary(idx) {
+                        col += 1;
+                    }
+                    if b == b'\n' {
+                        line += 1;
+                        col = 0;
+                    }
                 }
-                if b == b'\n' {
-                    line += 1;
-                    col = 0;
-                }
-            }
+                (line, col)
+            };
 
-            let mut eline = 0;
-            let mut ecol = 0;
-            for (idx, &b) in input.as_bytes().iter().take(end as usize).enumerate() {
-                if input.is_char_boundary(idx) {
-                    ecol += 1;
-                }
-                if b == b'\n' {
-                    eline += 1;
-                    ecol = 0;
-                }
-            }
+            let (line, col) = calc_line_col(first);
+            let (eline, ecol) = calc_line_col(end);
 
             Some(Annotation {
                 err: string,

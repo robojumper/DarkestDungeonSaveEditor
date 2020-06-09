@@ -1,3 +1,6 @@
+//! A simple JSON lexer and parser. Accepts all valid JSON, and accepts some invalid JSON.
+//! In particular, floating point numbers simply use the Rust core f32 parser -- see [`<f32 as FromStr>::from_str`](https://doc.rust-lang.org/core/str/trait.FromStr.html).
+
 use std::{borrow::Cow, iter::FusedIterator};
 
 use crate::{
@@ -58,6 +61,9 @@ struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
+    /// Construct a simple JSON lexer from a string slice. The Lexer will
+    /// sometimes yield invalid number and string tokens that must be
+    /// checked.
     fn new(src: &'a str) -> Self {
         Self {
             src,
@@ -66,10 +72,14 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Return the span of the last yielded token. The tokens yielded by the
+    /// lexer do not include spans as to keep the memory size of a token low.
     fn last_span(&self) -> &Span {
         &self.last_span
     }
 
+    /// Return the byte position of the next character that will be looked at.
+    /// Whitespace might be skipped.
     fn cur_pos(&mut self) -> usize {
         self.it
             .peek()
@@ -172,6 +182,8 @@ impl<'a> Iterator for Lexer<'a> {
 // CharIndices is Fused, we are Fused as well.
 impl<'a> FusedIterator for Lexer<'a> {}
 
+/// The span of a token, as described by the byte index of the first character
+/// (inclusive), and the end of the token (exclusive).
 #[derive(Copy, Clone, Debug)]
 pub struct Span {
     pub first: usize,
@@ -182,18 +194,26 @@ struct LexerToken {
     pub kind: TokenType,
 }
 
+/// A JSON Token. If `kind` is of [`TokenType::String`], `dat` will be escaped already.
 #[derive(Clone, Debug)]
 pub struct Token<'a> {
     pub kind: TokenType,
     pub dat: Cow<'a, str>,
 }
 
+/// Represents the errors that can occur upon parsing the file as JSON.
 #[derive(Debug, Clone)]
 pub enum JsonError {
+    /// A token was expected, but the file ended.
     EOF,
+    /// A value was expected, but a non-value token was found.
     ExpectedValue(usize, usize),
+    /// A specific token was expected, but another was found.
     Expected(String, usize, usize),
+    /// The string contained a raw control character such as `\n` instead of
+    /// `\\n`.
     BareControl(usize, usize),
+    /// Parsing of the number as an [`i32`] or [`f32`] failed.
     BadNumber(usize, usize),
 }
 

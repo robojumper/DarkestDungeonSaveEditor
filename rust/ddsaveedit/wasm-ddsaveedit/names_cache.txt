@@ -157,6 +157,9 @@ arbalest.suppressing_fire
 arbalest.triage
 arbalest.weapon
 archers_ring
+arena
+arena_first
+arena_win
 arkenhelm
 armor_haggler
 armour
@@ -174,6 +177,8 @@ bad_humours
 bandage
 bandits_sense
 bandits_trapped_chest
+banner
+banner_customization
 bar
 barbaric_yawp
 barnacle_crusted_chest
@@ -576,6 +581,7 @@ chop
 chortling_pseudopod
 christmas_cake
 christmas_cracker
+circus
 citrine
 claustrophobia
 claw_of_the_bellwether_beast
@@ -665,6 +671,9 @@ collector_shaman_D
 collector_shaman_E
 collector_shaman_F
 combat
+combat_activating_heroes
+combat_burndown_timer
+combat_taking_turns
 come_hither
 command
 commanders_orders
@@ -1027,6 +1036,7 @@ drowned_pirate_K
 drowned_pirate_L
 druidic_herb
 dud_hitter
+dueling_grounds
 duelist_advance
 dysthymia
 eagle_eye
@@ -1995,7 +2005,6 @@ medics_boots
 medics_greaves
 meditation
 meditator
-memory
 memory_of_true_love
 mercurial
 mine
@@ -2130,6 +2139,7 @@ pamplemousse
 papyrus_containing_the_spell
 paralyzers_crest
 paranormania
+party_setup
 patch_of_sight
 patch_up
 pavlovs_bell
@@ -2242,6 +2252,8 @@ present
 press_h
 preventative_medicine
 pristine_fountain
+prize_booth
+prize_box
 profane_scroll
 prophet_A
 prophet_B
@@ -2317,6 +2329,7 @@ rake
 ralackks_visage
 rampart
 rampart_shield
+rankings
 ravenous_lions_ring
 rayners_seal
 reaper_hourglass
@@ -2433,7 +2446,6 @@ shambler_tentacle_Q
 shambler_tentacle_R
 shambler_tooth
 shamblers_altar
-shard
 shard_of_rhembrandts_soul
 shared_dlc
 sharpen_spear
@@ -2714,7 +2726,6 @@ soothing_mask
 soul_of_the_neverborn
 spearing
 speed_stone
-spice
 spider_spitter_A
 spider_spitter_B
 spider_spitter_C

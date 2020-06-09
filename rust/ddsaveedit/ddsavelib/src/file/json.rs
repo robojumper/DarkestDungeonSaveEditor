@@ -4,7 +4,7 @@ use std::{
     io::{Read, Write},
 };
 
-use super::{hardcoded_type, FieldIdx, FieldInfo, FieldType, File, ObjIdx, NameType, Unhasher};
+use super::{hardcoded_type, FieldIdx, FieldInfo, FieldType, File, NameType, ObjIdx, Unhasher};
 use crate::{
     err::*,
     util::{escape, name_hash},

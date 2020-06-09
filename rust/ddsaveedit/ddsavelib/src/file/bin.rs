@@ -7,8 +7,8 @@ use std::{
 };
 
 use super::{
-    hardcoded_type, Data, Field, FieldIdx, FieldInfo, FieldType, Fields, File, Header, ObjIdx,
-    ObjectInfo, Objects, NameType,
+    hardcoded_type, Data, Field, FieldIdx, FieldInfo, FieldType, Fields, File, Header, NameType,
+    ObjIdx, ObjectInfo, Objects,
 };
 use crate::{err::*, util::name_hash};
 
@@ -44,7 +44,7 @@ impl File {
         Ok(())
     }
 
-    pub(in super) fn fixup_offsets(&mut self) -> Result<u32, std::num::TryFromIntError> {
+    pub(super) fn fixup_offsets(&mut self) -> Result<u32, std::num::TryFromIntError> {
         let mut offset = 0;
         for (idx, f) in self.f.iter_mut() {
             f.offset = u32::try_from(offset)?;
