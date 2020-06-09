@@ -31,10 +31,10 @@ jobs:
         npm run build
         cd ../../../
     - name: Deploy
-      uses: crazy-max/ghaction-github-pages@v1
+      uses: crazy-max/ghaction-github-pages@v2
       with:
         target_branch: gh-pages
         build_dir: rust/ddsaveedit/wasm-ddsaveedit/dist # The folder the action should deploy.
-        committer_name: robojumper
+        # committer: robojumper <robojumper@users.noreply.github.com>
       env:
-        GITHUB_PAT: ${{ secrets.ACCESS_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
