@@ -1,14 +1,14 @@
 [package]
 name = "ddsavelib"
-version = "0.1.0"
+version = "0.1.1"
 description = "Library for reading/writing Darkest Dungeon save files."
 authors = ["robojumper <robojumper@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 documentation = "https://docs.rs/ddsavelib"
-homepage = "https://github.com/robojumper/DarkestDungeonSaveEditor/ddsavelib"
-repository = "https://github.com/robojumper/DarkestDungeonSaveEditor/ddsavelib"
+homepage = "https://github.com/robojumper/DarkestDungeonSaveEditor"
+repository = "https://github.com/robojumper/DarkestDungeonSaveEditor"
 
 include = ["src/**/*", "README.md"]
 
