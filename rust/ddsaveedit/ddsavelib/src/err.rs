@@ -1,4 +1,5 @@
 //! Provides the various errors that can occur when deserializing from Binary or JSON.
+//!
 //! Serializing should, save for I/O errors, always succeed. I/O errors can be avoided
 //! by using [`Write`](std::io::Write) or [`Read`](std::io::Read) implementations that do not error (like memory buffers).
 

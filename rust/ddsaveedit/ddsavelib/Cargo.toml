@@ -1,8 +1,16 @@
 [package]
 name = "ddsavelib"
 version = "0.1.0"
+description = "Library for reading/writing Darkest Dungeon save files."
 authors = ["robojumper <robojumper@gmail.com>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+documentation = "https://docs.rs/ddsavelib"
+homepage = "https://github.com/robojumper/DarkestDungeonSaveEditor/ddsavelib"
+repository = "https://github.com/robojumper/DarkestDungeonSaveEditor/ddsavelib"
+
+include = ["src/**/*", "README.md"]
 
 [features]
 default = ["string_cache"]
@@ -13,11 +21,3 @@ itoa = "0.4.5"
 dtoa = "0.4.5"
 once_cell = "1.3.1"
 string_cache = { version = "0.8.0", default-features = false, optional = true }
-
-[dev-dependencies]
-criterion = "0.3.1"
-
-[[bench]]
-name = "load_save"
-harness = false
-test = true

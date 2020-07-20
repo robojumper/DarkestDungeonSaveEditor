@@ -6,9 +6,7 @@ fn main() {
         let mut buf_reader = std::io::BufReader::new(file);
 
         let fil = File::try_from_bin(&mut buf_reader).unwrap();
-        let mut x = Vec::new();
-        fil.write_to_json(&mut x, true, &Unhasher::empty()).unwrap();
-
-        println!("{}", std::str::from_utf8(&x).unwrap());
+        fil.write_to_json(&mut std::io::stdout().lock(), true, &Unhasher::empty())
+            .unwrap();
     }
 }

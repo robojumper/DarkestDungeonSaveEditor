@@ -14,7 +14,7 @@ jobs:
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: nightly-2020-06-08
+        toolchain: nightly-2020-07-12
         override: true
         profile: minimal
     - name: Install Node
@@ -35,6 +35,5 @@ jobs:
       with:
         target_branch: gh-pages
         build_dir: rust/ddsaveedit/wasm-ddsaveedit/dist # The folder the action should deploy.
-        # committer: robojumper <robojumper@users.noreply.github.com>
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

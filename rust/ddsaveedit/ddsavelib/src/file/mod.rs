@@ -62,6 +62,8 @@ impl Unhasher<&str> {
 #[derive(Clone, Debug, PartialEq)]
 /// Represents a valid Darkest Dungeon save file.
 ///
+/// See the [main library docs](`super`) for usage examples.
+///
 /// # A note on binary file identity
 ///
 /// Files produced by the game currently contain unidentified bits.
