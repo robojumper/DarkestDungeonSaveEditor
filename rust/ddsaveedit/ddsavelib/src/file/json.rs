@@ -9,7 +9,7 @@ use crate::{
     err::*,
     util::{escape, name_hash},
 };
-use json_parser::{JsonError, Parser, TokenType};
+use json_parser::{Parser, TokenType};
 
 mod json_parser;
 
@@ -26,7 +26,7 @@ impl File {
         Self::try_from_json_parser(lex, false)
     }
 
-    fn read_version_field<'a>(lex: &mut Parser<'a>) -> Result<u32, FromJsonError> {
+    fn read_version_field(lex: &mut Parser<'_>) -> Result<u32, FromJsonError> {
         let vers_field_tok = lex.expect(TokenType::FieldName)?;
         if vers_field_tok.dat != Self::BUILTIN_VERSION_FIELD {
             return Err(FromJsonError::Expected(
@@ -41,7 +41,7 @@ impl File {
         })
     }
 
-    fn try_from_json_parser<'a>(lex: &mut Parser<'a>, inner: bool) -> Result<Self, FromJsonError> {
+    fn try_from_json_parser(lex: &mut Parser<'_>, inner: bool) -> Result<Self, FromJsonError> {
         let mut s = Self {
             h: Default::default(),
             o: Default::default(),
@@ -74,20 +74,22 @@ impl File {
         lex.expect(TokenType::EndObject)?;
 
         if !inner {
-            let next = lex.next();
-            if let Some(Ok(_)) = next {
-                return Err(FromJsonError::Expected(
-                    "end of file".to_owned(),
-                    lex.span().first,
-                    lex.span().end,
-                ));
-            } else if let Some(Err(e)) = next {
-                return Err(e.into());
+            match lex.next() {
+                Some(Ok(_)) => {
+                    return Err(FromJsonError::Expected(
+                        "end of file".to_owned(),
+                        lex.span().first,
+                        lex.span().end,
+                    ))
+                }
+                Some(Err(e)) => return Err(e.into()),
+                _ => { /* ok, file ended without errors */ }
             }
         }
 
         let data_size = s.fixup_offsets()?;
-        s.h.fixup_header(s.o.len(), s.f.len(), vers_num, data_size)?;
+        s.h.fixup_header(s.o.len(), s.f.len(), vers_num, data_size)
+            .ok_or(FromJsonError::ArithError)?;
         Ok(s)
     }
 
@@ -100,7 +102,7 @@ impl File {
         let mut child_fields = vec![];
 
         loop {
-            let tok = lex.next().ok_or(JsonError::EOF)??;
+            let tok = lex.exp_next()?;
             match tok.kind {
                 TokenType::EndObject => break,
                 TokenType::FieldName => {
@@ -158,6 +160,8 @@ impl File {
                     name_stack.pop();
 
                     self.o[obj_index].num_direct_childs = childs.len() as u32;
+                    // Overflow checks unnecessary: We created a field above with index `field_index`,
+                    // so `f.len() - idx >= 1`
                     self.o[obj_index].num_all_childs = self.f.len() - 1 - field_index.numeric();
                     if let FieldType::Object(ref mut chl) = self.dat[field_index].tipe {
                         *chl = childs.into_boxed_slice();
@@ -169,7 +173,7 @@ impl File {
             _ => {
                 let f = FieldType::try_from_json(
                     lex,
-                    &name_stack,
+                    name_stack,
                     <NameType as AsRef<str>>::as_ref(&name),
                 )?;
                 self.dat.create_data(name, parent, f);
@@ -381,30 +385,45 @@ impl FieldType {
         name_stack: &'_ [impl AsRef<str>],
         name: impl AsRef<str>,
     ) -> Result<Self, FromJsonError> {
-        macro_rules! parse_prim {
-            ($tok:expr, $t:ty, $err:expr) => {{
-                let tok = $tok;
-                tok.dat.parse::<$t>().map_err(|_| {
-                    FromJsonError::LiteralFormat($err.to_owned(), lex.span().first, lex.span().end)
-                })?
-            }};
+        #[inline]
+        fn parse_prim<T: std::str::FromStr>(
+            tok: &json_parser::Token,
+            err: &str,
+            lex: &Parser,
+        ) -> Result<T, FromJsonError> {
+            tok.dat.parse::<T>().map_err(|_| {
+                FromJsonError::LiteralFormat(err.to_owned(), lex.span().first, lex.span().end)
+            })
+        }
+
+        #[inline]
+        fn parse_bool(tok: &json_parser::Token, lex: &Parser) -> Result<bool, FromJsonError> {
+            match tok.kind {
+                TokenType::BoolTrue => Ok(true),
+                TokenType::BoolFalse => Ok(false),
+                _ => Err(FromJsonError::Expected(
+                    "bool".to_owned(),
+                    lex.span().first,
+                    lex.span().end,
+                )),
+            }
         }
 
         if let Some(mut val) = hardcoded_type(name_stack, name) {
             match &mut val {
                 FieldType::Float(ref mut f) => {
                     let tok = lex.expect(TokenType::Number)?;
-                    *f = parse_prim!(tok, f32, "float");
+                    *f = parse_prim(&tok, "float", lex)?;
                 }
                 FieldType::IntVector(ref mut v) => {
                     lex.expect(TokenType::BeginArray)?;
                     let mut tmp_vec = vec![];
                     loop {
-                        let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+                        let tok = lex.exp_next()?;
                         match tok.kind {
                             TokenType::EndArray => break,
                             TokenType::Number => {
-                                tmp_vec.push(parse_prim!(tok, i32, "integer"));
+                                tmp_vec.push(parse_prim(&tok, "integer", lex)?);
                             }
                             TokenType::String if tok.dat.starts_with("###") => {
                                 tmp_vec.push(name_hash(&tok.dat[3..]));
@@ -424,7 +443,7 @@ impl FieldType {
                     lex.expect(TokenType::BeginArray)?;
                     let mut tmp_vec = vec![];
                     loop {
-                        let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+                        let tok = lex.exp_next()?;
                         match tok.kind {
                             TokenType::EndArray => break,
                             TokenType::String => {
@@ -445,11 +464,11 @@ impl FieldType {
                     lex.expect(TokenType::BeginArray)?;
                     let mut tmp_vec = vec![];
                     loop {
-                        let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+                        let tok = lex.exp_next()?;
                         match tok.kind {
                             TokenType::EndArray => break,
                             TokenType::Number => {
-                                tmp_vec.push(parse_prim!(tok, f32, "float"));
+                                tmp_vec.push(parse_prim(&tok, "float", lex)?);
                             }
                             _ => {
                                 return Err(FromJsonError::Expected(
@@ -465,37 +484,15 @@ impl FieldType {
                 FieldType::TwoInt(ref mut i1, ref mut i2) => {
                     lex.expect(TokenType::BeginArray)?;
                     let t1 = lex.expect(TokenType::Number)?;
-                    *i1 = parse_prim!(t1, i32, "integer");
+                    *i1 = parse_prim(&t1, "integer", lex)?;
                     let t2 = lex.expect(TokenType::Number)?;
-                    *i2 = parse_prim!(t2, i32, "integer");
+                    *i2 = parse_prim(&t2, "integer", lex)?;
                     lex.expect(TokenType::EndArray)?;
                 }
                 FieldType::TwoBool(ref mut b1, ref mut b2) => {
                     lex.expect(TokenType::BeginArray)?;
-                    let tok1 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
-                    *b1 = if tok1.kind == TokenType::BoolTrue {
-                        true
-                    } else if tok1.kind == TokenType::BoolFalse {
-                        false
-                    } else {
-                        return Err(FromJsonError::Expected(
-                            "bool".to_owned(),
-                            lex.span().first,
-                            lex.span().end,
-                        ));
-                    };
-                    let tok2 = lex.next().ok_or(FromJsonError::UnexpEOF)??;
-                    *b2 = if tok2.kind == TokenType::BoolTrue {
-                        true
-                    } else if tok2.kind == TokenType::BoolFalse {
-                        false
-                    } else {
-                        return Err(FromJsonError::Expected(
-                            "bool".to_owned(),
-                            lex.span().first,
-                            lex.span().end,
-                        ));
-                    };
+                    *b1 = parse_bool(&lex.exp_next()?, lex)?;
+                    *b2 = parse_bool(&lex.exp_next()?, lex)?;
                     lex.expect(TokenType::EndArray)?;
                 }
                 FieldType::Char(ref mut c) => {
@@ -505,7 +502,7 @@ impl FieldType {
                         *c = bytes[0] as char;
                     } else {
                         return Err(FromJsonError::LiteralFormat(
-                            "exactly one ascii char".to_owned(),
+                            "expected exactly one ascii char".to_owned(),
                             lex.span().first,
                             lex.span().end,
                         ));
@@ -516,9 +513,9 @@ impl FieldType {
             Ok(val)
         } else {
             // Decode heuristic
-            let tok = lex.next().ok_or(FromJsonError::UnexpEOF)??;
+            let tok = lex.exp_next()?;
             Ok(match tok.kind {
-                TokenType::Number => FieldType::Int(parse_prim!(tok, i32, "integer")),
+                TokenType::Number => FieldType::Int(parse_prim(&tok, "integer", lex)?),
                 TokenType::String => {
                     if tok.dat.starts_with("###") {
                         FieldType::Int(name_hash(&tok.dat[3..]))

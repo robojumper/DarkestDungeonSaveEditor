@@ -275,7 +275,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn peek(&mut self) -> Option<&<Self as Iterator>::Item> {
-        if let None = self.peeked {
+        if self.peeked.is_none() {
             self.peeked = if self.block_stack.is_empty() {
                 None
             } else {
@@ -295,6 +295,12 @@ impl<'a> Parser<'a> {
             ));
         }
         Ok(tok)
+    }
+
+    /// Return `Ok(_)` if the next token exists, `Err(_)` if the next token is
+    /// erroneous, and `Err(FromJsonError::UnexpEOF)` if there is no text token.
+    pub fn exp_next(&mut self) -> Result<Token<'a>, JsonError> {
+        self.next().ok_or(JsonError::EOF)?
     }
 
     fn parse_value(&mut self, next_tok: LexerToken) -> <Self as Iterator>::Item {
@@ -364,14 +370,12 @@ impl<'a> Parser<'a> {
                             TokenType::String => {
                                 self.block_stack
                                     .push(ParserBlock::Value { need_colon: true });
-                                self.json_to_token(next_tok).and_then(|mut t| {
+                                self.json_to_token(next_tok).map(|mut t| {
                                     t.kind = TokenType::FieldName;
-                                    Ok(t)
+                                    t
                                 })
                             }
-                            _ => {
-                                return self.err_expected(TokenType::FieldName);
-                            }
+                            _ => self.err_expected(TokenType::FieldName),
                         }
                     }
                 }
@@ -441,9 +445,8 @@ impl<'a> Parser<'a> {
 impl<'a> Iterator for Parser<'a> {
     type Item = Result<Token<'a>, JsonError>;
     fn next(&mut self) -> Option<Self::Item> {
-        match std::mem::replace(&mut self.peeked, None) {
-            tok @ Some(_) => return tok,
-            _ => {}
+        if let tok @ Some(_) = std::mem::replace(&mut self.peeked, None) {
+            return tok;
         }
         if self.block_stack.is_empty() {
             None

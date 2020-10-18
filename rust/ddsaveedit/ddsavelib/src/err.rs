@@ -3,8 +3,8 @@
 //! Serializing should, save for I/O errors, always succeed. I/O errors can be avoided
 //! by using [`Write`](std::io::Write) or [`Read`](std::io::Read) implementations that do not error (like memory buffers).
 
-#[derive(Debug)]
 /// Errors that can occur when deserializing from Binary
+#[derive(Debug)]
 pub enum FromBinError {
     /// An I/O error occured.
     IoError(std::io::Error),
@@ -70,8 +70,8 @@ impl std::fmt::Display for FromBinError {
 
 impl std::error::Error for FromBinError {}
 
-#[derive(Debug)]
 /// Errors that can occur when deserializing from JSON
+#[derive(Debug)]
 pub enum FromJsonError {
     /// An I/O error occured while writing.
     IoError(std::io::Error),
@@ -86,6 +86,8 @@ pub enum FromJsonError {
     UnexpEOF,
     /// We ran out of indices
     IntegerErr,
+    /// An integer representing a size or offset was too large to be represented in the file
+    ArithError,
     /// The String contained invalid bare control characters.
     EncodingErr(String, usize, usize),
 }

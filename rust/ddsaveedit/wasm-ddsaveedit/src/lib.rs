@@ -1,9 +1,10 @@
+#![feature(once_cell)]
+
 use ddsavelib::{
     err::{FromBinError, FromJsonError},
     File, Unhasher,
 };
-use once_cell::sync::Lazy;
-use std::sync::RwLock;
+use std::{lazy::SyncLazy, sync::RwLock};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -23,10 +24,11 @@ impl Annotation {
     }
 }
 
-static UNHASH: Lazy<RwLock<Unhasher<String>>> = Lazy::new(|| RwLock::new(Default::default()));
+static UNHASH: SyncLazy<RwLock<Unhasher<String>>> =
+    SyncLazy::new(|| RwLock::new(Default::default()));
 
-#[wasm_bindgen]
 /// Initialize this library
+#[wasm_bindgen]
 pub fn init() {
     // When the `console_error_panic_hook` feature is enabled, we can call the
     // `set_panic_hook` function at least once during initialization, and then
@@ -38,8 +40,8 @@ pub fn init() {
     console_error_panic_hook::set_once();
 }
 
-#[wasm_bindgen]
 /// Offer names to be used for unhashing.
+#[wasm_bindgen]
 pub fn set_names(n: Vec<JsValue>) {
     let mut m = UNHASH.write().unwrap();
     for name in n {
@@ -47,8 +49,8 @@ pub fn set_names(n: Vec<JsValue>) {
     }
 }
 
-#[wasm_bindgen]
 /// Encode a JSON file to binary.
+#[wasm_bindgen]
 pub fn encode(input: &str) -> Option<Vec<u8>> {
     let pass_input = input;
     let f = File::try_from_json(&mut pass_input.as_bytes()).ok()?;
@@ -57,8 +59,8 @@ pub fn encode(input: &str) -> Option<Vec<u8>> {
     Some(output)
 }
 
-#[wasm_bindgen]
 /// Check the JSON file for errors.
+#[wasm_bindgen]
 pub fn check(input: &str) -> Option<Annotation> {
     let pass_input = input;
     let f = File::try_from_json(&mut pass_input.as_bytes());
@@ -72,6 +74,7 @@ pub fn check(input: &str) -> Option<Annotation> {
                 }
                 FromJsonError::JsonErr(a, b) => ("JSON Syntax Error".to_owned(), a, b),
                 FromJsonError::IntegerErr => ("Too many items to encode".to_owned(), 0, 0),
+                FromJsonError::ArithError => ("Number too big".to_owned(), 0, 0),
                 FromJsonError::UnexpEOF => {
                     let in_len = input.len();
                     (
@@ -113,8 +116,8 @@ pub fn check(input: &str) -> Option<Annotation> {
     }
 }
 
-#[wasm_bindgen]
 /// Decode a binary file to JSON
+#[wasm_bindgen]
 pub fn decode(mut input: &[u8]) -> String {
     // FIXME: Use Result once it stops leaking stack space
     // https://github.com/rustwasm/wasm-bindgen/issues/1963

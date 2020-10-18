@@ -11,7 +11,8 @@ crate-type = ["cdylib", "rlib"]
 #default = ["console_error_panic_hook"]
 
 [dependencies]
-wasm-bindgen = "0.2"
+# FIXME: pinned because of https://github.com/rustwasm/wasm-pack/issues/886
+wasm-bindgen = "=0.2.65"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
@@ -20,7 +21,6 @@ wasm-bindgen = "0.2"
 console_error_panic_hook = { version = "0.1.1", optional = true }
 
 ddsavelib = { path = "../ddsavelib" }
-once_cell = "1.3.1"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.2"

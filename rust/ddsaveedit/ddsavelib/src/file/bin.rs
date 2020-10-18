@@ -95,19 +95,25 @@ impl Header {
         let _ = reader.read_u64::<LittleEndian>().unwrap();
         let fields_num = reader.read_u32::<LittleEndian>().unwrap();
         let fields_offset = reader.read_u32::<LittleEndian>().unwrap();
-        if fields_offset != objects_offset + objects_num * 16 {
+        let calc_offset = objects_offset
+            .checked_add(objects_num.checked_mul(16).ok_or(FromBinError::Arith)?)
+            .ok_or(FromBinError::Arith)?;
+        if fields_offset != calc_offset {
             return Err(FromBinError::OffsetMismatch {
                 exp: fields_offset.into(),
-                is: (objects_offset + objects_num * 16).into(),
+                is: calc_offset.into(),
             });
         }
         let _ = reader.read_u32::<LittleEndian>().unwrap();
         let data_size = reader.read_u32::<LittleEndian>().unwrap();
         let data_offset = reader.read_u32::<LittleEndian>().unwrap();
-        if data_offset != fields_offset + fields_num * 12 {
+        let calc_offset = fields_offset
+            .checked_add(fields_num.checked_mul(12).ok_or(FromBinError::Arith)?)
+            .ok_or(FromBinError::Arith)?;
+        if data_offset != calc_offset {
             return Err(FromBinError::OffsetMismatch {
                 exp: data_offset.into(),
-                is: (fields_offset + fields_num * 12).into(),
+                is: calc_offset.into(),
             });
         }
         Ok(Header {
@@ -208,7 +214,7 @@ impl Objects {
     }
 
     fn calc_bin_size(&self) -> usize {
-        4 * 4 * self.objs.len()
+        4 * 4 * self.objs.len() // TODO
     }
 }
 
@@ -251,7 +257,7 @@ impl Fields {
     }
 
     fn calc_bin_size(&self) -> usize {
-        4 * 3 * self.fields.len()
+        4 * 3 * self.fields.len() // TODO
     }
 }
 

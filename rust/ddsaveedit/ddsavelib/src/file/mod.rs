@@ -59,7 +59,6 @@ impl Unhasher<&str> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
 /// Represents a valid Darkest Dungeon save file.
 ///
 /// See the [main library docs](`super`) for usage examples.
@@ -76,6 +75,7 @@ impl Unhasher<&str> {
 ///
 /// It is recommended that tools operating on the JSON representation preserve
 /// the order of fields in the file.
+#[derive(Clone, Debug, PartialEq)]
 pub struct File {
     h: Header,
     o: Objects,
@@ -111,18 +111,20 @@ impl Header {
         num_fields: u32,
         version: u32,
         data_size: u32,
-    ) -> Result<(), std::num::TryFromIntError> {
+    ) -> Option<()> {
         self.magic = Self::MAGIC_NUMBER;
         self.version = version;
         self.header_len = u32::try_from(Header::BIN_SIZE).unwrap();
         self.objects_num = num_objects;
-        self.objects_size = self.objects_num * 16; // TODO
+        self.objects_size = self.objects_num.checked_mul(16)?;
         self.objects_offset = self.header_len;
         self.fields_num = num_fields;
-        self.fields_offset = self.objects_offset + self.objects_size; // TODO
-        self.data_offset = self.fields_offset + self.fields_num * 12; // TODO
+        self.fields_offset = self.objects_offset.checked_add(self.objects_size)?;
+        self.data_offset = self
+            .fields_offset
+            .checked_add(self.fields_num.checked_mul(12)?)?;
         self.data_size = data_size;
-        Ok(())
+        Some(())
     }
 
     fn version(&self) -> u32 {
@@ -158,10 +160,12 @@ impl Objects {
         nc: u32,
         ndc: u32,
     ) -> Option<ObjIdx> {
+        // Overflow checks: We have a maximum of i32::MAX elements due to the binary format
         if self.len() == u32::try_from(std::i32::MAX).unwrap() {
             None
         } else {
             let idx = self.len();
+            self.objs.try_reserve(1).ok()?;
             self.objs.push(ObjectInfo {
                 field: f,
                 parent: p,
@@ -247,7 +251,7 @@ impl Fields {
             self.fields.push(FieldInfo {
                 name_hash: name_hash(name),
                 field_info: {
-                    let len = u32::try_from(name.len() + 1).ok()?;
+                    let len = u32::try_from(name.len().checked_add(1)?).ok()?;
                     (len & FieldInfo::NAME_LEN_BITS) << 2
                 },
                 offset: 0,
@@ -380,87 +384,84 @@ macro_rules! types {
 }
 
 fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Option<FieldType> {
-    use once_cell::sync::OnceCell;
+    use std::lazy::SyncLazy;
     type PathTypeList<'a> = Vec<(&'a [&'a str], FieldType)>;
-    static TYPES_MAP: OnceCell<HashMap<&str, PathTypeList>> = OnceCell::new();
-    if let Some(candidates) = TYPES_MAP
-        .get_or_init(|| {
-            let mut map = HashMap::new();
-            let mut insert = |(tip, trace): (FieldType, &'static [&'static str])| {
-                map.entry(*trace.last().unwrap())
-                    .or_insert_with(Vec::new)
-                    .push((&trace[0..trace.len() - 1], tip));
-            };
+    static TYPES_MAP: SyncLazy<HashMap<&str, PathTypeList>> = SyncLazy::new(|| {
+        let mut map = HashMap::new();
+        let mut insert = |(tip, trace): (FieldType, &'static [&'static str])| {
+            map.entry(*trace.last().unwrap())
+                .or_insert_with(Vec::new)
+                .push((&trace[0..trace.len() - 1], tip));
+        };
 
-            #[rustfmt::skip]
-types!(insert,
-    [Char, "requirement_code"],
+        #[rustfmt::skip]
+        types!(insert,
+            [Char, "requirement_code"],
 
-    [Float, "current_hp"],
-    [Float, "m_Stress"],
-    [Float, "actor", "buff_group", "*", "amount"],
-    [Float, "chapters", "*", "*", "percent"],
-    [Float, "non_rolled_additional_chances", "*", "chance"],
-    [Float, "rarity_table", "*", "chance"],
-    [Float, "chance_of_loot"],
-    [Float, "shard_consume_percent"],
-    [Float, "chances", "*"],
-    [Float, "chance_sum"],
+            [Float, "current_hp"],
+            [Float, "m_Stress"],
+            [Float, "actor", "buff_group", "*", "amount"],
+            [Float, "chapters", "*", "*", "percent"],
+            [Float, "non_rolled_additional_chances", "*", "chance"],
+            [Float, "rarity_table", "*", "chance"],
+            [Float, "chance_of_loot"],
+            [Float, "shard_consume_percent"],
+            [Float, "chances", "*"],
+            [Float, "chance_sum"],
 
-    [IntVector, "read_page_indexes"],
-    [IntVector, "raid_read_page_indexes"],
-    [IntVector, "raid_unread_page_indexes"],
-    [IntVector, "dungeons_unlocked"],
-    [IntVector, "played_video_list"],
-    [IntVector, "trinket_retention_ids"],
-    [IntVector, "last_party_guids"],
-    [IntVector, "dungeon_history"],
-    [IntVector, "buff_group_guids"],
-    [IntVector, "result_event_history"],
-    [IntVector, "additional_mash_disabled_infestation_monster_class_ids"],
-    [IntVector, "party", "heroes"],
-    [IntVector, "skill_cooldown_keys"],
-    [IntVector, "skill_cooldown_values"],
-    [IntVector, "bufferedSpawningSlotsAvailable"],
-    [IntVector, "curioGroups", "*", "curios"],
-    [IntVector, "curioGroups", "*", "curio_table_entries"],
-    [IntVector, "raid_finish_quirk_monster_class_ids"],
-    [IntVector, "narration_audio_event_queue_tags"],
-    [IntVector, "dispatched_events"],
-    [IntVector, "backer_heroes", "*", "combat_skills"],
-    [IntVector, "backer_heroes", "*", "camping_skills"],
-    [IntVector, "backer_heroes", "*", "quirks"],
+            [IntVector, "read_page_indexes"],
+            [IntVector, "raid_read_page_indexes"],
+            [IntVector, "raid_unread_page_indexes"],
+            [IntVector, "dungeons_unlocked"],
+            [IntVector, "played_video_list"],
+            [IntVector, "trinket_retention_ids"],
+            [IntVector, "last_party_guids"],
+            [IntVector, "dungeon_history"],
+            [IntVector, "buff_group_guids"],
+            [IntVector, "result_event_history"],
+            [IntVector, "additional_mash_disabled_infestation_monster_class_ids"],
+            [IntVector, "party", "heroes"],
+            [IntVector, "skill_cooldown_keys"],
+            [IntVector, "skill_cooldown_values"],
+            [IntVector, "bufferedSpawningSlotsAvailable"],
+            [IntVector, "curioGroups", "*", "curios"],
+            [IntVector, "curioGroups", "*", "curio_table_entries"],
+            [IntVector, "raid_finish_quirk_monster_class_ids"],
+            [IntVector, "narration_audio_event_queue_tags"],
+            [IntVector, "dispatched_events"],
+            [IntVector, "backer_heroes", "*", "combat_skills"],
+            [IntVector, "backer_heroes", "*", "camping_skills"],
+            [IntVector, "backer_heroes", "*", "quirks"],
 
-    [StringVector, "goal_ids"],
-    [StringVector, "roaming_dungeon_2_ids", "*", "s"],
-    [StringVector, "quirk_group"],
-    [StringVector, "backgroundNames"],
-    [StringVector, "backgroundGroups", "*", "backgrounds"],
-    [StringVector, "backgroundGroups", "*", "background_table_entries"],
+            [StringVector, "goal_ids"],
+            [StringVector, "roaming_dungeon_2_ids", "*", "s"],
+            [StringVector, "quirk_group"],
+            [StringVector, "backgroundNames"],
+            [StringVector, "backgroundGroups", "*", "backgrounds"],
+            [StringVector, "backgroundGroups", "*", "background_table_entries"],
 
-    [FloatArray, "map", "bounds"],
-    [FloatArray, "areas", "*", "bounds"],
-    [FloatArray, "areas", "*", "tiles", "*", "mappos"],
-    [FloatArray, "areas", "*", "tiles", "*", "sidepos"],
+            [FloatArray, "map", "bounds"],
+            [FloatArray, "areas", "*", "bounds"],
+            [FloatArray, "areas", "*", "tiles", "*", "mappos"],
+            [FloatArray, "areas", "*", "tiles", "*", "sidepos"],
 
-    [TwoInt, "killRange"],
+            [TwoInt, "killRange"],
 
-    [TwoBool, "profile_options", "values", "quest_select_warnings"],
-    [TwoBool, "profile_options", "values", "provision_warnings"],
-    [TwoBool, "profile_options", "values", "deck_based_stage_coach"],
-    [TwoBool, "profile_options", "values", "curio_tracker"],
-    [TwoBool, "profile_options", "values", "dd_mode"],
-    [TwoBool, "profile_options", "values", "corpses"],
-    [TwoBool, "profile_options", "values", "stall_penalty"],
-    [TwoBool, "profile_options", "values", "deaths_door_recovery_debuffs"],
-    [TwoBool, "profile_options", "values", "retreats_can_fail"],
-    [TwoBool, "profile_options", "values", "multiplied_enemy_crits"],
-);
+            [TwoBool, "profile_options", "values", "quest_select_warnings"],
+            [TwoBool, "profile_options", "values", "provision_warnings"],
+            [TwoBool, "profile_options", "values", "deck_based_stage_coach"],
+            [TwoBool, "profile_options", "values", "curio_tracker"],
+            [TwoBool, "profile_options", "values", "dd_mode"],
+            [TwoBool, "profile_options", "values", "corpses"],
+            [TwoBool, "profile_options", "values", "stall_penalty"],
+            [TwoBool, "profile_options", "values", "deaths_door_recovery_debuffs"],
+            [TwoBool, "profile_options", "values", "retreats_can_fail"],
+            [TwoBool, "profile_options", "values", "multiplied_enemy_crits"],
+        );
 
-            map
-        })
-        .get(name.as_ref())
-    {
+        map
+    });
+    if let Some(candidates) = TYPES_MAP.get(name.as_ref()) {
         candidates.iter().find_map(|(path, t)| {
             if parents.len() >= path.len()
                 && path
