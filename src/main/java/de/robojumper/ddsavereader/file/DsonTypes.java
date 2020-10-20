@@ -35,6 +35,7 @@ public class DsonTypes {
                         { "trinket_retention_ids" }, // quest.json
                         { "last_party_guids" }, { "dungeon_history" }, { "buff_group_guids" }, // roster.json
                         { "result_event_history" }, // town_event.json
+                        { "dead_hero_entries" }, // town_event.json
                         { "additional_mash_disabled_infestation_monster_class_ids" }, // campaign_mash.json
                         { "party", "heroes" }, // raid.json
                         { "skill_cooldown_keys" }, // raid.json

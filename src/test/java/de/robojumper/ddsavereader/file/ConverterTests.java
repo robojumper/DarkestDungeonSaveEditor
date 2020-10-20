@@ -124,6 +124,7 @@ public class ConverterTests {
         testCorrectConversion("nonAsciiField");
         testCorrectConversion("backerHeroes");
         testCorrectConversion("quirk_monster_class_ids");
+        testCorrectConversion("dead_hero_entries");
         testCorrectConversion("networkFiles");
     }
 
