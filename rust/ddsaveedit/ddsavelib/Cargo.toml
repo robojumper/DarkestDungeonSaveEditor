@@ -19,5 +19,4 @@ default = ["string_cache"]
 byteorder = "1.3.4"
 itoa = "0.4.5"
 dtoa = "0.4.5"
-# FIXME: Pick up https://github.com/servo/string-cache/pull/235 when 0.9 releases
-string_cache = { version = "0.8.0", default-features = false, optional = true }
+string_cache = { version = "0.8.1", default-features = false, optional = true }
