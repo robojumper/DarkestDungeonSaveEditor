@@ -1,5 +1,5 @@
 //! A simple JSON lexer and parser. Accepts all valid JSON, and accepts some invalid JSON.
-//! In particular, floating point numbers simply use the Rust core f32 parser -- see [`<f32 as FromStr>::from_str`](https://doc.rust-lang.org/core/str/trait.FromStr.html).
+//! In particular, floating point numbers simply use the Rust core f32 parser -- see [`<f32 as FromStr>::from_str`](https://doc.rust-lang.org/core/str/trait.FromStr.html#impl-FromStr-14).
 
 use std::{borrow::Cow, iter::FusedIterator};
 
