@@ -5,16 +5,16 @@ use std::{
     path::PathBuf,
 };
 
-const TEST_PROFILES_PATH: &'static str = "../../../src/test/resources";
-const NAMES_PATH: &'static str = "../wasm-ddsaveedit/names_cache.txt";
+const TEST_PROFILES_PATH: &str = "../../../src/test/resources";
+const NAMES_PATH: &str = "../wasm-ddsaveedit/names_cache.txt";
 
 #[test]
 fn test_loading() {
-    let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    d.push(TEST_PROFILES_PATH);
+    let mut profiles_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    profiles_dir.push(TEST_PROFILES_PATH);
     let mut file_paths = vec![];
 
-    for file in fs::read_dir(d).unwrap() {
+    for file in fs::read_dir(profiles_dir).unwrap() {
         let entry = file.unwrap();
         let meta = entry.metadata().unwrap();
         if meta.file_type().is_dir() {
@@ -25,14 +25,17 @@ fn test_loading() {
         }
     }
 
-    let mut npath = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    npath.push(NAMES_PATH);
-    let f = fs::File::open(npath).unwrap();
-    let mut map = Unhasher::new();
-    for l in std::io::BufReader::new(f).lines() {
-        let l = l.unwrap();
-        map.offer_name(l);
-    }
+    let map = {
+        let mut map = Unhasher::new();
+        let mut npath = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        npath.push(NAMES_PATH);
+        let f = fs::File::open(npath).unwrap();
+        for l in std::io::BufReader::new(f).lines() {
+            let l = l.unwrap();
+            map.offer_name(l);
+        }
+        map
+    };
 
     file_paths.iter().for_each(|f| {
         let data = {
@@ -44,31 +47,31 @@ fn test_loading() {
         };
 
         let fil = File::try_from_bin(&mut &*data).unwrap();
-        let mut x = Vec::new();
-        fil.write_to_json(&mut x, true, &map).unwrap();
-        let fil2 = File::try_from_json(&mut &*x).unwrap();
-        assert_eq!(fil, fil2, "{:?} bin->json->struct: structs differ", f);
+        let mut json_data = Vec::new();
+        fil.write_to_json(&mut json_data, true, &map).unwrap();
+        let fil2 = File::try_from_json(&mut &*json_data).unwrap();
+        assert_eq!(fil, fil2, "{:?} bin->json->struct: structs differ", json_data);
 
-        let mut y = Vec::new();
-        fil2.write_to_json(&mut y, true, &map).unwrap();
+        let mut json_data_2 = Vec::new();
+        fil2.write_to_json(&mut json_data_2, true, &map).unwrap();
         assert_eq!(
-            std::str::from_utf8(&x).unwrap(),
-            std::str::from_utf8(&y).unwrap(),
+            std::str::from_utf8(&json_data).unwrap(),
+            std::str::from_utf8(&json_data_2).unwrap(),
             "{:?} bin->json->json: json differs",
             f
         );
 
-        let mut b = Vec::new();
-        fil2.write_to_bin(&mut b).unwrap();
+        let mut bin_again = Vec::new();
+        fil2.write_to_bin(&mut bin_again).unwrap();
 
         assert_eq!(
             data.len(),
-            b.len(),
+            bin_again.len(),
             "{:?} bin->json->bin: different sizes",
             f
         );
 
-        let fil3 = File::try_from_bin(&mut &*b).unwrap();
+        let fil3 = File::try_from_bin(&mut &*bin_again).unwrap();
         assert_eq!(fil2, fil3, "{:?} bin->json->bin->struct: structs differ", f);
     });
 }

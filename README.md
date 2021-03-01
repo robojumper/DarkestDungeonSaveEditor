@@ -1,6 +1,5 @@
 # Darkest Dungeon Save Editor
 
-[![Build Status](https://travis-ci.org/robojumper/DarkestDungeonSaveEditor.svg?branch=master)](https://travis-ci.org/robojumper/DarkestDungeonSaveEditor)
 [![GitHub license](https://img.shields.io/github/license/robojumper/DarkestDungeonSaveEditor.svg)](https://github.com/robojumper/DarkestDungeonSaveEditor/blob/master/LICENSE)
 [![GitHub release](https://img.shields.io/github/release/robojumper/DarkestDungeonSaveEditor.svg)](https://github.com/robojumper/DarkestDungeonSaveEditor/releases/latest)
 [![Github issues](https://img.shields.io/badge/save%20files-welcome-brightgreen.svg)](https://github.com/robojumper/DarkestDungeonSaveEditor/issues/)
