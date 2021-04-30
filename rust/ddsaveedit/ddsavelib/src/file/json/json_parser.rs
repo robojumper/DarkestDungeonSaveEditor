@@ -205,7 +205,7 @@ pub struct Token<'a> {
 #[derive(Debug, Clone)]
 pub enum JsonError {
     /// A token was expected, but the file ended.
-    EOF,
+    Eof,
     /// A value was expected, but a non-value token was found.
     ExpectedValue(usize, usize),
     /// A specific token was expected, but another was found.
@@ -234,7 +234,7 @@ impl From<JsonError> for FromJsonError {
 impl<'a> From<&'a JsonError> for FromJsonError {
     fn from(err: &'a JsonError) -> Self {
         match err {
-            JsonError::EOF => FromJsonError::UnexpEOF,
+            JsonError::Eof => FromJsonError::UnexpEof,
             JsonError::ExpectedValue(b, c) => FromJsonError::JsonErr(*b, *c),
             JsonError::BareControl(b, c) => {
                 FromJsonError::LiteralFormat("bare control character".to_owned(), *b, *c)
@@ -286,7 +286,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn expect(&mut self, exp: TokenType) -> Result<Token<'a>, JsonError> {
-        let tok = self.next().ok_or(JsonError::EOF)??;
+        let tok = self.next().ok_or(JsonError::Eof)??;
         if tok.kind != exp {
             return Err(JsonError::Expected(
                 exp.as_ref().to_owned(),
@@ -298,9 +298,9 @@ impl<'a> Parser<'a> {
     }
 
     /// Return `Ok(_)` if the next token exists, `Err(_)` if the next token is
-    /// erroneous, and `Err(FromJsonError::UnexpEOF)` if there is no text token.
+    /// erroneous, and `Err(FromJsonError::Eof)` if there is no text token.
     pub fn exp_next(&mut self) -> Result<Token<'a>, JsonError> {
-        self.next().ok_or(JsonError::EOF)?
+        self.next().ok_or(JsonError::Eof)?
     }
 
     fn parse_value(&mut self, next_tok: LexerToken) -> <Self as Iterator>::Item {
@@ -337,18 +337,18 @@ impl<'a> Parser<'a> {
         let block = self.block_stack.last_mut().unwrap();
         match block {
             ParserBlock::Value { need_colon } => {
-                let mut next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                let mut next_tok = self.lexer.next().ok_or(JsonError::Eof)?;
                 if *need_colon {
                     if next_tok.kind != TokenType::Colon {
                         return self.err_expected(TokenType::Colon);
                     }
-                    next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                    next_tok = self.lexer.next().ok_or(JsonError::Eof)?;
                 }
                 *need_colon = false;
                 self.parse_value(next_tok)
             }
             ParserBlock::Object { need_comma } => {
-                let mut next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                let mut next_tok = self.lexer.next().ok_or(JsonError::Eof)?;
                 match next_tok.kind {
                     TokenType::EndObject => {
                         self.block_stack.pop();
@@ -363,7 +363,7 @@ impl<'a> Parser<'a> {
                             if next_tok.kind != TokenType::Comma {
                                 return self.err_expected(TokenType::Comma);
                             }
-                            next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                            next_tok = self.lexer.next().ok_or(JsonError::Eof)?;
                         }
                         *need_comma = true;
                         match next_tok.kind {
@@ -381,7 +381,7 @@ impl<'a> Parser<'a> {
                 }
             }
             ParserBlock::Array { need_comma } => {
-                let mut next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                let mut next_tok = self.lexer.next().ok_or(JsonError::Eof)?;
                 match next_tok.kind {
                     TokenType::EndArray => {
                         self.block_stack.pop(); // Leave the array
@@ -396,7 +396,7 @@ impl<'a> Parser<'a> {
                             if next_tok.kind != TokenType::Comma {
                                 return self.err_expected(TokenType::Comma);
                             }
-                            next_tok = self.lexer.next().ok_or(JsonError::EOF)?;
+                            next_tok = self.lexer.next().ok_or(JsonError::Eof)?;
                         }
                         *need_comma = true;
                         self.block_stack

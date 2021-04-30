@@ -50,7 +50,11 @@ fn test_loading() {
         let mut json_data = Vec::new();
         fil.write_to_json(&mut json_data, true, &map).unwrap();
         let fil2 = File::try_from_json(&mut &*json_data).unwrap();
-        assert_eq!(fil, fil2, "{:?} bin->json->struct: structs differ", json_data);
+        assert_eq!(
+            fil, fil2,
+            "{:?} bin->json->struct: structs differ",
+            json_data
+        );
 
         let mut json_data_2 = Vec::new();
         fil2.write_to_json(&mut json_data_2, true, &map).unwrap();

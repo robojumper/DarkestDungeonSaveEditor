@@ -14,7 +14,7 @@ pub enum FromBinError {
     /// names or applying a heuristic.
     UnknownField(String),
     /// EOF
-    EOF,
+    Eof,
     /// A section of the file was not at the location specified
     /// in the header
     OffsetMismatch { exp: u64, is: u64 },
@@ -83,7 +83,7 @@ pub enum FromJsonError {
     /// Invalid JSON syntax
     JsonErr(usize, usize),
     /// The file ended unexpectedly
-    UnexpEOF,
+    UnexpEof,
     /// We ran out of indices
     IntegerErr,
     /// An integer representing a size or offset was too large to be represented in the file

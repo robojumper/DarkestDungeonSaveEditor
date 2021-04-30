@@ -15,7 +15,8 @@ use crate::{err::*, util::name_hash};
 impl File {
     /// Attempt create a Darkest Dungeon save [`File`] from a [`Read`] representing
     /// a binary encoded file.
-    pub fn try_from_bin<R: Read>(reader: &'_ mut R) -> Result<Self, FromBinError> {
+    pub fn try_from_bin<R: Read>(mut reader: R) -> Result<Self, FromBinError> {
+        let reader = reader.by_ref();
         let h = Header::try_from_bin(reader)?;
         let o: Objects = Objects::try_from_bin(reader, &h)?;
         let mut f = Fields::try_from_bin(reader, &h)?;
@@ -50,7 +51,7 @@ impl File {
             f.offset = u32::try_from(offset)?;
             offset = self.dat[idx].add_bin_size(offset);
         }
-        Ok(u32::try_from(offset)?)
+        u32::try_from(offset)
     }
 }
 
@@ -446,7 +447,7 @@ fn decode_fields_bin<R: Read>(
         // Read name
         let off = field.offset as usize;
         let len = field.name_length() as usize;
-        let field_name = buf.get(off..off + len).ok_or(FromBinError::EOF)?;
+        let field_name = buf.get(off..off + len).ok_or(FromBinError::Eof)?;
         let name = {
             let cs = CStr::from_bytes_with_nul(&field_name)?.to_str()?;
             NameType::from(cs)
@@ -466,7 +467,7 @@ fn decode_fields_bin<R: Read>(
                 return Err(FromBinError::FormatErr);
             }
             let to_skip_if_aligned = ((data_begin + 3) & !0b11) - data_begin;
-            let mut field_data = buf.get(data_begin..data_end).ok_or(FromBinError::EOF)?;
+            let mut field_data = buf.get(data_begin..data_end).ok_or(FromBinError::Eof)?;
             FieldType::try_from_bin(
                 &mut field_data,
                 to_skip_if_aligned,

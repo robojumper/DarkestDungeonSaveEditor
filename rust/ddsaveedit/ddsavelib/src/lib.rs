@@ -51,7 +51,6 @@
 //! performance boost for decoding binary files.
 
 #![feature(try_reserve)]
-#![feature(or_patterns)]
 #![feature(once_cell)]
 
 pub mod err;

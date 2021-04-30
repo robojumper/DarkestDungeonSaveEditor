@@ -17,7 +17,7 @@ impl File {
     const BUILTIN_VERSION_FIELD: &'static str = "__revision_dont_touch";
 
     /// Attempt to decode a [`File`] from a [`Read`] representing a JSON stream.
-    pub fn try_from_json<R: Read>(reader: &'_ mut R) -> Result<Self, FromJsonError> {
+    pub fn try_from_json<R: Read>(mut reader: R) -> Result<Self, FromJsonError> {
         let mut x = vec![];
         reader.read_to_end(&mut x)?;
         let slic = std::str::from_utf8(&x)?;
@@ -51,7 +51,7 @@ impl File {
 
         lex.expect(TokenType::BeginObject)?;
 
-        let next_tok = lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?;
+        let next_tok = lex.peek().ok_or(FromJsonError::UnexpEof)?.as_ref()?;
         let vers_num = if next_tok.kind == TokenType::FieldName
             && next_tok.dat == Self::BUILTIN_VERSION_FIELD
         {
@@ -136,7 +136,7 @@ impl File {
             .create_field(&name)
             .ok_or(FromJsonError::IntegerErr)?;
         // Identify type
-        match lex.peek().ok_or(FromJsonError::UnexpEOF)?.as_ref()?.kind {
+        match lex.peek().ok_or(FromJsonError::UnexpEof)?.as_ref()?.kind {
             TokenType::BeginObject => {
                 if &name == "raw_data" || &name == "static_save" {
                     let inner = File::try_from_json_parser(lex, true)?;
@@ -185,11 +185,11 @@ impl File {
     /// Write this [`File`] as JSON.
     pub fn write_to_json<T: AsRef<str>, W: Write>(
         &self,
-        writer: &'_ mut W,
+        mut writer: W,
         allow_dupes: bool,
         unhash: &Unhasher<T>,
     ) -> std::io::Result<()> {
-        self.write_to_json_priv(writer, &mut vec![], allow_dupes, unhash)
+        self.write_to_json_priv(writer.by_ref(), &mut vec![], allow_dupes, unhash)
     }
 
     fn write_to_json_priv<T: AsRef<str>, W: Write>(
@@ -209,7 +209,14 @@ impl File {
         writer.write_all(b",\n")?;
         if let Some(root) = self.o.iter().find(|o| o.parent.is_none()) {
             indent.extend_from_slice(b"    ");
-            self.write_field(root.field, writer, indent, false, allow_dupes, unhash)?;
+            self.write_field(
+                root.field,
+                writer.by_ref(),
+                indent,
+                false,
+                allow_dupes,
+                unhash,
+            )?;
             indent.truncate(indent.len() - 4);
         }
         writer.write_all(&indent)?;
@@ -226,40 +233,36 @@ impl File {
         unhash: &Unhasher<T>,
     ) -> std::io::Result<()> {
         let dat = &self.dat[field_idx];
-        if let FieldType::Object(ref c) = dat.tipe {
-            if c.is_empty() {
-                writer.write_all(b"{}")?;
-            } else {
-                writer.write_all(b"{\n")?;
-                let mut emitted_fields = if allow_dupes {
-                    None
-                } else {
-                    Some(std::collections::HashSet::new())
-                };
-                for (idx, &child) in c.iter().enumerate() {
-                    if let Some(ref mut emitted_fields) = emitted_fields {
-                        if !emitted_fields.insert(&self.dat[child].name) {
-                            continue;
-                        }
-                    }
-                    indent.extend_from_slice(b"    ");
-                    self.write_field(
-                        child,
-                        writer,
-                        indent,
-                        idx != c.len() - 1,
-                        allow_dupes,
-                        unhash,
-                    )?;
-                    indent.truncate(indent.len() - 4);
-                }
-                writer.write_all(&indent)?;
-                writer.write_all(b"}")?;
-            }
+        let c = dat.tipe.unwrap_object();
+        if c.is_empty() {
+            writer.write_all(b"{}")
         } else {
-            unreachable!("is object")
+            writer.write_all(b"{\n")?;
+            let mut emitted_fields = if allow_dupes {
+                None
+            } else {
+                Some(std::collections::HashSet::new())
+            };
+            for (idx, &child) in c.iter().enumerate() {
+                if let Some(ref mut emitted_fields) = emitted_fields {
+                    if !emitted_fields.insert(&self.dat[child].name) {
+                        continue;
+                    }
+                }
+                indent.extend_from_slice(b"    ");
+                self.write_field(
+                    child,
+                    writer,
+                    indent,
+                    idx != c.len() - 1,
+                    allow_dupes,
+                    unhash,
+                )?;
+                indent.truncate(indent.len() - 4);
+            }
+            writer.write_all(&indent)?;
+            writer.write_all(b"}")
         }
-        Ok(())
     }
 
     fn write_field<T: AsRef<str>, W: Write>(

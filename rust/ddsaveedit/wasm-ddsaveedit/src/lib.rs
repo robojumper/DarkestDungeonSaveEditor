@@ -75,7 +75,7 @@ pub fn check(input: &str) -> Option<Annotation> {
                 FromJsonError::JsonErr(a, b) => ("JSON Syntax Error".to_owned(), a, b),
                 FromJsonError::IntegerErr => ("Too many items to encode".to_owned(), 0, 0),
                 FromJsonError::ArithError => ("Number too big".to_owned(), 0, 0),
-                FromJsonError::UnexpEOF => {
+                FromJsonError::UnexpEof => {
                     let in_len = input.len();
                     (
                         "Unexpected end of file".to_owned(),
