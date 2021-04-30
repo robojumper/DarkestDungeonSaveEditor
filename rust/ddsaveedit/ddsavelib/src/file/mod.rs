@@ -482,18 +482,17 @@ fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Opti
 }
 
 impl FieldType {
-    #[allow(unused)]
     fn unwrap_object(&self) -> &[FieldIdx] {
         match self {
             FieldType::Object(ref v) => v,
-            _ => panic!(),
+            _ => panic!("attempted to unwrap non-object field type {:?}", self),
         }
     }
 
     fn unwrap_object_mut(&mut self) -> &mut [FieldIdx] {
         match self {
             FieldType::Object(ref mut v) => v,
-            _ => panic!(),
+            _ => panic!("attempted to unwrap non-object field type {:?}", self),
         }
     }
 }

@@ -6,7 +6,7 @@ fn main() {
         let mut buf_reader = std::io::BufReader::new(file);
 
         let fil = File::try_from_bin(&mut buf_reader).unwrap();
-        fil.write_to_json(&mut std::io::stdout().lock(), true, &Unhasher::empty())
+        fil.write_to_json(std::io::stdout().lock(), true, &Unhasher::empty())
             .unwrap();
     }
 }
