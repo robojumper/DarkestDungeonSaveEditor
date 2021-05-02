@@ -32,7 +32,7 @@ import java.util.zip.ZipOutputStream;
 import javax.swing.Icon;
 import javax.swing.SwingWorker;
 
-import de.fuerstenau.buildconfig.BuildConfig;
+import de.robojumper.ddsavereader.BuildConfig;
 import de.robojumper.ddsavereader.file.DsonFile;
 import de.robojumper.ddsavereader.file.DsonFile.UnhashBehavior;
 import de.robojumper.ddsavereader.file.DsonWriter;
@@ -158,10 +158,10 @@ public class State {
     public void setSaveDir(String dir) {
         if (!Objects.equals(dir, saveDir)) {
             this.saveDir = dir;
-            if (new File(saveDir).exists() && saveDir.matches(".*profile_[0-9]*/?")) {
+            if (new File(saveDir).exists()) {
                 profileString = Paths.get(saveDir).toFile().getName();
                 new File(BACKUP_DIR, profileString).mkdirs();
-                saveStatus = Status.OK;
+                saveStatus = saveDir.matches(".*profile_[0-9]*/?") ? Status.OK : Status.WARNING;
                 loadFiles();
             } else {
                 saveStatus = Status.ERROR;

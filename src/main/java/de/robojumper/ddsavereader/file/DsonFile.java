@@ -99,7 +99,7 @@ public class DsonFile {
             Stack<Integer> parentIdxStack = new Stack<Integer>();
             // base_root starts at -1
             int runningObjIdx = -1;
-            parentIdxStack.push(new Integer(runningObjIdx));
+            parentIdxStack.push(Integer.valueOf(runningObjIdx));
             rootFields = new ArrayList<DsonField>();
             // Is this the correct way to do it?
             // WARNING: Apparently, META2 is not necessarily ordered the same way as DATA
@@ -180,7 +180,7 @@ public class DsonFile {
                 // If we have an object, push it to the stack
                 if (field.type == FieldType.TYPE_OBJECT) {
                     fieldStack.push(field);
-                    parentIdxStack.push(new Integer(runningObjIdx));
+                    parentIdxStack.push(Integer.valueOf(runningObjIdx));
                 }
 
                 // Then check if the object on top of the stack has all its children. If so, pop

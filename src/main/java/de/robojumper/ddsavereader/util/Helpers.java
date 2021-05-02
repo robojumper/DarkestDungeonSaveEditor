@@ -1,6 +1,6 @@
 package de.robojumper.ddsavereader.util;
 
-import de.fuerstenau.buildconfig.BuildConfig;
+import de.robojumper.ddsavereader.BuildConfig;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;

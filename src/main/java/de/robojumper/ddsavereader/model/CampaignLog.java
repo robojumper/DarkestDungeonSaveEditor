@@ -32,8 +32,7 @@ public class CampaignLog extends AbstractFile {
 
         @Override
         public Chapter read(JsonReader in) throws IOException {
-            JsonParser p = new JsonParser();
-            JsonObject chapterRoot = p.parse(in).getAsJsonObject();
+            JsonObject chapterRoot = JsonParser.parseReader(in).getAsJsonObject();
             Chapter c = new Chapter();
             c.chapterIndex = chapterRoot.getAsJsonPrimitive("chapterIndex").getAsInt();
             Gson g = SaveState.makeGson();
@@ -189,8 +188,7 @@ public class CampaignLog extends AbstractFile {
 
     @Override
     public void update(String json) {
-        JsonParser parser = new JsonParser();
-        JsonObject o = parser.parse(json).getAsJsonObject();
+        JsonObject o = JsonParser.parseString(json).getAsJsonObject();
         o = o.getAsJsonObject("base_root");
 
         Gson g = SaveState.makeGson();

@@ -5,7 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.text.ParseException;
 
-import de.fuerstenau.buildconfig.BuildConfig;
+import de.robojumper.ddsavereader.BuildConfig;
 import de.robojumper.ddsavereader.file.DsonWriter;
 
 public class Json2Dson {

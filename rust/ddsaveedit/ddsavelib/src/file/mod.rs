@@ -421,6 +421,7 @@ fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Opti
             [IntVector, "result_event_history"],
             [IntVector, "dead_hero_entries"],
             [IntVector, "additional_mash_disabled_infestation_monster_class_ids"],
+            [IntVector, "mash", "valid_additional_mash_entry_indexes"],
             [IntVector, "party", "heroes"],
             [IntVector, "skill_cooldown_keys"],
             [IntVector, "skill_cooldown_values"],

@@ -1,6 +1,6 @@
 package de.robojumper.ddsavereader;
 
-import de.fuerstenau.buildconfig.BuildConfig;
+import de.robojumper.ddsavereader.BuildConfig;
 import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService;
 import de.robojumper.ddsavereader.ui.MainWindow;
 import de.robojumper.ddsavereader.util.ReadNames;

@@ -126,6 +126,7 @@ public class ConverterTests {
         testCorrectConversion("quirk_monster_class_ids");
         testCorrectConversion("dead_hero_entries");
         testCorrectConversion("networkFiles");
+		testCorrectConversion("valid_additional_mash_entry_indexes");
     }
 
     private List<String> getResourceFiles(String path) throws IOException {

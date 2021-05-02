@@ -68,8 +68,7 @@ public class ReadNames {
 			@Override
 			public void parseFile(Path filePath, byte[] file, Set<String> names) {
 				String JsonString = new String(file);
-				JsonParser parser = new JsonParser();
-				JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
+				JsonObject rootObject = JsonParser.parseString(JsonString).getAsJsonObject();
 				JsonArray arrArray = rootObject.getAsJsonArray("skills");
 				if (arrArray != null) {
 					for (int i = 0; i < arrArray.size(); i++) {
@@ -116,9 +115,8 @@ public class ReadNames {
 			@Override
 			public void parseFile(Path filePath, byte[] file, Set<String> names) {
 				addBaseName(filePath, names);
-				String JsonString = new String(file);
-				JsonParser parser = new JsonParser();
-				JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
+				String jsonString = new String(file);
+				JsonObject rootObject = JsonParser.parseString(jsonString).getAsJsonObject();
 				JsonObject dataObject = rootObject.getAsJsonObject("data");
 				if (dataObject != null) {
 					JsonArray activitiesArray = dataObject.getAsJsonArray("activities");
@@ -312,9 +310,8 @@ public class ReadNames {
 	// assuming a JSON file where the root object has an array <arrayName> of objects each with a string variable <idString>
 	// add that ID string
 	static void addSimpleJSONArrayEntryIDs(byte[] data, String arrayName, String idString, Set<String> Set) {
-		String JsonString = new String(data);
-		JsonParser parser = new JsonParser();
-		JsonObject rootObject = parser.parse(JsonString).getAsJsonObject();
+		String jsonString = new String(data);
+		JsonObject rootObject = JsonParser.parseString(jsonString).getAsJsonObject();
 		JsonArray arrArray = rootObject.getAsJsonArray(arrayName);
 		if (arrArray != null) {
 			for (int i = 0; i < arrArray.size(); i++) {

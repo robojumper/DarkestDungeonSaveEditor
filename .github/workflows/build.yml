@@ -1,13 +1,18 @@
-name: wasm
+name: build
 
 on:
   push:
     branches:
       - master
+  pull_request:
+    branches:
+      - master
 
 jobs:
-  build:
+  rust:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -D warnings
     steps:
     - name: Checkout
       uses: actions/checkout@v2
@@ -17,6 +22,12 @@ jobs:
         toolchain: nightly-2021-04-25
         override: true
         profile: minimal
+    - name: Test
+      run: |
+        cd rust/ddsaveedit
+        cargo check
+        cargo test
+        cargo test --release
     - name: Install Node
       uses: actions/setup-node@v1
       with:
@@ -31,9 +42,33 @@ jobs:
         npm run build
         cd ../../../
     - name: Deploy
+      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
       uses: crazy-max/ghaction-github-pages@v2
       with:
         target_branch: gh-pages
         build_dir: rust/ddsaveedit/wasm-ddsaveedit/dist # The folder the action should deploy.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+  java:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Install Java
+      uses: actions/setup-java@v1
+      with:
+        java-version: '8'
+        java-package: jdk
+    - name: Test
+      run: |
+        ./gradlew test
+    - name: Build distribution zip
+      run: |
+        ./gradlew dist
+    - name: Upload distribution zip
+      uses: actions/upload-artifact@v1
+      with:
+        name: DDSaveEditor
+        path: build/dist/

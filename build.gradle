@@ -1,15 +1,11 @@
 plugins {
-    id 'de.fuerstenau.buildconfig' version '1.1.8'
+    id 'java'
+    id 'application'
+    id 'com.github.gmazzo.buildconfig' version '3.0.0'
 }
-
-
-apply plugin: 'java'
-apply plugin: 'application'
-apply plugin: 'eclipse'
 
 repositories {
     mavenCentral()
-    jcenter()
 }
 
 sourceCompatibility = 1.8
@@ -17,28 +13,25 @@ targetCompatibility = 1.8
 
 
 dependencies {
-    testCompile 'org.testng:testng:6.8.8'
-    compile 'com.google.code.gson:gson:2.8.5'
-    compile 'com.google.api-client:google-api-client:1.23.0'
-    compile 'com.google.oauth-client:google-oauth-client-jetty:1.23.0'
-    compile 'com.google.apis:google-api-services-sheets:v4-rev516-1.23.0'
-    compile 'com.fifesoft:rsyntaxtextarea:3.0.3'
-    compile group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.9.6'
+    testImplementation 'org.testng:testng:7.4.0'
+    implementation 'com.google.code.gson:gson:2.8.6'
+    implementation 'com.google.api-client:google-api-client:1.31.2'
+    implementation 'com.google.oauth-client:google-oauth-client-jetty:1.31.2'
+    implementation 'com.google.apis:google-api-services-sheets:v4-rev612-1.25.0'
+    implementation 'com.fifesoft:rsyntaxtextarea:3.1.2'
+    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.12.3'
 }
 
 buildConfig {
-    appName = project.name
-    version = project.version
-    
-    buildConfigField 'String', 'DISPLAY_NAME', "$displayname"
-    buildConfigField 'String', 'GITHUB_URL', "$githuburl"
-    buildConfigField 'String', 'UPDATE_URL', "$releasesurl"
-    buildConfigField 'String', 'JAR_NAME', "${jarname}.jar"
-    buildConfigField 'String', 'DATA_DIR', "$datadir"
+    packageName("de.robojumper.ddsavereader")
+    buildConfigField('String', 'NAME', "\"${project.name}\"")
+    buildConfigField('String', 'VERSION', "\"${project.version}\"")
 
-    clsName = 'BuildConfig'
-    packageName = project.group
-    charset = 'UTF-8'
+    buildConfigField('String', 'DISPLAY_NAME', "\"$displayname\"")
+    buildConfigField('String', 'GITHUB_URL', "\"$githuburl\"")
+    buildConfigField('String', 'UPDATE_URL', "\"$releasesurl\"")
+    buildConfigField('String', 'JAR_NAME', "\"${jarname}.jar\"")
+    buildConfigField('String', 'DATA_DIR', "\"$datadir\"")
 }
 
 test {
@@ -61,9 +54,10 @@ task fatJar(type: Jar) {
                 'Implementation-Version': project.version,
                 'Main-Class': mainClassName
     }
+    setDuplicatesStrategy(DuplicatesStrategy.INCLUDE)
     archiveBaseName = "$jarname"
     archiveFileName = "${jarname}.jar"
-    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     with jar
 }
 
@@ -84,6 +78,7 @@ task dist(type: Zip, dependsOn: fatJar) {
         include "**/*"
         into "docs"
     }
-    destinationDir = file("${buildDir}/dist")
-    baseName = "${jarname}"
+
+    destinationDirectory = file("${buildDir}/dist")
+    archiveBaseName = "${jarname}"
 }
