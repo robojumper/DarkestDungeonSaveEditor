@@ -51,7 +51,7 @@ import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
 
-import de.fuerstenau.buildconfig.BuildConfig;
+import de.robojumper.ddsavereader.BuildConfig;
 import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService;
 import de.robojumper.ddsavereader.spreadsheets.SpreadsheetsService.SheetUpdater;
 import de.robojumper.ddsavereader.ui.State.SaveFile;
@@ -181,7 +181,7 @@ public class MainWindow {
         mntmSpreadsheets = new JMenuItem("Spreadsheets");
         mntmSpreadsheets.setEnabled(false);
         mntmSpreadsheets.addActionListener(e -> {
-            if (state.getSaveStatus() == Status.OK) {
+            if (state.getSaveStatus() != Status.ERROR) {
                 SheetUpdater sheetUpdater;
                 try {
                     final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
@@ -323,7 +323,7 @@ public class MainWindow {
         JButton chooseSavePathButton = new JButton("Browse...");
         chooseSavePathButton.addActionListener(e -> {
             if (confirmLoseChanges()) {
-                directoryChooser("", s -> state.setSaveDir(s));
+                directoryChooser(state.getSaveDir(), s -> state.setSaveDir(s));
                 updateSaveDir();
                 updateFiles();
             }
@@ -332,7 +332,7 @@ public class MainWindow {
         makeBackupButton = new JButton("Make Backup...");
         makeBackupButton.setEnabled(false);
         makeBackupButton.addActionListener(e -> {
-            if (state.getSaveStatus() == Status.OK) {
+            if (state.getSaveStatus() != Status.ERROR) {
                 String result = JOptionPane.showInputDialog(frame, "Choose backup name",
                         new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date()));
                 if (result == null) {
@@ -359,7 +359,7 @@ public class MainWindow {
 
         restoreBackupButton = new JButton("Load Backup...");
         restoreBackupButton.addActionListener(e -> {
-            if (state.getSaveStatus() == Status.OK && state.hasAnyBackups() && confirmLoseChanges()) {
+            if (state.getSaveStatus() != Status.ERROR && state.hasAnyBackups() && confirmLoseChanges()) {
                 String[] backups = state.getBackupNames().toArray(new String[0]);
                 Object result = JOptionPane.showInputDialog(frame, "Choose backup", "Restore",
                         JOptionPane.OK_CANCEL_OPTION, null, backups, backups[0]);
@@ -438,6 +438,7 @@ public class MainWindow {
 
     protected static final void directoryChooser(String def, Consumer<String> onSuccess) {
         JFileChooser chooser = new JFileChooser();
+        chooser.setCurrentDirectory(new File(def));
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         chooser.putClientProperty("JFileChooser.appBundleIsTraversable", "always");
         int result = chooser.showOpenDialog(null);
@@ -449,13 +450,13 @@ public class MainWindow {
     private void updateSaveDir() {
         savePathBox.setText(state.getSaveDir());
         saveFileStatus.setIcon(state.getSaveStatus().icon);
-        reloadButton.setEnabled(state.getSaveStatus() == Status.OK);
-        mntmSpreadsheets.setEnabled(state.getSaveStatus() == Status.OK);
+        reloadButton.setEnabled(state.getSaveStatus() != Status.ERROR);
+        mntmSpreadsheets.setEnabled(state.getSaveStatus() != Status.ERROR);
         updateBackupButtons();
     }
 
     private void updateBackupButtons() {
-        makeBackupButton.setEnabled(state.getSaveStatus() == Status.OK);
+        makeBackupButton.setEnabled(state.getSaveStatus() != Status.ERROR);
         restoreBackupButton.setEnabled(state.hasAnyBackups());
     }
 

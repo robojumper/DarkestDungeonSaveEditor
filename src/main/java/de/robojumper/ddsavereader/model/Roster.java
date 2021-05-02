@@ -30,7 +30,7 @@ public class Roster extends AbstractFile {
             Map<Integer, Hero> map = new HashMap<>();
             in.beginObject();
             while (in.peek() != JsonToken.END_OBJECT) {
-                int id = new Integer(in.nextName());
+                int id = Integer.valueOf(in.nextName());
                 
                 in.beginObject();
                 if (!Objects.equals(in.nextName(), "hero_file_data"))
@@ -94,8 +94,7 @@ public class Roster extends AbstractFile {
     
     @Override
     public void update(String json) {
-        JsonParser parser = new JsonParser();
-        JsonObject o = parser.parse(json).getAsJsonObject();
+        JsonObject o = JsonParser.parseString(json).getAsJsonObject();
         o = o.getAsJsonObject("base_root");
         
         Gson g = SaveState.makeGson();

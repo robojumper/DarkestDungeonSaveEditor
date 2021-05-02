@@ -102,7 +102,7 @@ public class DataPathsDialog {
 
         JButton chooseGamePathButton = new JButton("Browse...");
         chooseGamePathButton.addActionListener(e -> {
-            MainWindow.directoryChooser("", s -> this.gameDir = s);
+            MainWindow.directoryChooser(state.getGameDir(), s -> this.gameDir = s);
             gameDataPathBox.setText(this.gameDir);
         });
         gameDataPathPanel.add(chooseGamePathButton);
@@ -122,7 +122,7 @@ public class DataPathsDialog {
 
         JButton chooseWorkshopPathButton = new JButton("Browse...");
         chooseWorkshopPathButton.addActionListener(e -> {
-            MainWindow.directoryChooser("", s -> this.modsDir = s);
+            MainWindow.directoryChooser(state.getModsDir(), s -> this.modsDir = s);
             workshopPathBox.setText(this.modsDir);
         });
         workshopPathPanel.add(chooseWorkshopPathButton);

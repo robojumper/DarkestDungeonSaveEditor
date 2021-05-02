@@ -24,8 +24,7 @@ public class Town extends AbstractFile {
         @Override
         public Map<Integer, String> read(JsonReader in) throws IOException {
             Map<Integer, String> map = new LinkedTreeMap<>();
-            JsonParser p = new JsonParser();
-            JsonObject o = p.parse(in).getAsJsonObject();
+            JsonObject o = JsonParser.parseReader(in).getAsJsonObject();
             for (Entry<String, JsonElement> e : o.entrySet()) {
                 String activityName = e.getKey();
                 for (Entry<String, JsonElement> slot : e.getValue().getAsJsonObject().entrySet()) {
@@ -78,8 +77,7 @@ public class Town extends AbstractFile {
     
     @Override
     public void update(String json) {
-        JsonParser parser = new JsonParser();
-        JsonObject o = parser.parse(json).getAsJsonObject();
+        JsonObject o = JsonParser.parseString(json).getAsJsonObject();
         o = o.getAsJsonObject("base_root");
         
         Gson g = SaveState.makeGson();

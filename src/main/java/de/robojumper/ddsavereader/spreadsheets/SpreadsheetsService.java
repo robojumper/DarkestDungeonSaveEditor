@@ -31,7 +31,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.JsonFactory;
-import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.sheets.v4.Sheets;
 import com.google.api.services.sheets.v4.SheetsScopes;
@@ -40,7 +40,7 @@ import com.google.api.services.sheets.v4.model.*;
 import de.robojumper.ddsavereader.model.CampaignLog.BaseRTTI;
 import de.robojumper.ddsavereader.model.CampaignLog.Chapter;
 import de.robojumper.ddsavereader.util.Helpers;
-import de.fuerstenau.buildconfig.BuildConfig;
+import de.robojumper.ddsavereader.BuildConfig;
 import de.robojumper.ddsavereader.file.DsonTypes;
 import de.robojumper.ddsavereader.model.Hero;
 import de.robojumper.ddsavereader.model.SaveState;
@@ -49,7 +49,7 @@ import de.robojumper.ddsavereader.watcher.DarkestSaveFileWatcher.DsonParseResult
 
 public class SpreadsheetsService {
     private static final String APPLICATION_NAME = "robojumper-" + BuildConfig.NAME + "/" + BuildConfig.VERSION;
-    private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
+    private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
 
     private static final List<String> SCOPES = Collections.singletonList(SheetsScopes.SPREADSHEETS);
     private static final String CLIENT_SECRET_DIR = "/client_secret.json";

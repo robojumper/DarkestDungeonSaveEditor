@@ -61,8 +61,7 @@ public class Estate extends AbstractFile {
 
     @Override
     public void update(String json) {
-        JsonParser parser = new JsonParser();
-        JsonObject o = parser.parse(json).getAsJsonObject();
+        JsonObject o = JsonParser.parseString(json).getAsJsonObject();
         o = o.getAsJsonObject("base_root");
 
         Gson g = SaveState.makeGson();

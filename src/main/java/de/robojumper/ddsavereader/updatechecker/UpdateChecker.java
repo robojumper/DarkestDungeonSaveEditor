@@ -13,7 +13,7 @@ import com.google.common.io.CharStreams;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 
-import de.fuerstenau.buildconfig.BuildConfig;
+import de.robojumper.ddsavereader.BuildConfig;
 import de.robojumper.ddsavereader.util.Helpers;
 
 public class UpdateChecker {
@@ -48,8 +48,7 @@ public class UpdateChecker {
             Files.write(CACHED_LAST_RELEASE.toPath(), content.getBytes(StandardCharsets.UTF_8));
         }
 
-        JsonParser parser = new JsonParser();
-        JsonElement rootObject = parser.parse(content);
+        JsonElement rootObject = JsonParser.parseString(content);
 
         return new Release(rootObject.getAsJsonObject().get("tag_name").getAsString(),
                 rootObject.getAsJsonObject().get("html_url").getAsString());
