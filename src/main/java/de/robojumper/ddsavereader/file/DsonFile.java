@@ -205,14 +205,13 @@ public class DsonFile {
     static String readName(byte[] data, int start, int len) throws ParseException {
         // Field names can be UTF-8
         byte[] str = Arrays.copyOfRange(data, start, start + len);
-        String name = new String(str, StandardCharsets.UTF_8);
-        if (!Arrays.equals(name.getBytes(StandardCharsets.UTF_8), str) || data[start + len] != 0) {
+        if (data[start + len] != 0) {
             throw new ParseException(
-                    String.format("%d: Wrong name length: Name %s, expected %d but has null bytes in wrong place",
-                            start, name, len),
+                    String.format("%x: Wrong name length: expected %d but has null bytes in wrong place",
+                            start, len),
                     start);
         }
-        return name;
+        return Stringish.escape(str);
     }
 
     static class HeaderBlock {
@@ -406,7 +405,7 @@ public class DsonFile {
             sb.append("\n");
         }
 
-        sb.append(indt(indent) + "\"" + field.name + "\" : ");
+        sb.append(indt(indent) + "\"" + field.name.replace("\\", "\\\\") + "\" : ");
         if (field.type == FieldType.TYPE_OBJECT) {
             writeObject(sb, field, indent, debug);
         } else if (field.type == FieldType.TYPE_FILE) {

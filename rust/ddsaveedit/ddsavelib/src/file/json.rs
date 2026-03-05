@@ -131,10 +131,11 @@ impl File {
         lex: &mut Parser<'a>,
     ) -> Result<FieldIdx, FromJsonError> {
         let name = NameType::from(name.as_ref());
-        let field_index = self
-            .f
-            .create_field(&name)
-            .ok_or(FromJsonError::IntegerErr)?;
+        let field_index = match self.f.create_field(&name) {
+            Ok(field_idx) => field_idx,
+            Err(super::CreateFieldError::Overflow) => return Err(FromJsonError::ArithError),
+            Err(super::CreateFieldError::StringError) => return Err(FromJsonError::BadString),
+        };
         // Identify type
         match lex.peek().ok_or(FromJsonError::UnexpEof)?.as_ref()?.kind {
             TokenType::BeginObject => {
@@ -200,7 +201,7 @@ impl File {
         unhash: &Unhasher<T>,
     ) -> std::io::Result<()> {
         writer.write_all(b"{\n")?;
-        writer.write_all(&indent)?;
+        writer.write_all(indent)?;
         writer.write_all(b"    ")?;
         writer.write_all(b"\"")?;
         writer.write_all(Self::BUILTIN_VERSION_FIELD.as_bytes())?;
@@ -219,7 +220,7 @@ impl File {
             )?;
             indent.truncate(indent.len() - 4);
         }
-        writer.write_all(&indent)?;
+        writer.write_all(indent)?;
         writer.write_all(b"}")?;
         Ok(())
     }
@@ -260,7 +261,7 @@ impl File {
                 )?;
                 indent.truncate(indent.len() - 4);
             }
-            writer.write_all(&indent)?;
+            writer.write_all(indent)?;
             writer.write_all(b"}")
         }
     }
@@ -276,9 +277,9 @@ impl File {
     ) -> std::io::Result<()> {
         use FieldType::*;
         let dat = &self.dat[field_idx];
-        writer.write_all(&indent)?;
+        writer.write_all(indent)?;
         writer.write_all(b"\"")?;
-        writer.write_all(dat.name.as_bytes())?;
+        writer.write_all(escape(&dat.name).as_bytes())?;
         writer.write_all(b"\" : ")?;
         match &dat.tipe {
             Bool(b) => writer.write_all(if *b { b"true" } else { b"false" })?,
@@ -429,7 +430,9 @@ impl FieldType {
                                 tmp_vec.push(parse_prim(&tok, "integer", lex)?);
                             }
                             TokenType::String if tok.dat.starts_with("###") => {
-                                tmp_vec.push(name_hash(&tok.dat[3..]));
+                                tmp_vec.push(
+                                    name_hash(&tok.dat[3..]).ok_or(FromJsonError::BadString)?,
+                                );
                             }
                             _ => {
                                 return Err(FromJsonError::Expected(
@@ -521,7 +524,7 @@ impl FieldType {
                 TokenType::Number => FieldType::Int(parse_prim(&tok, "integer", lex)?),
                 TokenType::String => {
                     if tok.dat.starts_with("###") {
-                        FieldType::Int(name_hash(&tok.dat[3..]))
+                        FieldType::Int(name_hash(&tok.dat[3..]).ok_or(FromJsonError::BadString)?)
                     } else {
                         FieldType::String(tok.dat.into_owned().into_boxed_str())
                     }

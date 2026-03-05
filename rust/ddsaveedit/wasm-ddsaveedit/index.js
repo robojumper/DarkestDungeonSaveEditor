@@ -64,7 +64,7 @@ rust.then(wasm => {
 		const val = upload.value;
 
 		var res = document.getElementById('hashoutput');
-		res.value = wasm.calc_hash(val);
+		res.value = wasm.calc_hash(val) ?? "invalid string syntax";
 	}
 
 	function dropHandler(ev) {

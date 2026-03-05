@@ -135,6 +135,7 @@ public class DsonField {
                 int strlen = bf.getInt();
                 byte[] tempArr2 = Arrays.copyOfRange(rawData, alignmentSkip() + 4 + bf.position(),
                         alignmentSkip() + 4 + bf.position() + strlen - 1);
+                // TODO - can strings have non-UTF-8 bytes?
                 sb.append("\"" + new String(tempArr2, StandardCharsets.UTF_8).replaceAll("\n", "\\\\n") + "\"");
                 bf.position(bf.position() + strlen);
                 if (i < arrLen - 1) {
@@ -233,6 +234,7 @@ public class DsonField {
             if (alignedSize() == 4 + strlen) {
                 type = FieldType.TYPE_STRING;
                 byte[] tempArr2 = Arrays.copyOfRange(rawData, alignmentSkip() + 4, alignmentSkip() + 4 + strlen - 1);
+                // TODO - can strings have non-UTF-8 bytes?
                 dataString = "\"" + new String(tempArr2, StandardCharsets.UTF_8) + "\"";
                 return true;
             }

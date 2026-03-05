@@ -11,6 +11,7 @@ use string_cache::{Atom, EmptyStaticAtomSet};
 
 mod bin;
 mod json;
+pub mod stringish;
 
 #[cfg(feature = "string_cache")]
 type NameType = Atom<EmptyStaticAtomSet>;
@@ -35,13 +36,17 @@ impl<T: AsRef<str>> Unhasher<T> {
 
     /// Offer a single name that could potentially appear in a save file in hashed form.
     pub fn offer_name(&mut self, name: T) {
-        self.map.insert(name_hash(name.as_ref()), name);
+        if let Some(hash) = name_hash(name.as_ref()) {
+            self.map.insert(hash, name);
+        }
     }
 
     /// Offer names that could potentially appear in a save file in hashed form.
     pub fn offer_names<I: IntoIterator<Item = T>>(&mut self, names: I) {
         for name in names {
-            self.map.insert(name_hash(name.as_ref()), name);
+            if let Some(hash) = name_hash(name.as_ref()) {
+                self.map.insert(hash, name);
+            }
         }
     }
 
@@ -161,7 +166,7 @@ impl Objects {
         ndc: u32,
     ) -> Option<ObjIdx> {
         // Overflow checks: We have a maximum of i32::MAX elements due to the binary format
-        if self.len() == u32::try_from(std::i32::MAX).unwrap() {
+        if self.len() == u32::try_from(i32::MAX).unwrap() {
             None
         } else {
             let idx = self.len();
@@ -209,7 +214,7 @@ struct ObjIdx(u32);
 impl ObjIdx {
     /// Returns the numeric value of this object index
     fn numeric(self) -> u32 {
-        self.0 as u32
+        self.0
     }
 }
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -225,6 +230,11 @@ impl FieldIdx {
     fn dangling() -> Self {
         Self(u32::MAX)
     }
+}
+
+pub enum CreateFieldError {
+    Overflow,
+    StringError,
 }
 
 impl Fields {
@@ -243,20 +253,29 @@ impl Fields {
             .map(|(f, a)| (FieldIdx(f as u32), a))
     }
 
-    fn create_field(&mut self, name: &str) -> Option<FieldIdx> {
-        if self.len() == std::u32::MAX {
-            None
+    fn create_field(&mut self, name: &str) -> Result<FieldIdx, CreateFieldError> {
+        if self.len() == u32::MAX {
+            Err(CreateFieldError::Overflow)
         } else {
             let idx = self.len();
+            let Some(bytes) = stringish::encode(name) else {
+                return Err(CreateFieldError::StringError);
+            };
             self.fields.push(FieldInfo {
-                name_hash: name_hash(name),
+                name_hash: name_hash(name).ok_or(CreateFieldError::StringError)?,
                 field_info: {
-                    let len = u32::try_from(name.len().checked_add(1)?).ok()?;
+                    let len = u32::try_from(
+                        bytes
+                            .len()
+                            .checked_add(1)
+                            .ok_or(CreateFieldError::Overflow)?,
+                    )
+                    .map_err(|_| CreateFieldError::Overflow)?;
                     (len & FieldInfo::NAME_LEN_BITS) << 2
                 },
                 offset: 0,
             });
-            Some(FieldIdx(idx))
+            Ok(FieldIdx(idx))
         }
     }
 
@@ -384,9 +403,9 @@ macro_rules! types {
 }
 
 fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Option<FieldType> {
-    use std::lazy::SyncLazy;
+    use std::sync::LazyLock;
     type PathTypeList<'a> = Vec<(&'a [&'a str], FieldType)>;
-    static TYPES_MAP: SyncLazy<HashMap<&str, PathTypeList>> = SyncLazy::new(|| {
+    static TYPES_MAP: LazyLock<HashMap<&str, PathTypeList>> = LazyLock::new(|| {
         let mut map = HashMap::new();
         let mut insert = |(tip, trace): (FieldType, &'static [&'static str])| {
             map.entry(*trace.last().unwrap())
@@ -434,6 +453,8 @@ fn hardcoded_type(parents: &'_ [impl AsRef<str>], name: impl AsRef<str>) -> Opti
             [IntVector, "backer_heroes", "*", "combat_skills"],
             [IntVector, "backer_heroes", "*", "camping_skills"],
             [IntVector, "backer_heroes", "*", "quirks"],
+            [IntVector, "combat_skills"],
+            [IntVector, "camping_skills"],
 
             [StringVector, "goal_ids"],
             [StringVector, "roaming_dungeon_2_ids", "*", "s"],

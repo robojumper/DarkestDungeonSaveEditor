@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
 
 import com.fasterxml.jackson.core.JsonFactory;
@@ -89,7 +90,7 @@ public class DsonWriter {
 
         Meta2BlockEntry e2 = new Meta2BlockEntry();
         e2.nameHash = DsonTypes.stringHash(name);
-        byte[] nameb = name.getBytes(StandardCharsets.UTF_8);
+        byte[] nameb = Stringish.unescape(name);
         e2.fieldInfo = ((nameb.length + 1) & 0b111111111) << 2;
         meta2Entries.add(e2);
 
@@ -269,7 +270,12 @@ public class DsonWriter {
             int hash = DsonTypes.stringHash(s.substring(3));
             return intBytes(hash);
         } else {
-            byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
+            byte[] bytes = Stringish.unescape(s);
+            if (!Arrays.equals(bytes, s.getBytes(StandardCharsets.UTF_8))) {
+                System.out.println(s);
+                System.out.println(Arrays.toString(bytes));
+                System.out.println(Arrays.toString(s.getBytes(StandardCharsets.UTF_8)));
+            }
             return ByteBuffer.allocate(5 + bytes.length).order(ByteOrder.LITTLE_ENDIAN).putInt(bytes.length + 1)
                     .put(bytes).put((byte) 0).array();
         }

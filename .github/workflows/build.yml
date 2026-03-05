@@ -19,7 +19,7 @@ jobs:
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: nightly-2021-04-25
+        toolchain: 1.93.1
         override: true
         profile: minimal
     - name: Test
@@ -68,7 +68,7 @@ jobs:
       run: |
         ./gradlew dist
     - name: Upload distribution zip
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v4
       with:
         name: DDSaveEditor
         path: build/dist/

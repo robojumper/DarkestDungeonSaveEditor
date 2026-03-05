@@ -1,13 +1,16 @@
 use std::borrow::Cow;
 
+use crate::file::stringish;
+
 /// Calculate the hash of a given string according to the DD hashing algorithm.
-pub fn name_hash(s: &'_ str) -> i32 {
-    s.bytes().fold(0i32, |acc, c| {
+pub fn name_hash(s: &'_ str) -> Option<i32> {
+    let bytes = stringish::encode(s)?;
+    Some(bytes.into_iter().fold(0i32, |acc, c| {
         acc.wrapping_mul(53).wrapping_add(i32::from(c))
-    })
+    }))
 }
 
-pub fn escape(arg: &str) -> Cow<str> {
+pub fn escape(arg: &str) -> Cow<'_, str> {
     if arg
         .chars()
         .any(|c| matches!(c, '\x08' | '\x0C' | '\n' | '\r' | '\t' | '\\' | '"'))
@@ -31,7 +34,7 @@ pub fn escape(arg: &str) -> Cow<str> {
     }
 }
 
-pub fn unescape(arg: &str) -> Option<Cow<str>> {
+pub fn unescape(arg: &str) -> Option<Cow<'_, str>> {
     // Bare control characters are disallowed
     if arg
         .chars()
@@ -58,6 +61,7 @@ pub fn unescape(arg: &str) -> Option<Cow<str>> {
                 Some('r') => '\r',
                 Some('t') => '\t',
                 Some('"') => '\"',
+                Some('\\') => '\\',
                 _ => return None,
             });
         }
@@ -67,5 +71,5 @@ pub fn unescape(arg: &str) -> Option<Cow<str>> {
 }
 
 pub fn is_whitespace(i: char) -> bool {
-    return matches!(i, '\r' | '\n' | '\t' | ' ');
+    matches!(i, '\r' | '\n' | '\t' | ' ')
 }

@@ -21,6 +21,8 @@ pub enum FromBinError {
     /// The hash of a field name mismatched the hash specified in the
     /// file.
     HashMismatch,
+    /// We have a really messed up string
+    BadString,
     /// A string did not contain valid UTF-8.
     Utf8Error(std::str::Utf8Error),
     /// A string was not NUL-terminated, or contained an interior
@@ -86,6 +88,8 @@ pub enum FromJsonError {
     UnexpEof,
     /// We ran out of indices
     IntegerErr,
+    /// We have a really messed up string
+    BadString,
     /// An integer representing a size or offset was too large to be represented in the file
     ArithError,
     /// The String contained invalid bare control characters.

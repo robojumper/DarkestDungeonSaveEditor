@@ -115,6 +115,12 @@ public class ConverterTests {
         testCorrectConversion("modlimit");
     }
 
+    @Test
+    public void testUtf8Error() throws ParseException, IOException {
+        testCorrectConversion("invalid_utf8_2020");
+        testCorrectConversion("plot_crimson_court_1");
+    }
+
 
     @Test
     public void testOtherFiles() throws ParseException, IOException {

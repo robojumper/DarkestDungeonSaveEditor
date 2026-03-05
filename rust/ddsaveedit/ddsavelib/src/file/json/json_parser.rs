@@ -410,12 +410,12 @@ impl<'a> Parser<'a> {
 
     fn json_to_token(&self, tok: LexerToken) -> Result<Token<'a>, JsonError> {
         let span = self.lexer.last_span();
-        let str_data = Cow::from(&self.data[span.first as usize..span.end as usize]);
+        let str_data = Cow::from(&self.data[span.first..span.end]);
 
         let str_data = match tok.kind {
             TokenType::String => {
-                let st = &self.data[span.first as usize + 1..span.end as usize - 1];
-                unescape(&st).ok_or(JsonError::BareControl(span.first, span.end))?
+                let st = &self.data[span.first + 1..span.end - 1];
+                unescape(st).ok_or(JsonError::BareControl(span.first, span.end))?
             }
             TokenType::Number => {
                 if str_data.parse::<i32>().is_err() && str_data.parse::<f32>().is_err() {
@@ -434,18 +434,18 @@ impl<'a> Parser<'a> {
 
     fn err_expected(&self, exp: TokenType) -> Result<Token<'a>, JsonError> {
         let span = self.lexer.last_span();
-        return Err(JsonError::Expected(
+        Err(JsonError::Expected(
             exp.as_ref().to_owned(),
             span.first,
             span.end,
-        ));
+        ))
     }
 }
 
 impl<'a> Iterator for Parser<'a> {
     type Item = Result<Token<'a>, JsonError>;
     fn next(&mut self) -> Option<Self::Item> {
-        if let tok @ Some(_) = std::mem::replace(&mut self.peeked, None) {
+        if let tok @ Some(_) = self.peeked.take() {
             return tok;
         }
         if self.block_stack.is_empty() {

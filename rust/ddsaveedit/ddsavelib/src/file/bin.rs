@@ -10,7 +10,7 @@ use super::{
     hardcoded_type, Data, Field, FieldIdx, FieldInfo, FieldType, Fields, File, Header, NameType,
     ObjIdx, ObjectInfo, Objects,
 };
-use crate::{err::*, util::name_hash};
+use crate::{err::*, file::stringish, util::name_hash};
 
 impl File {
     /// Attempt create a Darkest Dungeon save [`File`] from a [`Read`] representing
@@ -266,7 +266,8 @@ impl Field {
     fn add_bin_size(&self, mut existing_size: usize) -> usize {
         use FieldType::*;
 
-        existing_size += self.name.len() + 1;
+        let bytes = stringish::encode(&self.name).expect("should have been already validated");
+        existing_size += bytes.len() + 1;
         let align = ((existing_size + 3) & !0b11) - existing_size;
         existing_size += match &self.tipe {
             Bool(_) => 1,
@@ -303,9 +304,10 @@ impl Field {
     ) -> std::io::Result<usize> {
         use FieldType::*;
 
-        inwriter.write_all(self.name.as_bytes())?;
+        let bytes = stringish::encode(&self.name).expect("should have been already validated");
+        inwriter.write_all(&bytes)?;
         inwriter.write_u8(0)?;
-        existing_offset += self.name.len() + 1;
+        existing_offset += bytes.len() + 1;
         let align = ((existing_offset + 3) & !0b11) - existing_offset;
         let align_zeros = &vec![0u8; align];
 
@@ -449,11 +451,14 @@ fn decode_fields_bin<R: Read>(
         let len = field.name_length() as usize;
         let field_name = buf.get(off..off + len).ok_or(FromBinError::Eof)?;
         let name = {
-            let cs = CStr::from_bytes_with_nul(&field_name)?.to_str()?;
+            if field_name.last() != Some(&0) {
+                return Err(FromBinError::BadString);
+            }
+            let cs = stringish::decode(&field_name[..field_name.len() - 1]);
             NameType::from(cs)
         };
 
-        if name_hash(&name) != field.name_hash {
+        if name_hash(&name).ok_or(FromBinError::BadString)? != field.name_hash {
             return Err(FromBinError::HashMismatch);
         }
 

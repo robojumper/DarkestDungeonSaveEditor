@@ -48,10 +48,7 @@
 //! ## Features
 //!
 //! * `string_cache` (default: yes): Uses the `string_cache` crate to intern strings, yielding a
-//! performance boost for decoding binary files.
-
-#![feature(try_reserve)]
-#![feature(once_cell)]
+//!   performance boost for decoding binary files.
 
 pub mod err;
 mod file;

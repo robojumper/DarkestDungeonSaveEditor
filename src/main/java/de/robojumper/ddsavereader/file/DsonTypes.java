@@ -50,6 +50,8 @@ public class DsonTypes {
                         { "backer_heroes", "*", "combat_skills"},
                         { "backer_heroes", "*", "camping_skills"},
                         { "backer_heroes", "*", "quirks"},
+                        { "combat_skills"},
+                        { "camping_skills"},
                 }),
         // aligned, 4-byte int [count], then [count] string length + null-terminated
         // string
@@ -96,7 +98,7 @@ public class DsonTypes {
 
     public static int stringHash(String str) {
         int hash = 0;
-        byte[] arr = str.getBytes(StandardCharsets.UTF_8);
+        byte[] arr = Stringish.unescape(str);
         for (int i = 0; i < arr.length; i++) {
             hash = hash * 53 + Byte.toUnsignedInt(arr[i]);
         }

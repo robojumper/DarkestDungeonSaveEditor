@@ -1,10 +1,8 @@
-#![feature(once_cell)]
-
 use ddsavelib::{
     err::{FromBinError, FromJsonError},
     File, Unhasher,
 };
-use std::{lazy::SyncLazy, sync::RwLock};
+use std::sync::{LazyLock, RwLock};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -24,8 +22,8 @@ impl Annotation {
     }
 }
 
-static UNHASH: SyncLazy<RwLock<Unhasher<String>>> =
-    SyncLazy::new(|| RwLock::new(Default::default()));
+static UNHASH: LazyLock<RwLock<Unhasher<String>>> =
+    LazyLock::new(|| RwLock::new(Default::default()));
 
 /// Initialize this library
 #[wasm_bindgen]
@@ -85,12 +83,13 @@ pub fn check(input: &str) -> Option<Annotation> {
                 }
                 FromJsonError::IoError(e) => (e.to_string(), 0, 0),
                 FromJsonError::EncodingErr(display, a, b) => (display, a, b),
+                FromJsonError::BadString => ("Invalid string syntax".to_owned(), 0, 0),
             };
 
             let calc_line_col = |i| {
                 let mut line = 0;
                 let mut col = 0;
-                for (idx, &b) in input.as_bytes().iter().take(i as usize).enumerate() {
+                for (idx, &b) in input.as_bytes().iter().take(i).enumerate() {
                     if input.is_char_boundary(idx) {
                         col += 1;
                     }
@@ -144,7 +143,7 @@ and attach the save file.",
 }
 
 #[wasm_bindgen]
-pub fn calc_hash(mut s: &str) -> i32 {
+pub fn calc_hash(mut s: &str) -> Option<i32> {
     if s.starts_with("###") {
         s = &s[3..];
     }
